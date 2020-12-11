@@ -13,36 +13,42 @@ namespace ConsoleGame.Core
 
         public List<Component> Components { get; protected set; } = new List<Component>();
 
+        public T Get<T>() where T : Component =>
+            (T)AllComponents.FirstOrDefault(c => c.GetType() == typeof(T));
+        
+        public void Set<T>(T component) where T : Component
+        {
+            var existingComponent = Components.FirstOrDefault(c => typeof(T).IsAssignableFrom(c.GetType()));
+            if (existingComponent != null)
+                Components.Remove(existingComponent);
+
+            Components.Add(component);
+        }
+
         public IEnumerable<Component> AllComponents
         {
             get
             {
                 yield return this;
 
-                foreach (var component in Components)
-                    yield return component;
+                foreach (var component in Components.ToList())
+                    foreach (var x in component.AllComponents.ToList())
+                        yield return x;
             }
         }
 
         public bool HasAllComponents(IList<Type> components)
         {
-            var componentsFound = 0;
+            var found = new List<Type>();
 
-            foreach (var component in components)
-            {
-            }
+            foreach (var component in AllComponents.ToList())
+                //if (components.Any(c => c.GetType().IsAssignableFrom(component.GetType())))
+                if (components.Contains(component.GetType()) && !found.Contains(component.GetType()))
+                    found.Add(component.GetType());
 
-            return false;
+            return found.Count == components.Count;
         }
 
         public bool HasComponent(Type type) => Components.Where(c => c.GetType() == type).Any();
-
-        //public bool DescendantsHaveComponent(Type type)
-        //{
-        //    foreach (var component in Components)
-        //    {
-        //        if (component.HasComponent())
-        //    }
-        //}
     }
 }

@@ -6,11 +6,14 @@ namespace ConsoleGame
     {
         public int Level { get; set; }
 
+        public int MaxLevel { get; set; }
+
         public Health() { }
 
-        public Health(int level) 
+        public Health(int level, int maxLevel) 
         {
-            Level = level; 
+            Level = level;
+            MaxLevel = maxLevel;
         }
     }
 }

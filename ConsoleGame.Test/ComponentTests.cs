@@ -21,7 +21,7 @@ namespace ConsoleGame.Test
             var world = new GameWorld(100, 100, 1);
             var monster = new Monster(world);
 
-            Assert.IsTrue(monster.HasComponent(typeof(Position)));
+            Assert.IsTrue(monster.HasComponent(typeof(Location)));
             Assert.IsTrue(monster.HasComponent(typeof(Health)));
             Assert.IsTrue(monster.HasComponent(typeof(Mind)));
         }
@@ -31,11 +31,44 @@ namespace ConsoleGame.Test
         {
             var world = new GameWorld(100, 100, 1);
             var monster = new Monster(world);
+            monster.Get<Mind>().Components.Add(new Health());
 
             var components = monster.AllComponents.ToList();
-            var count = components.Count(c => c.GetType() == typeof(Health));
+            var count = components.Count(c => typeof(Health).IsAssignableFrom(c.GetType()));
 
             Assert.AreEqual(2, count);
+        }
+
+        [Test]
+        public void MonsterHasAllComponents()
+        {
+            var world = new GameWorld(100, 100, 1);
+            var monster = new Monster(world);
+
+            var hasAllComponents = monster.HasAllComponents(new List<Type> 
+            {
+                typeof(Location),
+                typeof(Health),
+                typeof(Mind)
+            });
+
+            Assert.IsTrue(hasAllComponents);
+        }
+
+        [Test]
+        public void MonsterHasNotAllComponents()
+        {
+            var world = new GameWorld(100, 100, 1);
+            var monster = new Monster(world);
+
+            var hasAllComponents = monster.HasAllComponents(new List<Type>
+            {
+                typeof(Location),
+                typeof(Health),
+                typeof(Goal)
+            });
+
+            Assert.IsFalse(hasAllComponents);
         }
     }
 }

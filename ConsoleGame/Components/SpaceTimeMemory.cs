@@ -6,7 +6,7 @@ namespace ConsoleGame
 {
     public class SpaceTimeMemory
     {
-        public Position Location { get; set; }
+        public Location Location { get; set; }
 
         public DateTime LastEventTime { get; set; }
 

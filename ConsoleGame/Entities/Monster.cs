@@ -10,8 +10,6 @@ namespace ConsoleGame
 {
     public class Monster : Character
     {
-        Mind mind;
-
         GameWorld world;
 
         Goal goal;
@@ -24,7 +22,7 @@ namespace ConsoleGame
 
             rand = new Random();
 
-            mind = new Mind();
+            Components.Add(new Mind());
         }
 
         public void Heartbeat()
@@ -40,19 +38,15 @@ namespace ConsoleGame
                 if (world.TryMove(this, direction))
                 {
                     PerceiveEnvironment();
-                    PreviousDirection = direction;
+                    //PreviousDirection = direction;
                 }
             }
-
-            // monsters are healed when they're in the forest
-            if (Health < MaxHealth && world.GetTerrain(Location) == TerrainType.Forest)
-                Health += 1;
         }
 
         public void SetGoal()
         {
             // find the strongest recent memories of forest terrain
-            var memories = mind.AllSpaceTimeMemories
+            var memories = Get<Mind>().AllSpaceTimeMemories
                 .Where(m => m.ContentType == "Terrain"
                     && m.Content == "Forest"
                     && m.Impressions > 30
@@ -61,7 +55,7 @@ namespace ConsoleGame
                 .Take(3)
                 .ToList();
 
-            Position destination;
+            Location destination;
 
             // if forest memories exist, there's a strong chance they'll be chosen (90%)
             var useMemoryForSettingGoal = memories.Any() && rand.NextDouble() < 0.90;
@@ -90,7 +84,9 @@ namespace ConsoleGame
 
         public void RememberThisTerrain()
         {
-            var bias = world.GetTerrain(Location) switch
+            var location = Get<Location>();
+
+            var bias = world.GetTerrain(location) switch
             {
                 TerrainType.Forest => 1,
                 TerrainType.Cave => 0.8,
@@ -100,7 +96,7 @@ namespace ConsoleGame
                 _ => 0.5
             };
 
-            mind.Remember(Location, "Terrain", world.Terrain[Location.Z, Location.Y, Location.X].ToString());
+            Get<Mind>().Remember(location, "Terrain", world.Terrain[location.Z, location.Y, location.X].ToString());
         }
 
         public Direction SelectRandomDirection()

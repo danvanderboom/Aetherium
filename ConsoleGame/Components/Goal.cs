@@ -9,6 +9,6 @@ namespace ConsoleGame
     {
         public DateTime Created { get; set; }
 
-        public Position Location { get; set; }
+        public Location Location { get; set; }
     }
 }

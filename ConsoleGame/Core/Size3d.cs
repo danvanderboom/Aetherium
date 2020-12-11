@@ -6,17 +6,6 @@ namespace ConsoleGame.Core
 {
     public class Size3d
     {
-        int _Height;
-        public int Height
-        {
-            get => _Height;
-            set
-            {
-                _Height = value;
-                IsEmpty = false;
-            }
-        }
-
         int _Width;
         public int Width
         {
@@ -24,6 +13,17 @@ namespace ConsoleGame.Core
             set
             {
                 _Width = value;
+                IsEmpty = false;
+            }
+        }
+
+        int _Length;
+        public int Length
+        {
+            get => _Length;
+            set
+            {
+                _Length = value;
                 IsEmpty = false;
             }
         }
@@ -45,9 +45,9 @@ namespace ConsoleGame.Core
 
         public Size3d() { }
 
-        public Size3d(int height, int width, int depth)
+        public Size3d(int length, int width, int depth)
         {
-            Height = height;
+            Length = length;
             Width = width;
             Depth = depth;
         }
@@ -60,7 +60,7 @@ namespace ConsoleGame.Core
             if (lhs is null || rhs is null)
                 return false;
 
-            return lhs.Height == rhs.Height && lhs.Width == rhs.Width && lhs.Depth == lhs.Depth;
+            return lhs.Width == rhs.Width && lhs.Length == rhs.Length && lhs.Depth == lhs.Depth;
         }
 
         public override bool Equals(object obj)
@@ -72,7 +72,7 @@ namespace ConsoleGame.Core
             return Equals(this, other);
         }
 
-        public override int GetHashCode() => $"{Height}-{Width}-{Depth}".GetHashCode();
+        public override int GetHashCode() => $"{Width}-{Length}-{Depth}".GetHashCode();
 
         public static bool operator ==(Size3d lhs, Size3d rhs) => Equals(lhs, rhs);
 

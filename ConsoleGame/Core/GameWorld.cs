@@ -20,9 +20,7 @@ namespace ConsoleGame.Core
 
         public TerrainType[,,] Terrain { get; protected set; }
 
-        public TerrainType GetTerrain(Position location) => Terrain[location.Z, location.Y, location.X];
-
-        public event Action MonstersMoved;
+        public TerrainType GetTerrain(Location location) => Terrain[location.Z, location.Y, location.X];
 
         Random rand = new Random();
 
@@ -32,11 +30,11 @@ namespace ConsoleGame.Core
 
         public Guid MonsterMoveTimestamp { get; protected set; } = Guid.NewGuid();
 
-        public GameWorld(int height, int width, int depth)
+        public GameWorld(int width, int length, int depth)
         {
-            WorldSize = new Size3d(height, width, depth);
+            WorldSize = new Size3d(length, width, depth);
 
-            Terrain = new TerrainType[depth, height, width];
+            Terrain = new TerrainType[depth, length, width];
 
             Entities = new ConcurrentBag<Entity>();
 
@@ -45,13 +43,20 @@ namespace ConsoleGame.Core
 
         public Character AddPlayer(string name)
         {
+            var location = SelectRandomPassableLocation();
+
             var player = new Character
             {
-                Name = name,
-                Health = 100,
-                MaxHealth = 100,
-                Location = SelectRandomPassableLocation(),
+                //Name = name,
+                //Location = location
             };
+
+            player.Get<Health>().Level = 100;
+            player.Get<Health>().MaxLevel = 100;
+
+            player.Get<Location>().X = location.X;
+            player.Get<Location>().Y = location.Y;
+            player.Get<Location>().Z = location.Z;
 
             Entities.Add(player);
 
@@ -60,13 +65,20 @@ namespace ConsoleGame.Core
 
         public Monster AddMonster(string name)
         {
+            var location = SelectRandomPassableLocation();
+
             var monster = new Monster(this)
             {
-                Name = name,
-                Health = 10,
-                MaxHealth = 10,
-                Location = SelectRandomPassableLocation()
+                //Name = name,
+                //Location = SelectRandomPassableLocation()
             };
+
+            monster.Get<Health>().Level = 10;
+            monster.Get<Health>().MaxLevel = 10;
+
+            monster.Get<Location>().X = location.X;
+            monster.Get<Location>().Y = location.Y;
+            monster.Get<Location>().Z = location.Z;
 
             Entities.Add(monster);
 
@@ -85,24 +97,21 @@ namespace ConsoleGame.Core
                 foreach (var monster in monsters)
                     monster.Heartbeat();
 
-                MonstersMoved?.Invoke();
-
                 await Task.Delay(1000);
             }
         }
 
-        public Position SelectRandomPassableLocation()
+        public Location SelectRandomPassableLocation()
         {
             while (true)
             {
-                var x = rand.Next(0, WorldSize.Width);
-                var y = rand.Next(0, WorldSize.Height);
+                var x = rand.Next(0, WorldSize.Length);
+                var y = rand.Next(0, WorldSize.Width);
                 var z = rand.Next(0, WorldSize.Depth);
 
-                var location = new Position(x, y, z);
+                var location = new Location(x, y, z);
 
-                var playersAtLocation = Entities.OfType<Character>().Any(c => c.Location == location);
-                var monstersAtLocation = Entities.OfType<Character>().Any(p => p.Location == location);
+                var charactersAtLocation = Entities.OfType<Character>().Any(c => c.Get<Location>() == location);
 
                 if (PassableTerrain(Terrain[z, y, x]))
                     return location;
@@ -126,25 +135,25 @@ namespace ConsoleGame.Core
             switch (direction)
             {
                 case Direction.North:
-                    return TryMove(player, new Position(player.Location.X, player.Location.Y - 1, player.Location.Z));
+                    return TryMove(player, player.Get<Location>().FromDelta(0, -1, 0));
                 case Direction.South:
-                    return TryMove(player, new Position(player.Location.X, player.Location.Y + 1, player.Location.Z));
-                case Direction.East:
-                    return TryMove(player, new Position(player.Location.X + 1, player.Location.Y, player.Location.Z));
+                    return TryMove(player, player.Get<Location>().FromDelta(0, +1, 0));
                 case Direction.West:
-                    return TryMove(player, new Position(player.Location.X - 1, player.Location.Y, player.Location.Z));
+                    return TryMove(player, player.Get<Location>().FromDelta(0, -1, 0));
+                case Direction.East:
+                    return TryMove(player, player.Get<Location>().FromDelta(0, +1, 0));
                 default:
                     return false;
             }
         }
 
-        public bool TryMove(Character player, Position location)
+        public bool TryMove(Character player, Location location)
         {
-            if (location.X < 0 || location.X >= WorldSize.Width || location.Y < 0 || location.Y >= WorldSize.Height)
+            if (location.X < 0 || location.X >= WorldSize.Length || location.Y < 0 || location.Y >= WorldSize.Width)
                 return false;
 
             // stop players (including monsters) from existing in the same location
-            if (Entities.OfType<Character>().Any(p => p.Location == location))
+            if (Entities.OfType<Character>().Any(p => p.Get<Location>() == location))
                 return false;
 
             if (PassableTerrain(location))
@@ -152,17 +161,18 @@ namespace ConsoleGame.Core
                 if (player is Monster)
                     MonsterMoveTimestamp = Guid.NewGuid();
 
-                player.Location = location;
+                player.Set(location);
+
                 return true;
             }
 
             return false;
         }
 
-        public double Distance(Position start, Position end) => 
+        public double Distance(Location start, Location end) => 
             Math.Sqrt((end.X - start.X) + (end.Y - start.Y) + (end.Z - start.Z));
 
-        public bool PassableTerrain(Position location) => 
+        public bool PassableTerrain(Location location) => 
             PassableTerrain(Terrain[location.Z, location.Y, location.X]);
 
         public bool PassableTerrain(TerrainType terrainType)
@@ -202,20 +212,20 @@ namespace ConsoleGame.Core
 
             for (int i = 0; i < 1000; i++)
             {
-                var location = new Point(rand.Next(WorldSize.Width), rand.Next(WorldSize.Height));
+                var location = new Point(rand.Next(WorldSize.Length), rand.Next(WorldSize.Width));
 
                 var width = rand.Next(5, 25);
                 if (width % 2 == 0)
                     width++;
 
-                if (location.X + width >= WorldSize.Width)
+                if (location.X + width >= WorldSize.Length)
                     continue;
 
                 var height = rand.Next(5, 25);
                 if (height % 2 == 0)
                     height++;
 
-                if (location.Y + height >= WorldSize.Height)
+                if (location.Y + height >= WorldSize.Width)
                     continue;
 
                 var size = new Size(width, height);
@@ -227,8 +237,8 @@ namespace ConsoleGame.Core
             }
 
             for (int z = 0; z < WorldSize.Depth; z++)
-                for (int y = 0; y < WorldSize.Height; y++)
-                    for (int x = 0; x < WorldSize.Width; x++)
+                for (int y = 0; y < WorldSize.Width; y++)
+                    for (int x = 0; x < WorldSize.Length; x++)
                         Terrain[z, y, x] = TerrainType.None;
 
             var cellsUpdated = 0;
@@ -274,7 +284,7 @@ namespace ConsoleGame.Core
             }
         }
 
-        public void CreateLake(Position center, int lakeSize)
+        public void CreateLake(Location center, int lakeSize)
         {
             var remaining = lakeSize;
 
@@ -287,13 +297,13 @@ namespace ConsoleGame.Core
 
         public void GenerateDefaultTerrain()
         {
-            for (int x = 0; x < WorldSize.Width; x++)
+            for (int x = 0; x < WorldSize.Length; x++)
             {
-                for (int y = 0; y < WorldSize.Height; y++)
+                for (int y = 0; y < WorldSize.Width; y++)
                 {
                     var onEdge = 
-                        y == 0 || y == WorldSize.Height - 1       // top and bottom rows
-                        || x == 0 || x == WorldSize.Width - 1;    // left and right columns
+                        y == 0 || y == WorldSize.Width - 1       // top and bottom rows
+                        || x == 0 || x == WorldSize.Length - 1;    // left and right columns
 
                     if (onEdge) 
                     {
@@ -353,7 +363,7 @@ namespace ConsoleGame.Core
         }
 
         // Always display current location (x, y) in the center of the map viewport.
-        public void DrawMap(Size mapSize, Point locationOnScreenTopLeft, Position locationInWorldTopLeft)
+        public void DrawMap(Size mapSize, Point locationOnScreenTopLeft, Location locationInWorldTopLeft)
         {
             var oldBackgroundColor = Console.BackgroundColor;
             var oldForegroundColor = Console.ForegroundColor;
@@ -364,20 +374,20 @@ namespace ConsoleGame.Core
 
                 for (int x = 0; x < mapSize.Width; x++)
                 {
-                    var worldLocation = new Position(
+                    var worldLocation = new Location(
                         locationInWorldTopLeft.X + x, 
                         locationInWorldTopLeft.Y + y,
                         locationInWorldTopLeft.Z);
 
-                    if (Entities.OfType<Character>().Any(c => c.Location == worldLocation))
+                    if (Entities.OfType<Character>().Any(c => c.Get<Location>() == worldLocation))
                     {
-                        if (Entities.OfType<Character>().Any(c => c.Location == worldLocation && c is Monster))
+                        if (Entities.OfType<Character>().Any(c => c.Get<Location>() == worldLocation && c is Monster))
                             RenderTerrain(TerrainType.Monster);
                         else
                             RenderTerrain(TerrainType.Player);
                     }
-                    else if (worldLocation.X < 0 || worldLocation.X >= WorldSize.Width 
-                        || worldLocation.Y < 0 || worldLocation.Y >= WorldSize.Height
+                    else if (worldLocation.X < 0 || worldLocation.X >= WorldSize.Length 
+                        || worldLocation.Y < 0 || worldLocation.Y >= WorldSize.Width
                         || worldLocation.Z < 0 || worldLocation.Z >= WorldSize.Depth)
                     {
                         RenderTerrain(TerrainType.None);

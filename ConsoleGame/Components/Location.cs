@@ -6,9 +6,9 @@ using ConsoleGame.Core;
 
 namespace ConsoleGame.Components
 {
-    public class Position : Component
+    public class Location : Component
     {
-        public static Position Empty = new Position(0, 0, 0) { IsEmpty = true };
+        public static Location Empty = new Location(0, 0, 0) { IsEmpty = true };
 
         int _X;
         public int X 
@@ -45,9 +45,9 @@ namespace ConsoleGame.Components
 
         public bool IsEmpty { get; protected set; }
 
-        public Position() { }
+        public Location() { }
 
-        public Position(int x, int y, int z)
+        public Location(int x, int y, int z)
         {
             X = x;
             Y = y;
@@ -56,14 +56,14 @@ namespace ConsoleGame.Components
 
         public override bool Equals(object obj)
         {
-            var other = obj as Position;
+            var other = obj as Location;
             if (other is null)
                 return false;
 
             return Equals(this, other);
         }
 
-        public static bool Equals(Position rhs, Position lhs)
+        public static bool Equals(Location rhs, Location lhs)
         {
             if (rhs is null && lhs is null)
                 return true;
@@ -76,8 +76,8 @@ namespace ConsoleGame.Components
 
         public override int GetHashCode() => $"{X}-{Y}-{Z}".GetHashCode();
 
-        public static bool operator ==(Position lhs, Position rhs) => Equals(lhs, rhs);
+        public static bool operator ==(Location lhs, Location rhs) => Equals(lhs, rhs);
 
-        public static bool operator !=(Position lhs, Position rhs) => !Equals(lhs, rhs);
+        public static bool operator !=(Location lhs, Location rhs) => !Equals(lhs, rhs);
     }
 }

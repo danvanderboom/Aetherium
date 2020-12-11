@@ -11,6 +11,11 @@ namespace ConsoleGame.Core
     {
         public Size3d size { get; protected set; } = Size3d.Empty;
 
+        public TerrainType[,,] Terrain { get; protected set; }
+
+        public TerrainType GetTerrain(Location location) => Terrain[location.Z, location.Y, location.X];
+
+
         public GameWorldLayer()
         {
         }
@@ -24,7 +29,7 @@ namespace ConsoleGame.Core
         {
             this.size = size;
 
-
+            Terrain = new TerrainType[size.Depth, size.Length, size.Width];
         }
     }
 }
