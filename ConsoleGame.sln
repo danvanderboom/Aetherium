@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30717.126
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleGame", "ConsoleGame\ConsoleGame.csproj", "{070464C2-84C0-4B36-92E2-5C876D00AC1D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleGame.Test", "ConsoleGame.Test\ConsoleGame.Test.csproj", "{0DD26083-AFB6-423F-8430-902BDED99EF7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{070464C2-84C0-4B36-92E2-5C876D00AC1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{070464C2-84C0-4B36-92E2-5C876D00AC1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{070464C2-84C0-4B36-92E2-5C876D00AC1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{070464C2-84C0-4B36-92E2-5C876D00AC1D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0DD26083-AFB6-423F-8430-902BDED99EF7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0DD26083-AFB6-423F-8430-902BDED99EF7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0DD26083-AFB6-423F-8430-902BDED99EF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0DD26083-AFB6-423F-8430-902BDED99EF7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F8D63F66-47FE-461D-BF49-9F0E5036E4FA}
+	EndGlobalSection
+EndGlobal
