@@ -4,64 +4,155 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleGame;
-using ConsoleGame.Components;
 using ConsoleGame.Core;
+using ConsoleGame.Components;
 
 namespace ConsoleGame
 {
     class Program
     {
         GameWorld world;
+
         Character player;
-        Character followedPlayer;
-        bool followMonsterMode = false;
 
-        Size3d gameWorldSize = new Size3d(500, 500, 1);
-        int monsterCount = 1000;
+        Character followedMonster1;
+        Character followedMonster2;
+        Character followedMonster3;
+        Character followedMonster4;
+        Character followedMonster5;
+        Character followedMonster6;
+        Character followedMonster7;
 
-        Size mapSize = new Size(60, 20);
-        Point mapLocationOnScreenTopLeft = new Point(4, 3);
+        Size3d gameWorldSize = new Size3d(200, 200, 10);
+        int monsterCount = 100;
 
-        ConsoleColor backgroundColor = ConsoleColor.Black;
+        Size mapSize = new Size(20, 10);
+        Point mapLocation = new Point(2, 2);
+
+        ConsoleColor backgroundColor = ConsoleColor.DarkRed;
         ConsoleColor oldBackgroundColor;
         ConsoleColor oldForegroundColor;
 
         Location playerHomeLocation;
 
+        int interMapDistanceX = 4;
+        int interMapDistanceY = 6;
+
         static void Main(string[] args) => new Program().Run();
 
         void Run()
         {
+            CreateWorld();
+
             oldBackgroundColor = Console.BackgroundColor;
             oldForegroundColor = Console.ForegroundColor;
 
-            CreateWorld();
-            DrawLayout();
+            ClearScreen(ConsoleColor.Black);
+
+            DrawMapFrames();
 
             var done = false;
             while (!done)
             {
-                DrawMap();
+                DrawMaps();
 
                 Console.CursorVisible = false;
 
-                var monsterMoveCount = world.MonsterMoveTimestamp;
+                var characterMoves = world.CharacterMoveTimestamp;
 
                 while (!Console.KeyAvailable)
                 {
                     Thread.Sleep(10);
 
-                    if (monsterMoveCount != world.MonsterMoveTimestamp)
-                        DrawMap();
+                    if (characterMoves != world.CharacterMoveTimestamp)
+                        DrawMaps();
                 }
 
                 var keyInfo = Console.ReadKey(true);
 
-                HandleCommand(keyInfo);
+                if (!HandleCommand(keyInfo))
+                    break;
             }
 
             Console.BackgroundColor = oldBackgroundColor;
             Console.ForegroundColor = oldForegroundColor;
+        }
+
+        void ClearScreen(ConsoleColor? backgroundColor = null)
+        {
+            if (backgroundColor.HasValue)
+            {
+                this.backgroundColor = backgroundColor.Value;
+                Console.BackgroundColor = backgroundColor.Value;
+            }
+
+            Console.Clear();
+        }
+
+
+
+        private void DrawMapFrames()
+        {
+            world.DrawMapFrame(mapSize, mapLocation);
+
+            var (x, y) = (mapLocation.X, mapLocation.Y);
+
+            if (followedMonster1 != null)
+            {
+                x += mapSize.Width + interMapDistanceX;
+                world.DrawMapFrame(mapSize, new Point(x, y));
+
+                x += mapSize.Width + interMapDistanceX;
+                world.DrawMapFrame(mapSize, new Point(x, y));
+
+                //x += mapSize.Width + interMapDistanceX;
+                //world.DrawMapFrame(mapSize, new Point(x, y));
+
+                x = mapLocation.X;
+                y += mapSize.Height + interMapDistanceY;
+                world.DrawMapFrame(mapSize, new Point(x, y));
+
+                x += mapSize.Width + interMapDistanceX;
+                world.DrawMapFrame(mapSize, new Point(x, y));
+
+                x += mapSize.Width + interMapDistanceX;
+                world.DrawMapFrame(mapSize, new Point(x, y));
+
+                //x += mapSize.Width + interMapDistanceX;
+                //world.DrawMapFrame(mapSize, new Point(x, y));
+            }
+        }
+
+        void DrawMaps()
+        {
+            DrawMap(mapLocation, mapSize, player.Get<Location>());
+
+            var (x, y) = (mapLocation.X, mapLocation.Y);
+
+            if (followedMonster1 != null)
+            {
+                x += mapSize.Width + interMapDistanceX;
+                DrawMap(new Point(x, y), mapSize, followedMonster1.Get<Location>());
+
+                x += mapSize.Width + interMapDistanceX;
+                DrawMap(new Point(x, y), mapSize, followedMonster2.Get<Location>());
+
+                //x += mapSize.Width + interMapDistanceX;
+                //DrawMap(new Point(x, y), mapSize, followedMonster3.Get<Location>());
+
+                x = mapLocation.X;
+                y += mapSize.Height + interMapDistanceY;
+                DrawMap(new Point(x, y), mapSize, followedMonster4.Get<Location>());
+
+                x += mapSize.Width + interMapDistanceX;
+                DrawMap(new Point(x, y), mapSize, followedMonster5.Get<Location>());
+
+                x += mapSize.Width + interMapDistanceX;
+                DrawMap(new Point(x, y), mapSize, followedMonster6.Get<Location>());
+
+                //x += mapSize.Width + interMapDistanceX;
+                //DrawMap(new Point(x, y), mapSize, followedMonster7.Get<Location>());
+            }
         }
 
         void CreateWorld()
@@ -71,7 +162,6 @@ namespace ConsoleGame
             //world.GenerateMazeWorld();
 
             player = world.AddPlayer("Player 1");
-            followedPlayer = player;
 
             for (int i = 0; i < monsterCount; i++)
                 world.AddMonster("Generic Monster");
@@ -79,41 +169,43 @@ namespace ConsoleGame
             playerHomeLocation = player.Get<Location>();
         }
 
-        void DrawLayout()
+        void DrawMap(Point mapLocation, Size mapSize, Location location, bool drawFrame = true)
         {
-            backgroundColor = ConsoleColor.Black;
-            Console.BackgroundColor = backgroundColor;
-            Console.Clear();
+            //if (drawFrame)
+            //{
+            //    Console.ForegroundColor = ConsoleColor.Cyan;
+            //    world.DrawMapFrame(mapSize, mapLocation);
+            //}
 
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            world.DrawMapFrame(mapSize, mapLocationOnScreenTopLeft);
-        }
-
-        void DrawMap()
-        {
-            var location = followedPlayer.Get<Location>();
+            mapSize = new Size(mapSize.Width - 2, mapSize.Height - 2);
+            mapLocation = new Point(mapLocation.X + 1, mapLocation.Y + 1);
 
             world.DrawMap(
                 mapSize: mapSize,
-                locationOnScreenTopLeft: mapLocationOnScreenTopLeft,
+                locationOnScreenTopLeft: mapLocation,
                 locationInWorldTopLeft: new Location(
                     location.X - (mapSize.Width / 2),
                     location.Y - (mapSize.Height / 2),
                     location.Z));
 
             Console.SetCursorPosition(
-                mapLocationOnScreenTopLeft.X - 1, // start at the map frame
-                mapLocationOnScreenTopLeft.Y + mapSize.Height + 2); // map frame + blank line
+                mapLocation.X - 1, // start at the map frame
+                mapLocation.Y + mapSize.Height + 2); // map frame + blank line
 
             Console.BackgroundColor = backgroundColor;
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.Write(
-                CenterText($"{location.X}, {location.Y}, {location.Z}", 
+                CenterText($"{location.X}, {location.Y}, {location.FromDelta(0, 0, - gameWorldSize.Depth + 1).Z}", 
                 mapSize.Width + 2));
         }
 
-        void HandleCommand(ConsoleKeyInfo keyInfo)
+        int lockLevel = 0;
+
+        bool HandleCommand(ConsoleKeyInfo keyInfo)
         {
+            if (lockLevel > 0)
+                lockLevel--;
+
             switch (keyInfo.Key)
             {
                 case ConsoleKey.Backspace:
@@ -127,22 +219,47 @@ namespace ConsoleGame
                     Console.CursorVisible = true;
                     Console.BackgroundColor = oldBackgroundColor;
                     Console.ForegroundColor = oldForegroundColor;
-                    Environment.Exit(0);
+                    return false;
+                case ConsoleKey.L:
+                    lockLevel = 2;
                     break;
                 case ConsoleKey.Spacebar:
-                    if (world.TryMove(player, world.SelectRandomPassableLocation()))
+                    var z = lockLevel > 0 ? player.Get<Location>().Z : (int?)null;
+
+                    if (world.TryMove(player, world.SelectRandomPassableLocation(zlock: z)))
                         PlayTeleportSound();
+
+                    lockLevel = 0;
 
                     break;
                 case ConsoleKey.N:
                 // TODO: set note
                 case ConsoleKey.M:
-                    followMonsterMode = !followMonsterMode;
+                    if (followedMonster1 == null)
+                    {
+                        followedMonster1 = world.SelectRandomMonster();
+                        followedMonster2 = world.SelectRandomMonster();
+                        followedMonster3 = world.SelectRandomMonster();
+                        followedMonster4 = world.SelectRandomMonster();
+                        followedMonster5 = world.SelectRandomMonster();
+                        followedMonster6 = world.SelectRandomMonster();
+                        followedMonster7 = world.SelectRandomMonster();
 
-                    if (followMonsterMode)
-                        followedPlayer = world.SelectRandomMonster() ?? player;
+                        DrawMapFrames();
+                    }
                     else
-                        followedPlayer = player;
+                    {
+                        followedMonster1 = null;
+                        followedMonster2 = null;
+                        followedMonster3 = null;
+                        followedMonster4 = null;
+                        followedMonster5 = null;
+                        followedMonster6 = null;
+                        followedMonster7 = null;
+
+                        ClearScreen();
+                        DrawMapFrames();
+                    }
 
                     break;
                 case ConsoleKey.Home: // set teleport home
@@ -189,7 +306,19 @@ namespace ConsoleGame
                     PlayDiggingSound();
                     world.Terrain[target.Z, target.Y, target.X] = TerrainType.Indoors;
                     break;
+                case ConsoleKey.U:
+                    if (!world.TryMove(player, player.Get<Location>().FromDelta(0, 0, +1)))
+                        PlayObstructionSound();
+
+                    break;
+                case ConsoleKey.D:
+                    if (!world.TryMove(player, player.Get<Location>().FromDelta(0, 0, -1)))
+                        PlayObstructionSound();
+
+                    break;
             }
+
+            return true; // continue game
         }
 
         static string CenterText(string text, int length)

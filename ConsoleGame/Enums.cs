@@ -9,6 +9,8 @@ namespace ConsoleGame
         North,
         South,
         East,
-        West
+        West,
+        Up,
+        Down
     }
 }

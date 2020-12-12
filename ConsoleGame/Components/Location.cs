@@ -45,7 +45,10 @@ namespace ConsoleGame.Components
 
         public bool IsEmpty { get; protected set; }
 
-        public Location() { }
+        public Location() 
+        {
+            IsEmpty = true;
+        }
 
         public Location(int x, int y, int z)
         {
@@ -74,10 +77,12 @@ namespace ConsoleGame.Components
             return lhs.X == rhs.X && lhs.Y == rhs.Y && lhs.Z == rhs.Z;
         }
 
-        public override int GetHashCode() => $"{X}-{Y}-{Z}".GetHashCode();
+        public override int GetHashCode() => ToString().GetHashCode();
 
         public static bool operator ==(Location lhs, Location rhs) => Equals(lhs, rhs);
 
         public static bool operator !=(Location lhs, Location rhs) => !Equals(lhs, rhs);
+
+        public override string ToString() => $"{X}, {Y}, {Z}";
     }
 }

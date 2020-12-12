@@ -5,8 +5,8 @@ using System.Collections.Concurrent;
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
-using ConsoleGame.Components;
 using ConsoleGame;
+using ConsoleGame.Components;
 
 namespace ConsoleGame.Core
 {
@@ -19,23 +19,36 @@ namespace ConsoleGame.Core
         public ConcurrentBag<Entity> Entities { get; protected set; }
 
         public TerrainType[,,] Terrain { get; protected set; }
-
         public TerrainType GetTerrain(Location location) => Terrain[location.Z, location.Y, location.X];
+
+        public ConcurrentDictionary<Location, Entity> EntitiesByLocation { get; protected set; }
 
         Random rand = new Random();
 
         Task MonsterHeartbeatTask = null;
 
+        int staircaseCount = 120;
+
         List<Rectangle> mazeRectangles;
 
-        public Guid MonsterMoveTimestamp { get; protected set; } = Guid.NewGuid();
+        ConsoleColor mapFrameColor = ConsoleColor.Gray;
 
-        public GameWorld(int width, int length, int depth)
+        public Guid CharacterMoveTimestamp { get; protected set; } = Guid.NewGuid();
+
+        class BoxFrameCharacters
+        {
+            public static char Corner = '#';
+            public static char Horizontal = '-';
+            public static char Vertical = '|';
+        }
+
+        public GameWorld(int length, int width, int depth)
         {
             WorldSize = new Size3d(length, width, depth);
 
             Terrain = new TerrainType[depth, length, width];
 
+            EntitiesByLocation = new ConcurrentDictionary<Location, Entity>();
             Entities = new ConcurrentBag<Entity>();
 
             Layers = new List<GameWorldLayer>();
@@ -43,20 +56,10 @@ namespace ConsoleGame.Core
 
         public Character AddPlayer(string name)
         {
-            var location = SelectRandomPassableLocation();
+            var player = new Character();
 
-            var player = new Character
-            {
-                //Name = name,
-                //Location = location
-            };
-
-            player.Get<Health>().Level = 100;
-            player.Get<Health>().MaxLevel = 100;
-
-            player.Get<Location>().X = location.X;
-            player.Get<Location>().Y = location.Y;
-            player.Get<Location>().Z = location.Z;
+            player.Set(new Health { Level = 100, MaxLevel = 100 });
+            player.Set(SelectRandomPassableLocation());
 
             Entities.Add(player);
 
@@ -67,18 +70,10 @@ namespace ConsoleGame.Core
         {
             var location = SelectRandomPassableLocation();
 
-            var monster = new Monster(this)
-            {
-                //Name = name,
-                //Location = SelectRandomPassableLocation()
-            };
+            var monster = new Monster(this);
 
-            monster.Get<Health>().Level = 10;
-            monster.Get<Health>().MaxLevel = 10;
-
-            monster.Get<Location>().X = location.X;
-            monster.Get<Location>().Y = location.Y;
-            monster.Get<Location>().Z = location.Z;
+            monster.Set(new Health { Level = 10, MaxLevel = 10 });
+            monster.Set(location);
 
             Entities.Add(monster);
 
@@ -101,13 +96,13 @@ namespace ConsoleGame.Core
             }
         }
 
-        public Location SelectRandomPassableLocation()
+        public Location SelectRandomPassableLocation(int? zlock = null)
         {
             while (true)
             {
-                var x = rand.Next(0, WorldSize.Length);
-                var y = rand.Next(0, WorldSize.Width);
-                var z = rand.Next(0, WorldSize.Depth);
+                var x = rand.Next(0, WorldSize.Width);
+                var y = rand.Next(0, WorldSize.Length);
+                var z = zlock.HasValue ? zlock.Value : rand.Next(0, WorldSize.Depth);
 
                 var location = new Location(x, y, z);
 
@@ -156,12 +151,23 @@ namespace ConsoleGame.Core
             if (Entities.OfType<Character>().Any(p => p.Get<Location>() == location))
                 return false;
 
+            var currentLocation = player.Get<Location>();
+            var up = currentLocation.FromDelta(0, 0, +1);
+            var down = currentLocation.FromDelta(0, 0, -1);
+
+            if (location == up && GetTerrain(currentLocation) != TerrainType.Upstairs)
+                return false;
+            else if (location == down && GetTerrain(currentLocation) != TerrainType.Downstairs)
+                return false;
+
             if (PassableTerrain(location))
             {
                 if (player is Monster)
-                    MonsterMoveTimestamp = Guid.NewGuid();
+                    CharacterMoveTimestamp = Guid.NewGuid();
 
                 player.Set(location);
+
+                CharacterMoveTimestamp = Guid.NewGuid();
 
                 return true;
             }
@@ -173,13 +179,18 @@ namespace ConsoleGame.Core
             Math.Sqrt((end.X - start.X) + (end.Y - start.Y) + (end.Z - start.Z));
 
         public bool PassableTerrain(Location location) => 
-            PassableTerrain(Terrain[location.Z, location.Y, location.X]);
+            location.X >= 0 && location.X < WorldSize.Width
+            && location.Y >= 0 && location.Y < WorldSize.Length
+            && location.Z >= 0 && location.Z < WorldSize.Depth
+            && PassableTerrain(Terrain[location.Z, location.Y, location.X]);
 
         public bool PassableTerrain(TerrainType terrainType)
         {
             switch (terrainType)
             {
                 case TerrainType.Indoors:
+                case TerrainType.Upstairs:
+                case TerrainType.Downstairs:
                 case TerrainType.Road:
                 case TerrainType.Plains:
                 case TerrainType.Forest:
@@ -196,7 +207,6 @@ namespace ConsoleGame.Core
             }
         }
 
-
         bool IntersectsExistingRectangle(Rectangle rectangle)
         {
             foreach (var mazeRectangle in mazeRectangles.Select(r => r.ToEnclosingRectangle()))
@@ -206,7 +216,7 @@ namespace ConsoleGame.Core
             return false;
         }
 
-        public void GenerateMazeWorld()
+        public void GenerateMazeWorld(int z = 0, int density = 100)
         {
             mazeRectangles = new List<Rectangle>();
 
@@ -236,10 +246,9 @@ namespace ConsoleGame.Core
                     mazeRectangles.Add(rectangle);
             }
 
-            for (int z = 0; z < WorldSize.Depth; z++)
-                for (int y = 0; y < WorldSize.Width; y++)
-                    for (int x = 0; x < WorldSize.Length; x++)
-                        Terrain[z, y, x] = TerrainType.None;
+            for (int y = 0; y < WorldSize.Width; y++)
+                for (int x = 0; x < WorldSize.Length; x++)
+                    Terrain[z, y, x] = TerrainType.None;
 
             var cellsUpdated = 0;
 
@@ -247,7 +256,7 @@ namespace ConsoleGame.Core
                 for (int y = rectangle.Y; y < rectangle.Y + rectangle.Height; y++)
                     for (int x = rectangle.X; x < rectangle.X + rectangle.Width; x++)
                     {
-                        Terrain[0, y, x] = TerrainType.Indoors;
+                        Terrain[z, y, x] = TerrainType.Indoors;
                         cellsUpdated++;
                     }
         }
@@ -297,18 +306,20 @@ namespace ConsoleGame.Core
 
         public void GenerateDefaultTerrain()
         {
-            for (int x = 0; x < WorldSize.Length; x++)
+            var z = WorldSize.Depth - 1;
+
+            for (int y = 0; y < WorldSize.Length; y++)
             {
-                for (int y = 0; y < WorldSize.Width; y++)
+                for (int x = 0; x < WorldSize.Width; x++)
                 {
                     var onEdge = 
-                        y == 0 || y == WorldSize.Width - 1       // top and bottom rows
-                        || x == 0 || x == WorldSize.Length - 1;    // left and right columns
+                        y == 0 || y == WorldSize.Length - 1       // top and bottom rows
+                        || x == 0 || x == WorldSize.Width - 1;    // left and right columns
 
                     if (onEdge) 
                     {
                         // the world is enclosed in impassable mountains
-                        Terrain[0, y, x] = TerrainType.Mountain;
+                        Terrain[z, y, x] = TerrainType.Mountain;
                     }
                     else
                     {
@@ -321,43 +332,89 @@ namespace ConsoleGame.Core
                             t = TerrainType.Water;
 
                         // fill the rest with plains
-                        Terrain[0, y, x] = t;
+                        Terrain[z, y, x] = t;
                     }
+                }
+            }
+
+            if (WorldSize.Depth > 1)
+            {
+                for (z = 0; z < WorldSize.Depth - 1; z++)
+                    GenerateMazeWorld(z, density: 1000);
+
+                for (int i = 0; i < staircaseCount; i++)
+                {
+                    Location start;
+                    Location end;
+
+                    while (true)
+                    {
+                        start = SelectRandomPassableLocation();
+                        var up = start.FromDelta(0, 0, -1);
+                        var down = start.FromDelta(0, 0, +1);
+
+                        var validLocations = new List<Location>();
+
+                        if (PassableTerrain(up))
+                            validLocations.Add(up);
+
+                        if (PassableTerrain(down))
+                            validLocations.Add(down);
+
+                        if (validLocations.Count == 0)
+                            continue;
+
+                        end = validLocations[rand.Next(0, validLocations.Count)];
+
+                        break;
+                    }
+
+                    Terrain[start.Z, start.Y, start.X] = start.Z > end.Z ? TerrainType.Downstairs : TerrainType.Upstairs;
+                    Terrain[end.Z, end.Y, end.X] = start.Z > end.Z ? TerrainType.Upstairs : TerrainType.Downstairs;
                 }
             }
         }
 
-        class BoxFrameCharacters
+        // TODO: cleanup: is this still needed?
+        void ConnectTwoLevels(Location location1, Location location2)
         {
-            public static char Corner = '#';
-            public static char Horizontal = '-';
-            public static char Vertical = '|';
+            if (location1.X != location2.X || location1.Y != location2.Y)
+                throw new ArgumentException("X and Y must be the same and Z must be one different");
+
+            if (Math.Abs(location1.Z - location2.Z) != 1)
+                throw new ArgumentException("X and Y must be the same and Z must be one different");
+
+            var lowerLevel = Math.Min(location1.Z, location2.Z);
+
+
         }
 
-        public void DrawMapFrame(Size mapSize, Point locationOnScreenTopleft)
+        public void DrawMapFrame(Size size, Point locationOnScreen)
         {
-            Console.SetCursorPosition(locationOnScreenTopleft.X - 1, locationOnScreenTopleft.Y - 1);
+            Console.SetCursorPosition(locationOnScreen.X, locationOnScreen.Y);
+
+            Console.ForegroundColor = mapFrameColor;
 
             var hline = 
                 BoxFrameCharacters.Corner
-                + new string(BoxFrameCharacters.Horizontal, mapSize.Width)
+                + new string(BoxFrameCharacters.Horizontal, size.Width - 2)
                 + BoxFrameCharacters.Corner;
 
             Console.Write(hline);
 
-            for (int y = 0; y < mapSize.Height; y++)
+            for (int y = 0; y < size.Height - 2; y++)
             {
-                Console.CursorTop = locationOnScreenTopleft.Y + y;
+                Console.CursorTop = locationOnScreen.Y + y + 1;
 
-                Console.CursorLeft = locationOnScreenTopleft.X - 1;
+                Console.CursorLeft = locationOnScreen.X;
                 Console.Write(BoxFrameCharacters.Vertical);
 
-                Console.CursorLeft = locationOnScreenTopleft.X + mapSize.Width;
+                Console.CursorLeft = locationOnScreen.X + size.Width - 1;
                 Console.Write(BoxFrameCharacters.Vertical);
             }
 
             Console.CursorTop += 1;
-            Console.CursorLeft = locationOnScreenTopleft.X - 1;
+            Console.CursorLeft = locationOnScreen.X;
 
             Console.Write(hline);
         }
@@ -382,19 +439,19 @@ namespace ConsoleGame.Core
                     if (Entities.OfType<Character>().Any(c => c.Get<Location>() == worldLocation))
                     {
                         if (Entities.OfType<Character>().Any(c => c.Get<Location>() == worldLocation && c is Monster))
-                            RenderTerrain(TerrainType.Monster);
+                            DrawTerrain(TerrainType.Monster);
                         else
-                            RenderTerrain(TerrainType.Player);
+                            DrawTerrain(TerrainType.Player);
                     }
                     else if (worldLocation.X < 0 || worldLocation.X >= WorldSize.Length 
                         || worldLocation.Y < 0 || worldLocation.Y >= WorldSize.Width
                         || worldLocation.Z < 0 || worldLocation.Z >= WorldSize.Depth)
                     {
-                        RenderTerrain(TerrainType.None);
+                        DrawTerrain(TerrainType.None);
                     }
                     else
                     {
-                        RenderTerrain(Terrain[worldLocation.Z, worldLocation.Y, worldLocation.X]);
+                        DrawTerrain(Terrain[worldLocation.Z, worldLocation.Y, worldLocation.X]);
                     }
                 }
             }
@@ -403,7 +460,7 @@ namespace ConsoleGame.Core
             Console.ForegroundColor = oldForegroundColor;
         }
 
-        public void RenderTerrain(TerrainType terrain)
+        public void DrawTerrain(TerrainType terrain)
         {
             var terrainInfo = TerrainInfo(terrain);
 
@@ -427,6 +484,8 @@ namespace ConsoleGame.Core
                 TerrainType.Cave => ('c', ConsoleColor.Black, ConsoleColor.DarkGray),
                 TerrainType.Player => ('*', ConsoleColor.White, ConsoleColor.Blue),
                 TerrainType.Monster => ('!', ConsoleColor.Red, ConsoleColor.Black),
+                TerrainType.Upstairs => ('+', ConsoleColor.Gray, ConsoleColor.Yellow),
+                TerrainType.Downstairs => ('-', ConsoleColor.Gray, ConsoleColor.Yellow),
                 _ => throw new NotImplementedException()
             };
     }

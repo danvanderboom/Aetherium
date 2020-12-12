@@ -22,7 +22,7 @@ namespace ConsoleGame
 
             rand = new Random();
 
-            Components.Add(new Mind());
+            Components.TryAdd(typeof(Mind), new Mind());
         }
 
         public void Heartbeat()
@@ -33,7 +33,8 @@ namespace ConsoleGame
             var rest = rand.NextDouble() < 0.1; // 10% chance of resting
             if (!rest)
             {
-                var direction = SelectRandomDirection();
+                var validDirections = GetValidDirections();
+                var direction = validDirections[rand.Next(0, validDirections.Count)];
 
                 if (world.TryMove(this, direction))
                 {
@@ -41,6 +42,30 @@ namespace ConsoleGame
                     //PreviousDirection = direction;
                 }
             }
+        }
+
+        private IList<Direction> GetValidDirections()
+        {
+            var directions = Enum.GetValues(typeof(Direction)).Cast<Direction>().ToList();
+
+            foreach (var direction in Enum.GetValues(typeof(Direction)).Cast<Direction>())
+            {
+                var target = direction switch
+                {
+                    Direction.North => Get<Location>().FromDelta(0, +1, 0),
+                    Direction.South => Get<Location>().FromDelta(0, -1, 0),
+                    Direction.East => Get<Location>().FromDelta(+1, 0, 0),
+                    Direction.West => Get<Location>().FromDelta(-1, 0, 0),
+                    Direction.Up => Get<Location>().FromDelta(0, 0, +1),
+                    Direction.Down => Get<Location>().FromDelta(0, 0, -1),
+                    _ => throw new NotImplementedException()
+                };
+
+                if (!world.PassableTerrain(target))
+                    directions.Remove(direction);
+            }
+
+            return directions;
         }
 
         public void SetGoal()

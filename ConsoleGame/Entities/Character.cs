@@ -10,8 +10,8 @@ namespace ConsoleGame
     {
         public Character() : base()
         {
-            Components.Add(new Location());
-            Components.Add(new Health());
+            Components.TryAdd(typeof(Location), new Location());
+            Components.TryAdd(typeof(Health), new Health());
         }
     }
 }

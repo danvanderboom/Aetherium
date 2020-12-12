@@ -27,5 +27,8 @@ namespace ConsoleGame
 
         public static Location FromDelta(this Location position, int xd, int yd, int zd) =>
             new Location(position.X + xd, position.Y + yd, position.Z + zd);
+
+        public static Point FromDelta(this Point position, int xd, int yd) =>
+            new Point(position.X + xd, position.Y + yd);
     }
 }

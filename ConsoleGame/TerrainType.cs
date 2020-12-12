@@ -12,6 +12,8 @@
         Water,
         Cave,
         Player,
-        Monster
+        Monster,
+        Upstairs,
+        Downstairs
     }
 }
