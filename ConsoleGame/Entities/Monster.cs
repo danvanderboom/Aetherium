@@ -121,7 +121,7 @@ namespace ConsoleGame
                 _ => 0.5
             };
 
-            Get<Mind>().Remember(location, "Terrain", world.Terrain[location.Z, location.Y, location.X].ToString());
+            Get<Mind>().Remember(location, "Terrain", world.GetTerrain(location).ToString());
         }
 
         public Direction SelectRandomDirection()

@@ -23,8 +23,8 @@ namespace ConsoleGame
         Character followedMonster6;
         Character followedMonster7;
 
-        Size3d gameWorldSize = new Size3d(200, 200, 10);
-        int monsterCount = 100;
+        Size3d gameWorldSize = new Size3d(200, 200, 5);
+        int monsterCount = 200;
 
         Size mapSize = new Size(20, 10);
         Point mapLocation = new Point(2, 2);
@@ -161,12 +161,19 @@ namespace ConsoleGame
             world.GenerateDefaultTerrain();
             //world.GenerateMazeWorld();
 
+            world.CharacterDied += World_CharacterDied;
+
             player = world.AddPlayer("Player 1");
 
             for (int i = 0; i < monsterCount; i++)
                 world.AddMonster("Generic Monster");
 
             playerHomeLocation = player.Get<Location>();
+        }
+
+        private void World_CharacterDied(Character obj)
+        {
+            SoundEffects.PlayDeathSound();
         }
 
         void DrawMap(Point mapLocation, Size mapSize, Location location, bool drawFrame = true)
@@ -212,7 +219,7 @@ namespace ConsoleGame
                     break;
                 case ConsoleKey.Tab: // teleport home
                     if (world.TryMove(player, playerHomeLocation))
-                        PlayTeleportSound();
+                        SoundEffects.PlayTeleportSound();
 
                     break;
                 case ConsoleKey.Escape:
@@ -227,7 +234,7 @@ namespace ConsoleGame
                     var z = lockLevel > 0 ? player.Get<Location>().Z : (int?)null;
 
                     if (world.TryMove(player, world.SelectRandomPassableLocation(zlock: z)))
-                        PlayTeleportSound();
+                        SoundEffects.PlayTeleportSound();
 
                     lockLevel = 0;
 
@@ -264,56 +271,76 @@ namespace ConsoleGame
                     break;
                 case ConsoleKey.Home: // set teleport home
                     playerHomeLocation = player.Get<Location>();
-                    PlaySetTeleportHomeSound();
+                    SoundEffects.PlaySetTeleportHomeSound();
                     break;
                 case ConsoleKey.LeftArrow:
                     if (!world.TryMove(player, player.Get<Location>().FromDelta(-1, 0, 0)))
-                        PlayObstructionSound();
+                        SoundEffects.PlayObstructionSound();
 
                     break;
                 case ConsoleKey.UpArrow:
                     if (!world.TryMove(player, player.Get<Location>().FromDelta(0, -1, 0)))
-                        PlayObstructionSound();
+                        SoundEffects.PlayObstructionSound();
 
                     break;
                 case ConsoleKey.RightArrow:
                     if (!world.TryMove(player, player.Get<Location>().FromDelta(+1, 0, 0)))
-                        PlayObstructionSound();
+                        SoundEffects.PlayObstructionSound();
 
                     break;
                 case ConsoleKey.DownArrow:
                     if (!world.TryMove(player, player.Get<Location>().FromDelta(0, +1, 0)))
-                        PlayObstructionSound();
+                        SoundEffects.PlayObstructionSound();
 
                     break;
                 case ConsoleKey.Enter:
-                    var direction = Console.ReadKey();
+                    var direction = Console.ReadKey(true);
                     var target = direction.Key switch
                     {
                         ConsoleKey.UpArrow => player.Get<Location>().FromDelta(0, -1, 0),
                         ConsoleKey.DownArrow => player.Get<Location>().FromDelta(0, +1, 0),
                         ConsoleKey.LeftArrow => player.Get<Location>().FromDelta(-1, 0, 0),
                         ConsoleKey.RightArrow => player.Get<Location>().FromDelta(+1, 0, 0),
+                        ConsoleKey.U => player.Get<Location>().FromDelta(0, 0, +1),
+                        ConsoleKey.D => player.Get<Location>().FromDelta(0, 0, -1),
                         _ => Location.Empty
                     };
 
                     if (target == Location.Empty)
                         break;
 
-                    if (world.PassableTerrain(target))
+                    if (!world.PassableTerrain(target))
                         break;
 
-                    PlayDiggingSound();
-                    world.Terrain[target.Z, target.Y, target.X] = TerrainType.Indoors;
+                    SoundEffects.PlayDiggingSound();
+
+                    if (direction.Key != ConsoleKey.U && direction.Key != ConsoleKey.D)
+                    {
+                        world.SetTerrain(target, TerrainType.Indoors);
+                    }
+                    else
+                    {
+                        if (direction.Key == ConsoleKey.U)
+                        {
+                            world.SetTerrain(player.Get<Location>(), TerrainType.Upstairs);
+                            world.SetTerrain(player.Get<Location>().FromDelta(0, 0, +1), TerrainType.Downstairs);
+                        }
+                        else
+                        {
+                            world.SetTerrain(player.Get<Location>(), TerrainType.Downstairs);
+                            world.SetTerrain(player.Get<Location>().FromDelta(0, 0, -1), TerrainType.Upstairs);
+                        }
+                    }
+
                     break;
                 case ConsoleKey.U:
                     if (!world.TryMove(player, player.Get<Location>().FromDelta(0, 0, +1)))
-                        PlayObstructionSound();
+                        SoundEffects.PlayObstructionSound();
 
                     break;
                 case ConsoleKey.D:
                     if (!world.TryMove(player, player.Get<Location>().FromDelta(0, 0, -1)))
-                        PlayObstructionSound();
+                        SoundEffects.PlayObstructionSound();
 
                     break;
             }
@@ -325,30 +352,6 @@ namespace ConsoleGame
         {
             var start = (length / 2) - (text.Length / 2);
             return text.PadLeft(text.Length + start).PadRight(length);
-        }
-
-        static void PlayTeleportSound()
-        {
-            Console.Beep(200, 100);
-            Console.Beep(400, 100);
-            Console.Beep(800, 100);
-            Console.Beep(1600, 100);
-        }
-
-        private static void PlaySetTeleportHomeSound()
-        {
-            Console.Beep(1600, 100);
-            Console.Beep(200, 100);
-        }
-        
-        private static void PlayObstructionSound()
-        {
-            Console.Beep(200, 100);
-        }
-
-        private void PlayDiggingSound()
-        {
-            Console.Beep(300, 25);
         }
 
         static void Write(string text, Point location, 

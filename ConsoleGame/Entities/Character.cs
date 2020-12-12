@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Linq;
 using System.Drawing;
-using ConsoleGame.Components;
 using ConsoleGame.Core;
+using ConsoleGame.Components;
 
 namespace ConsoleGame
 {

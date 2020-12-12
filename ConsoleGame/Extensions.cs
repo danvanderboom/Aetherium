@@ -30,5 +30,8 @@ namespace ConsoleGame
 
         public static Point FromDelta(this Point position, int xd, int yd) =>
             new Point(position.X + xd, position.Y + yd);
+
+        public static TileType ToTileType(this TerrainType terrainType) =>
+            (TileType)Enum.Parse(typeof(TileType), terrainType.ToString());
     }
 }

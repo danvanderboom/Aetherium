@@ -14,7 +14,8 @@ namespace ConsoleGame
 
         public string ContentType { get; set; }
 
-        public string Content { get; set; }
+        public string Content { get; set; } // PerceptionFrame object?
+        //public PerceptionFrame Content { get; set; } // TODO
 
         /// <summary>
         /// 0 ... 1

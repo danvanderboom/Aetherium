@@ -24,7 +24,7 @@ namespace ConsoleGame
 
         public int LocationsTracked => SpaceTimeMemories.Count;
 
-        public Mind()
+        public Mind() : base()
         {
             SpaceTimeMemories = new ConcurrentDictionary<Location, List<SpaceTimeMemory>>();
         }

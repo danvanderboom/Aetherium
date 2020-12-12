@@ -15,7 +15,6 @@ namespace ConsoleGame.Core
 
         public TerrainType GetTerrain(Location location) => Terrain[location.Z, location.Y, location.X];
 
-
         public GameWorldLayer()
         {
         }

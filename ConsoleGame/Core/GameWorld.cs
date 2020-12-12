@@ -12,13 +12,9 @@ namespace ConsoleGame.Core
 {
     public class GameWorld
     {
-        public List<GameWorldLayer> Layers;
-
         public Size3d WorldSize { get; protected set; }
 
         public ConcurrentBag<Entity> Entities { get; protected set; }
-
-        public TerrainType[,,] Terrain { get; protected set; }
 
         public TerrainType GetTerrain(Location location) => 
             Terrain[location.Z, location.Y, location.X];
@@ -28,7 +24,13 @@ namespace ConsoleGame.Core
 
         public ConcurrentDictionary<Location, Entity> EntitiesByLocation { get; protected set; }
 
+        public Guid CharacterMoveTimestamp { get; protected set; } = Guid.NewGuid();
+
+        public event Action<Character> CharacterDied;
+
         Random rand = new Random();
+
+        TerrainType[,,] Terrain;
 
         Task MonsterHeartbeatTask = null;
 
@@ -37,8 +39,6 @@ namespace ConsoleGame.Core
         List<Rectangle> mazeRectangles;
 
         ConsoleColor mapFrameColor = ConsoleColor.Gray;
-
-        public Guid CharacterMoveTimestamp { get; protected set; } = Guid.NewGuid();
 
         class BoxFrameCharacters
         {
@@ -55,8 +55,6 @@ namespace ConsoleGame.Core
 
             EntitiesByLocation = new ConcurrentDictionary<Location, Entity>();
             Entities = new ConcurrentBag<Entity>();
-
-            Layers = new List<GameWorldLayer>();
         }
 
         public Character AddPlayer(string name)
@@ -95,7 +93,8 @@ namespace ConsoleGame.Core
                 var monsters = Entities.OfType<Monster>().ToList();
 
                 foreach (var monster in monsters)
-                    monster.Heartbeat();
+                    if (monster.Get<Health>().Level > 0)
+                        monster.Heartbeat();
 
                 await Task.Delay(1000);
             }
@@ -160,8 +159,17 @@ namespace ConsoleGame.Core
                 return false;
 
             // stop players (including monsters) from existing in the same location
-            if (Entities.OfType<Character>().Any(p => p.Get<Location>() == location))
+            var character = Entities.OfType<Character>().FirstOrDefault(p => p.Get<Location>() == location);
+            if (character != null)
+            {
+                var health = character.Get<Health>();
+                health.Level--;
+
+                if (health.Level == 0)
+                    CharacterDied?.Invoke(character);
+
                 return false;
+            }
 
             var currentLocation = player.Get<Location>();
             var up = currentLocation.FromDelta(0, 0, +1);
@@ -377,7 +385,7 @@ namespace ConsoleGame.Core
                     }
 
                     SetTerrain(start, start.Z > end.Z ? TerrainType.Downstairs : TerrainType.Upstairs);
-                    SetTerrain(end, start.Z > end.Z ? TerrainType.Downstairs : TerrainType.Upstairs);
+                    SetTerrain(end, start.Z > end.Z ? TerrainType.Upstairs : TerrainType.Downstairs);
                 }
             }
         }
@@ -443,22 +451,29 @@ namespace ConsoleGame.Core
                         locationInWorldTopLeft.Y + y,
                         locationInWorldTopLeft.Z);
 
-                    if (Entities.OfType<Character>().Any(c => c.Get<Location>() == worldLocation))
+                    var character = Entities.OfType<Character>()
+                        .FirstOrDefault(c => c.Get<Location>() == worldLocation);
+
+                    if (character != null)
                     {
-                        if (Entities.OfType<Character>().Any(c => c.Get<Location>() == worldLocation && c is Monster))
-                            DrawTerrain(TerrainType.Monster);
+                        var healthLevel = character.Get<Health>().Level;
+
+                        if (character is Monster && healthLevel > 0)
+                            DrawTile(TileType.Monster);
+                        else if (character is Monster && healthLevel <= 0)
+                            DrawTile(TileType.DeadMonster);
                         else
-                            DrawTerrain(TerrainType.Player);
+                            DrawTile(TileType.Player);
                     }
                     else if (worldLocation.X < 0 || worldLocation.X >= WorldSize.Length 
                         || worldLocation.Y < 0 || worldLocation.Y >= WorldSize.Width
                         || worldLocation.Z < 0 || worldLocation.Z >= WorldSize.Depth)
                     {
-                        DrawTerrain(TerrainType.None);
+                        DrawTile(TileType.None);
                     }
                     else
                     {
-                        DrawTerrain(Terrain[worldLocation.Z, worldLocation.Y, worldLocation.X]);
+                        DrawTerrain(GetTerrain(worldLocation));
                     }
                 }
             }
@@ -467,9 +482,11 @@ namespace ConsoleGame.Core
             Console.ForegroundColor = oldForegroundColor;
         }
 
-        public void DrawTerrain(TerrainType terrain)
+        public void DrawTerrain(TerrainType terrainType) => DrawTile(terrainType.ToTileType());
+
+        public void DrawTile(TileType tileType)
         {
-            var terrainInfo = TerrainInfo(terrain);
+            var terrainInfo = TerrainInfo(tileType);
 
             Console.BackgroundColor = terrainInfo.BackgroundColor;
             Console.ForegroundColor = terrainInfo.ForegroundColor;
@@ -477,22 +494,23 @@ namespace ConsoleGame.Core
             Console.Write(terrainInfo.MapSymbol);
         }
 
-        public (char MapSymbol, ConsoleColor BackgroundColor, ConsoleColor ForegroundColor) TerrainInfo(TerrainType terrain) => 
+        public (char MapSymbol, ConsoleColor BackgroundColor, ConsoleColor ForegroundColor) TerrainInfo(TileType terrain) => 
             terrain switch
             {
-                TerrainType.None => (' ', ConsoleColor.Black, ConsoleColor.Black),
-                TerrainType.Indoors => (' ', ConsoleColor.Gray, ConsoleColor.Black),
-                TerrainType.Wall => ('|', ConsoleColor.Gray, ConsoleColor.DarkRed),
-                TerrainType.Mountain => ('^', ConsoleColor.DarkGray, ConsoleColor.White),
-                TerrainType.Road => ('=', ConsoleColor.Black, ConsoleColor.White),
-                TerrainType.Plains => ('.', ConsoleColor.DarkYellow, ConsoleColor.Yellow),
-                TerrainType.Forest => ('t', ConsoleColor.Black, ConsoleColor.Green),
-                TerrainType.Water => ('~', ConsoleColor.Blue, ConsoleColor.White),
-                TerrainType.Cave => ('c', ConsoleColor.Black, ConsoleColor.DarkGray),
-                TerrainType.Player => ('*', ConsoleColor.White, ConsoleColor.Blue),
-                TerrainType.Monster => ('!', ConsoleColor.Red, ConsoleColor.Black),
-                TerrainType.Upstairs => ('+', ConsoleColor.Gray, ConsoleColor.Yellow),
-                TerrainType.Downstairs => ('-', ConsoleColor.Gray, ConsoleColor.Yellow),
+                TileType.None => (' ', ConsoleColor.Black, ConsoleColor.Black),
+                TileType.Indoors => (' ', ConsoleColor.Gray, ConsoleColor.Black),
+                TileType.Wall => ('|', ConsoleColor.Gray, ConsoleColor.DarkRed),
+                TileType.Mountain => ('^', ConsoleColor.DarkGray, ConsoleColor.White),
+                TileType.Road => ('=', ConsoleColor.Black, ConsoleColor.White),
+                TileType.Plains => ('.', ConsoleColor.DarkYellow, ConsoleColor.Yellow),
+                TileType.Forest => ('t', ConsoleColor.Black, ConsoleColor.Green),
+                TileType.Water => ('~', ConsoleColor.Blue, ConsoleColor.White),
+                TileType.Cave => ('c', ConsoleColor.Black, ConsoleColor.DarkGray),
+                TileType.Player => ('*', ConsoleColor.White, ConsoleColor.Blue),
+                TileType.Monster => ('!', ConsoleColor.Red, ConsoleColor.Black),
+                TileType.DeadMonster => ('!', ConsoleColor.DarkRed, ConsoleColor.Black),
+                TileType.Upstairs => ('+', ConsoleColor.Gray, ConsoleColor.Yellow),
+                TileType.Downstairs => ('-', ConsoleColor.Gray, ConsoleColor.Yellow),
                 _ => throw new NotImplementedException()
             };
     }
