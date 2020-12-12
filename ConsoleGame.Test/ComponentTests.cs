@@ -31,7 +31,7 @@ namespace ConsoleGame.Test
         {
             var world = new GameWorld(100, 100, 1);
             var monster = new Monster(world);
-            monster.Get<Mind>().Components.Add(new Health());
+            monster.Get<Mind>().Components.TryAdd(typeof(Health), new Health());
 
             var components = monster.AllComponents.ToList();
             var count = components.Count(c => typeof(Health).IsAssignableFrom(c.GetType()));
