@@ -22,7 +22,7 @@ namespace ConsoleGame
 
             rand = new Random();
 
-            Components.TryAdd(typeof(Mind), new Mind());
+            Set(new Mind());
         }
 
         public void Heartbeat()

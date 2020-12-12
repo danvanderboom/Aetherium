@@ -19,7 +19,12 @@ namespace ConsoleGame.Core
         public ConcurrentBag<Entity> Entities { get; protected set; }
 
         public TerrainType[,,] Terrain { get; protected set; }
-        public TerrainType GetTerrain(Location location) => Terrain[location.Z, location.Y, location.X];
+
+        public TerrainType GetTerrain(Location location) => 
+            Terrain[location.Z, location.Y, location.X];
+
+        public TerrainType SetTerrain(Location location, TerrainType terrainType) => 
+            Terrain[location.Z, location.Y, location.X] = terrainType;
 
         public ConcurrentDictionary<Location, Entity> EntitiesByLocation { get; protected set; }
 
@@ -106,9 +111,12 @@ namespace ConsoleGame.Core
 
                 var location = new Location(x, y, z);
 
+                // avoid locations with other characters
                 var charactersAtLocation = Entities.OfType<Character>().Any(c => c.Get<Location>() == location);
+                if (charactersAtLocation)
+                    continue; // try again
 
-                if (PassableTerrain(Terrain[z, y, x]))
+                if (PassableTerrain(GetTerrain(location)))
                     return location;
             }
         }
@@ -137,6 +145,10 @@ namespace ConsoleGame.Core
                     return TryMove(player, player.Get<Location>().FromDelta(0, -1, 0));
                 case Direction.East:
                     return TryMove(player, player.Get<Location>().FromDelta(0, +1, 0));
+                case Direction.Up:
+                    return TryMove(player, player.Get<Location>().FromDelta(0, 0, +1));
+                case Direction.Down:
+                    return TryMove(player, player.Get<Location>().FromDelta(0, 0, -1));
                 default:
                     return false;
             }
@@ -162,9 +174,6 @@ namespace ConsoleGame.Core
 
             if (PassableTerrain(location))
             {
-                if (player is Monster)
-                    CharacterMoveTimestamp = Guid.NewGuid();
-
                 player.Set(location);
 
                 CharacterMoveTimestamp = Guid.NewGuid();
@@ -182,7 +191,7 @@ namespace ConsoleGame.Core
             location.X >= 0 && location.X < WorldSize.Width
             && location.Y >= 0 && location.Y < WorldSize.Length
             && location.Z >= 0 && location.Z < WorldSize.Depth
-            && PassableTerrain(Terrain[location.Z, location.Y, location.X]);
+            && PassableTerrain(GetTerrain(location));
 
         public bool PassableTerrain(TerrainType terrainType)
         {
@@ -199,8 +208,6 @@ namespace ConsoleGame.Core
                 case TerrainType.None:
                 case TerrainType.Wall:
                 case TerrainType.Mountain:
-                case TerrainType.Player:
-                case TerrainType.Monster:
                 case TerrainType.Water:
                 default:
                     return false;
@@ -248,7 +255,7 @@ namespace ConsoleGame.Core
 
             for (int y = 0; y < WorldSize.Width; y++)
                 for (int x = 0; x < WorldSize.Length; x++)
-                    Terrain[z, y, x] = TerrainType.None;
+                    SetTerrain(new Location(x, y, z), TerrainType.None);
 
             var cellsUpdated = 0;
 
@@ -256,7 +263,7 @@ namespace ConsoleGame.Core
                 for (int y = rectangle.Y; y < rectangle.Y + rectangle.Height; y++)
                     for (int x = rectangle.X; x < rectangle.X + rectangle.Width; x++)
                     {
-                        Terrain[z, y, x] = TerrainType.Indoors;
+                        SetTerrain(new Location(x, y, z), TerrainType.Indoors);
                         cellsUpdated++;
                     }
         }
@@ -299,7 +306,7 @@ namespace ConsoleGame.Core
 
             while (remaining > 0)
             {
-                Terrain[center.Z, center.Y, center.X] = TerrainType.Water;
+                SetTerrain(center, TerrainType.Water);
                 remaining--;
             }
         }
@@ -319,20 +326,20 @@ namespace ConsoleGame.Core
                     if (onEdge) 
                     {
                         // the world is enclosed in impassable mountains
-                        Terrain[z, y, x] = TerrainType.Mountain;
+                        SetTerrain(new Location(x, y, z), TerrainType.Mountain);
                     }
                     else
                     {
                         var d = rand.NextDouble();
 
-                        var t = TerrainType.Plains;
+                        var terrainType = TerrainType.Plains;
                         if (d < 0.05)
-                            t = TerrainType.Forest;
+                            terrainType = TerrainType.Forest;
                         else if (d < 0.07)
-                            t = TerrainType.Water;
+                            terrainType = TerrainType.Water;
 
                         // fill the rest with plains
-                        Terrain[z, y, x] = t;
+                        SetTerrain(new Location(x, y, z), terrainType);
                     }
                 }
             }
@@ -369,8 +376,8 @@ namespace ConsoleGame.Core
                         break;
                     }
 
-                    Terrain[start.Z, start.Y, start.X] = start.Z > end.Z ? TerrainType.Downstairs : TerrainType.Upstairs;
-                    Terrain[end.Z, end.Y, end.X] = start.Z > end.Z ? TerrainType.Upstairs : TerrainType.Downstairs;
+                    SetTerrain(start, start.Z > end.Z ? TerrainType.Downstairs : TerrainType.Upstairs);
+                    SetTerrain(end, start.Z > end.Z ? TerrainType.Downstairs : TerrainType.Upstairs);
                 }
             }
         }
