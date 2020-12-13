@@ -1,6 +1,6 @@
 ﻿using ConsoleGame.Core;
 
-namespace ConsoleGame
+namespace ConsoleGame.Components
 {
     public class Health : Component
     {

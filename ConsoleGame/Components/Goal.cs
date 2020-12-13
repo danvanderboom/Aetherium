@@ -3,7 +3,7 @@ using System.Drawing;
 using ConsoleGame.Components;
 using ConsoleGame.Core;
 
-namespace ConsoleGame
+namespace ConsoleGame.Components
 {
     public class Goal : Component
     {

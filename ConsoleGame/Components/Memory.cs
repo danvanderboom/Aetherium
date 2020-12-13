@@ -4,11 +4,10 @@ using System.Drawing;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using ConsoleGame.Core;
-using ConsoleGame.Components;
 
-namespace ConsoleGame
+namespace ConsoleGame.Components
 {
-    public class Mind : Component
+    public class Memory : Component
     {
         public ConcurrentDictionary<Location, List<SpaceTimeMemory>> SpaceTimeMemories;
 
@@ -24,7 +23,7 @@ namespace ConsoleGame
 
         public int LocationsTracked => SpaceTimeMemories.Count;
 
-        public Mind() : base()
+        public Memory() : base()
         {
             SpaceTimeMemories = new ConcurrentDictionary<Location, List<SpaceTimeMemory>>();
         }

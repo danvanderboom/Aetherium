@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Drawing;
-using ConsoleGame.Components;
 
-namespace ConsoleGame
+namespace ConsoleGame.Components
 {
     public class SpaceTimeMemory
     {

@@ -8,11 +8,21 @@ namespace ConsoleGame.Core
 {
     public abstract class Component
     {
-        public string Id { get; protected set; }
+        public string ComponentId { get; protected set; } = Guid.NewGuid().ToString();
 
         public Component Parent { get; set; }
 
         public ConcurrentDictionary<Type, Component> Components { get; protected set; } = new ConcurrentDictionary<Type, Component>();
+
+        public Component()
+        {
+            Components = new ConcurrentDictionary<Type, Component>();
+        }
+
+        public Component(Component parent) : this()
+        {
+            Parent = parent;
+        }
 
         public T Get<T>() where T : Component =>
             (T)AllComponents.FirstOrDefault(c => c.GetType() == typeof(T));
@@ -23,7 +33,8 @@ namespace ConsoleGame.Core
             if (existingComponent != null)
                 Components.TryRemove(typeof(T), out var _);
 
-            Components.TryAdd(component.GetType(), component);
+            if (Components.TryAdd(component.GetType(), component))
+                component.Parent = this;
         }
 
         public IEnumerable<Component> AllComponents

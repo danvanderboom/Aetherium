@@ -10,8 +10,9 @@ namespace ConsoleGame
     {
         public Character() : base()
         {
-            Set(new Location());
             Set(new Health());
+            Set(new Perception());
+            Set(new Memory());
         }
     }
 }

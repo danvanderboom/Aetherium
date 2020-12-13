@@ -14,41 +14,48 @@ namespace ConsoleGame
         Down
     }
 
-    public enum TileType
+    public enum WorldEventType
     {
-        None,
-        Indoors,
-        Soil,
-        TreeRoots,
-        Rock,
-        Wall,
-        Mountain,
-        Road,
-        Plains,
-        Forest,
-        Water,
-        Cave,
-        Player,
-        Monster,
-        DeadMonster,
-        Upstairs,
-        Downstairs
+        EntityAdded,
+        EntityMoved,
+        EntityRemoved
     }
 
-    public enum TerrainType
-    {
-        None,
-        Indoors,
-        Wall,
-        Mountain,
-        Road,
-        Plains,
-        Forest,
-        Water,
-        Cave,
-        Upstairs,
-        Downstairs
-    }
+    //public enum TileType
+    //{
+    //    None,
+    //    Indoors,
+    //    Soil,
+    //    TreeRoots,
+    //    Rock,
+    //    Wall,
+    //    Mountain,
+    //    Road,
+    //    Plains,
+    //    Forest,
+    //    Water,
+    //    Cave,
+    //    Player,
+    //    Monster,
+    //    DeadMonster,
+    //    Upstairs,
+    //    Downstairs
+    //}
+
+    //public enum TerrainType
+    //{
+    //    None,
+    //    Indoors,
+    //    Wall,
+    //    Mountain,
+    //    Road,
+    //    Plains,
+    //    Forest,
+    //    Water,
+    //    Cave,
+    //    Upstairs,
+    //    Downstairs
+    //}
 
     public enum VisualType
     {
