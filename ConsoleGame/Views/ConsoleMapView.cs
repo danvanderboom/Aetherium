@@ -69,7 +69,14 @@ namespace ConsoleGame.Views
 
         private void HandleWorldEvent(WorldEvent worldEvent)
         {
-            //if (new Rectangle())
+            if (WorldLocation.Z != worldEvent.Location.Z)
+                return;
+
+            if (!VisibleWorldRectangle.Contains(
+                new Point(worldEvent.Location.X, worldEvent.Location.Y)))
+                return;
+
+            DrawContents();
         }
 
         public Point CenterScreenPosition => new Point(

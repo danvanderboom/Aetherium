@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Linq;
+using System.Collections.Generic;
 using ConsoleGame.Core;
 using ConsoleGame.Components;
 using ConsoleGame.Entities;
-using System.Collections.Generic;
 
 namespace ConsoleGame.WorldBuilders
 {

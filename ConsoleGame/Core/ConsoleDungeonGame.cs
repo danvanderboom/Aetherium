@@ -95,6 +95,14 @@ namespace ConsoleGame.Core
                     case ConsoleKey.C:
                         Clear(mapView.ContentScreenPosition, mapView.ContentSize, ConsoleColor.DarkYellow);
                         continue;
+                    case ConsoleKey.J:
+                        var locationCount = World.EntitiesByLocation.Keys.Count;
+                        var location = World.EntitiesByLocation.Keys
+                            .Skip(rand.Next(0, locationCount))
+                            .First();
+
+                        mapView.WorldLocation = location;
+                        break;
                 }
 
                 DisplayViewContents();
@@ -226,7 +234,7 @@ namespace ConsoleGame.Core
                 Name = "Plains",
                 Settings = new Dictionary<string, string>
                 {
-                    { "MapCharacter", "=" },
+                    { "MapCharacter", "." },
                     { "BackgroundColor", ConsoleColor.DarkYellow.ToString() },
                     { "ForegroundColor", ConsoleColor.Yellow.ToString() },
                 }
