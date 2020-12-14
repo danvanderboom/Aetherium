@@ -7,7 +7,7 @@ namespace ConsoleGame.Components
 {
     public class Tile : Component
     {
-        public TileType Type { get; set; }
+        public TileType Type { get; set; } = TileType.None;
 
         public Tile() { }
     }

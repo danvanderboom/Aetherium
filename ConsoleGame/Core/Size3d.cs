@@ -63,7 +63,7 @@ namespace ConsoleGame.Core
             return lhs.Width == rhs.Width && lhs.Length == rhs.Length && lhs.Depth == lhs.Depth;
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             var other = obj as Size3d;
             if (other is null)

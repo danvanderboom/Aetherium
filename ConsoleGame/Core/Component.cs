@@ -10,7 +10,7 @@ namespace ConsoleGame.Core
     {
         public string ComponentId { get; protected set; } = Guid.NewGuid().ToString();
 
-        public Component Parent { get; set; }
+        public Component? Parent { get; set; }
 
         public ConcurrentDictionary<Type, Component> Components { get; protected set; } = new ConcurrentDictionary<Type, Component>();
 

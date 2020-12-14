@@ -1,0 +1,13 @@
+
+Game Goals
+- implement Field-of-View (FOV)
+  - use efficient spiral method
+- finish implementing Perception handling
+  - use Field-of-View output for generating vision Perception data
+  - bind ConsoleMapView contents to a Character's Perception component
+- create separate projects for client, server, and a shared model
+- host server components in Orleans cluster in Azure
+- create a GameClient class able to connect to a GameGrain in Orelans
+  - GameClient connects to SignalR endpoint, from which it receives a stream of Perception data
+  - GameClient sends Control data to move, pick up items, etc
+- use SimplexNoise package to generate terrain in one or more WorldBuilders

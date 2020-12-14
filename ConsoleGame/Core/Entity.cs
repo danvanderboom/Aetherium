@@ -12,7 +12,7 @@ namespace ConsoleGame.Core
 
         public Entity() : base() 
         {
-            Set(new Location());
+            Set(new WorldLocation());
             Set(new Tile());
         }
     }

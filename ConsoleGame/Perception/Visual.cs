@@ -7,19 +7,21 @@ namespace ConsoleGame.Components
 {
     public class Visual
     {
-        public Location Location { get; set; }
+        public WorldLocation Location { get; set; } = WorldLocation.None;
 
         public TileType? Terrain { get; set; }
 
         public Dictionary<VisualType, Dictionary<string, double>> ThingsSeen { get; set; }
 
-        public Visual() { }
+        public Visual() 
+        {
+            ThingsSeen = new Dictionary<VisualType, Dictionary<string, double>>();
+        }
 
-        public Visual(Location location, TileType? terrain)
+        public Visual(WorldLocation location, TileType? terrain) : this()
         {
             Location = location;
             Terrain = terrain;
-            ThingsSeen = new Dictionary<VisualType, Dictionary<string, double>>();
         }
     }
 }

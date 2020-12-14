@@ -2,7 +2,7 @@
 {
     public class Sound
     {
-        public Location Location { get; set; }
+        public WorldLocation Location { get; set; } = WorldLocation.None;
 
         public SoundType Type { get; set; }
 
@@ -12,7 +12,7 @@
 
         public Sound() { }
 
-        public Sound(Location location, SoundType type, int degrees, double intensity)
+        public Sound(WorldLocation location, SoundType type, int degrees, double intensity)
         {
             Location = location;
             Type = type;

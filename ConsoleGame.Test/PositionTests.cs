@@ -14,8 +14,8 @@ namespace ConsoleGame.Test
         [Test]
         public void PositionsAreEqual()
         {
-            var pos1 = new Location(1, 2, 3);
-            var pos2 = new Location(1, 2, 3);
+            var pos1 = new WorldLocation(1, 2, 3);
+            var pos2 = new WorldLocation(1, 2, 3);
 
             Assert.AreEqual(pos1, pos2);
         }
@@ -23,8 +23,8 @@ namespace ConsoleGame.Test
         [Test]
         public void PositionEqualsPosition()
         {
-            var pos1 = new Location(1, 2, 3);
-            var pos2 = new Location(1, 2, 3);
+            var pos1 = new WorldLocation(1, 2, 3);
+            var pos2 = new WorldLocation(1, 2, 3);
 
             Assert.IsTrue(pos1 == pos2);
         }
@@ -32,12 +32,12 @@ namespace ConsoleGame.Test
         [Test]
         public void PositionAsDictionaryKey()
         {
-            var d = new Dictionary<Location, string>();
+            var d = new Dictionary<WorldLocation, string>();
 
-            var pos1 = new Location(1, 2, 3);
+            var pos1 = new WorldLocation(1, 2, 3);
             d.Add(pos1, "Test");
 
-            var pos2 = new Location(1, 2, 3);
+            var pos2 = new WorldLocation(1, 2, 3);
             var text = d[pos1];
 
             Assert.AreEqual("Test", text);

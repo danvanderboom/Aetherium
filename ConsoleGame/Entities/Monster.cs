@@ -12,8 +12,6 @@ namespace ConsoleGame
     {
         World world;
 
-        Goal goal;
-
         Random rand;
 
         public Monster(World world) : base()

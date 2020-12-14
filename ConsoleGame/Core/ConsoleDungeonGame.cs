@@ -13,7 +13,7 @@ namespace ConsoleGame.Core
     {
         public World World { get; protected set; }
 
-        public Character player { get; protected set; }
+        public Character? player { get; protected set; }
 
         List<ConsoleView> Views;
 
@@ -24,11 +24,14 @@ namespace ConsoleGame.Core
 
         Random rand = new Random();
 
-        public ConsoleDungeonGame() => Initialize();
-
-        public void Initialize()
+        public ConsoleDungeonGame() 
         {
-            CreateWorld();
+            World = new World();
+            World.AddTileTypes(CreateTileTypes());
+            World.AddTerrainTypes(CreateTerrainTypes());
+
+            var builder = new DungeonCrawlerWorldBuilder(World);
+            builder.Build();
 
             Views = new List<ConsoleView>();
 
@@ -50,19 +53,8 @@ namespace ConsoleGame.Core
             if (locations.Any())
             {
                 var randomLocation = locations[rand.Next(0, locations.Count)];
-                if (randomLocation != null)
-                    mapView.WorldLocation = randomLocation;
+                mapView.WorldLocation = randomLocation;
             }
-        }
-
-        private void CreateWorld()
-        {
-            World = new World();
-            World.AddTileTypes(CreateTileTypes());
-            World.AddTerrainTypes(CreateTerrainTypes());
-
-            var builder = new DungeonCrawlerWorldBuilder(World);
-            builder.Build();
         }
 
         public void Run()
@@ -81,22 +73,30 @@ namespace ConsoleGame.Core
                 switch (keyInfo.Key)
                 {
                     case ConsoleKey.UpArrow:
-                        mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, -1, 0);
+                        if (mapView?.WorldLocation != null)
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, -1, 0);
                         break;
                     case ConsoleKey.DownArrow:
-                        mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, +1, 0);
+                        if (mapView?.WorldLocation != null)
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, +1, 0);
                         break;
                     case ConsoleKey.LeftArrow:
-                        mapView.WorldLocation = mapView.WorldLocation.FromDelta(-1, 0, 0);
+                        if (mapView?.WorldLocation != null)
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(-1, 0, 0);
                         break;
                     case ConsoleKey.RightArrow:
-                        mapView.WorldLocation = mapView.WorldLocation.FromDelta(+1, 0, 0);
+                        if (mapView?.WorldLocation != null)
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(+1, 0, 0);
                         break;
                     case ConsoleKey.C:
-                        Clear(mapView.ContentScreenPosition, mapView.ContentSize, ConsoleColor.DarkYellow);
+                        if (mapView != null)
+                            Clear(mapView.ContentScreenPosition, mapView.ContentSize, ConsoleColor.DarkYellow);
                         continue;
                     case ConsoleKey.J:
                         var locationCount = World.EntitiesByLocation.Keys.Count;
+                        if (mapView == null || locationCount == 0)
+                            continue;
+
                         var location = World.EntitiesByLocation.Keys
                             .Skip(rand.Next(0, locationCount))
                             .First();
@@ -108,9 +108,9 @@ namespace ConsoleGame.Core
                 DisplayViewContents();
             }
 
-            Console.CursorVisible = false;
-            Console.BackgroundColor = oldBackgroundColor;
-            Console.ForegroundColor = oldForegroundColor;
+            //Console.CursorVisible = false;
+            //Console.BackgroundColor = oldBackgroundColor;
+            //Console.ForegroundColor = oldForegroundColor;
         }
 
         public void DisplayViews()

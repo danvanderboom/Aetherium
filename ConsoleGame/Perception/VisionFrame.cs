@@ -7,7 +7,7 @@ namespace ConsoleGame.Components
 {
     public class VisionFrame : PerceptionFrame
     {
-        public ConcurrentDictionary<Location, List<Visual>> Visuals { get; protected set; }
+        public ConcurrentDictionary<WorldLocation, List<Visual>> Visuals { get; protected set; }
 
         public IList<Visual> GetVisualsOfType(VisualType type) => Visuals
             .SelectMany(v => v.Value)
@@ -18,7 +18,7 @@ namespace ConsoleGame.Components
 
         public VisionFrame() : base()
         {
-            Visuals = new ConcurrentDictionary<Location, List<Visual>>();
+            Visuals = new ConcurrentDictionary<WorldLocation, List<Visual>>();
         }
 
         public VisionFrame(IList<Visual> visuals) : this()

@@ -7,15 +7,12 @@ using ConsoleGame.Entities;
 
 namespace ConsoleGame.WorldBuilders
 {
-    public class DungeonCrawlerWorldBuilder
+    public class SpaceHackWorldBuilder : WorldBuilder
     {
-        World world;
-
         Random rand = new Random();
 
-        public DungeonCrawlerWorldBuilder(World world)
+        public SpaceHackWorldBuilder(World world) : base(world)
         {
-            this.world = world;
         }
 
         int ForceInRange(int value, int min, int max) => Math.Min(max, Math.Max(min, value));
@@ -76,41 +73,14 @@ namespace ConsoleGame.WorldBuilders
             }
         }
 
-        List<Terrain> GetTerrain(WorldLocation location, Size3d size)
+        public override World Build(WorldBuilderOptions options = null)
         {
-            var results = new List<Terrain>();
-
-            // TODO: convert this into a general-purpose entity-by-location visitor
-            for (int z = 0; z < size.Depth; z++)
-                for (int y = 0; y < size.Length; y++)
-                    for (int x = 0; x < size.Width; x++)
-                        foreach (var terrainEntity in world.EntitiesByLocation[location.FromDelta(x, y, z)].Values.OfType<Terrain>())
-                            results.Add(terrainEntity);
-
-            return results;
+            throw new NotImplementedException();
         }
 
-        void AddTerrain(string name, WorldLocation location, Size3d size)
+        public override World Expand(WorldBuilderOptions options = null)
         {
-            for (int z = 0; z < size.Depth; z++)
-                for (int y = 0; y < size.Length; y++)
-                    for (int x = 0; x < size.Width; x++)
-                        AddTerrain(name, location.FromDelta(x, y, z));
-        }
-
-        Terrain? AddTerrain(string name, WorldLocation location)
-        {
-            var terrainType = world.TerrainTypes[name];
-            if (terrainType == null)
-                throw new InvalidOperationException($"Terrain not registered: '{name}'");
-
-            var terrain = new Terrain();
-            terrain.Set(new Tile { Type = terrainType?.TileType ?? TileType.None });
-            terrain.Set(location);
-
-            world.AddEntity(terrain);
-
-            return terrain;
+            throw new NotImplementedException();
         }
     }
 }

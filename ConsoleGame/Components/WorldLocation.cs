@@ -6,9 +6,9 @@ using ConsoleGame.Core;
 
 namespace ConsoleGame.Components
 {
-    public class Location : Component
+    public class WorldLocation : Component
     {
-        public static Location Empty = new Location(0, 0, 0) { IsEmpty = true };
+        public static WorldLocation None = new WorldLocation(0, 0, 0) { IsNone = true };
 
         int _X;
         public int X 
@@ -17,7 +17,7 @@ namespace ConsoleGame.Components
             set
             {
                 _X = value;
-                IsEmpty = false;
+                IsNone = false;
             }
         }
 
@@ -28,7 +28,7 @@ namespace ConsoleGame.Components
             set
             {
                 _Y = value;
-                IsEmpty = false;
+                IsNone = false;
             }
         }
 
@@ -39,34 +39,34 @@ namespace ConsoleGame.Components
             set
             {
                 _Z = value;
-                IsEmpty = false;
+                IsNone = false;
             }
         }
 
-        public bool IsEmpty { get; protected set; }
+        public bool IsNone { get; protected set; }
 
-        public Location() 
+        public WorldLocation() 
         {
-            IsEmpty = true;
+            IsNone = true;
         }
 
-        public Location(int x, int y, int z)
+        public WorldLocation(int x, int y, int z)
         {
             X = x;
             Y = y;
             Z = z;
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
-            var other = obj as Location;
+            var other = obj as WorldLocation;
             if (other is null)
                 return false;
 
             return Equals(this, other);
         }
 
-        public static bool Equals(Location rhs, Location lhs)
+        public static bool Equals(WorldLocation? rhs, WorldLocation? lhs)
         {
             if (rhs is null && lhs is null)
                 return true;
@@ -79,9 +79,9 @@ namespace ConsoleGame.Components
 
         public override int GetHashCode() => ToString().GetHashCode();
 
-        public static bool operator ==(Location lhs, Location rhs) => Equals(lhs, rhs);
+        public static bool operator ==(WorldLocation? lhs, WorldLocation? rhs) => Equals(lhs, rhs);
 
-        public static bool operator !=(Location lhs, Location rhs) => !Equals(lhs, rhs);
+        public static bool operator !=(WorldLocation? lhs, WorldLocation? rhs) => !Equals(lhs, rhs);
 
         public override string ToString() => $"{X}, {Y}, {Z}";
     }

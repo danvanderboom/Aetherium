@@ -15,9 +15,9 @@ namespace ConsoleGame.Core
         public Dictionary<string, TerrainType> TerrainTypes { get; protected set; }
 
         public ConcurrentDictionary<string, Entity> Entities { get; set; }
-        public ConcurrentDictionary<Location, ConcurrentDictionary<string, Entity>> EntitiesByLocation { get; set; }
+        public ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>> EntitiesByLocation { get; set; }
 
-        public event Action<WorldEvent> WorldEvents;
+        public ConcurrentDictionary<string, ConcurrentDictionary<string, WorldFeature>> WorldFeaturesByName { get; set; }
 
         Random rand = new Random();
 
@@ -27,7 +27,8 @@ namespace ConsoleGame.Core
             TileTypes = new Dictionary<string, TileType>();
 
             Entities = new ConcurrentDictionary<string, Entity>();
-            EntitiesByLocation = new ConcurrentDictionary<Location, ConcurrentDictionary<string, Entity>>();
+            EntitiesByLocation = new ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>>();
+            WorldFeaturesByName = new ConcurrentDictionary<string, ConcurrentDictionary<string, WorldFeature>>();
         }
 
         public void AddTileTypes(IList<TileType> tileTypes)
@@ -48,39 +49,41 @@ namespace ConsoleGame.Core
             {
                 ConcurrentDictionary<string, Entity> dict;
 
-                if (EntitiesByLocation.TryGetValue(entity.Get<Location>(), out var existingDict))
+                if (EntitiesByLocation.TryGetValue(entity.Get<WorldLocation>(), out var existingDict))
                 {
                     dict = existingDict;
                 }
                 else
                 {
                     dict = new ConcurrentDictionary<string, Entity>();
-                    EntitiesByLocation.TryAdd(entity.Get<Location>(), dict);
+                    EntitiesByLocation.TryAdd(entity.Get<WorldLocation>(), dict);
                 }
 
-                if (dict.TryAdd(entity.EntityId, entity))
-                    WorldEvents?.Invoke(new WorldEvent
-                    {
-                        EventType = WorldEventType.EntityAdded,
-                        Location = entity.Get<Location>(),
-                        Entity = entity
-                    });
+                dict.TryAdd(entity.EntityId, entity);
+
+                //if (dict.TryAdd(entity.EntityId, entity))
+                //    WorldEvents?.Invoke(new WorldEvent
+                //    {
+                //        EventType = WorldEventType.EntityAdded,
+                //        Location = entity.Get<WorldLocation>(),
+                //        Entity = entity
+                //    });
             }
         }
 
         public void RemoveEntity(string Id)
         {
             if (Entities.TryGetValue(Id, out var entity)
-                && EntitiesByLocation.TryGetValue(entity.Get<Location>(), out var entitiesAtLocation)
+                && EntitiesByLocation.TryGetValue(entity.Get<WorldLocation>(), out var entitiesAtLocation)
                 && entitiesAtLocation.TryRemove(Id, out var _)
                 && Entities.TryRemove(Id, out var _))
             {
-                WorldEvents?.Invoke(new WorldEvent
-                {
-                    EventType = WorldEventType.EntityRemoved,
-                    Location = entity.Get<Location>(),
-                    Entity = entity
-                });
+                //WorldEvents?.Invoke(new WorldEvent
+                //{
+                //    EventType = WorldEventType.EntityRemoved,
+                //    Location = entity.Get<WorldLocation>(),
+                //    Entity = entity
+                //});
             }
         }
     }

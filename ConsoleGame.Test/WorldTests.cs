@@ -26,7 +26,7 @@ namespace ConsoleGame.Test
                 Strength = 5
             });
 
-            bomb.Set(new Location { X = 1, Y = 2, Z = -5 });
+            bomb.Set(new WorldLocation { X = 1, Y = 2, Z = -5 });
 
             return bomb;
         }
@@ -40,8 +40,8 @@ namespace ConsoleGame.Test
             world.AddEntity(bomb);
 
             Assert.IsTrue(world.Entities.ContainsKey(bomb.EntityId));
-            Assert.IsTrue(world.EntitiesByLocation.ContainsKey(bomb.Get<Location>()));
-            Assert.IsTrue(world.EntitiesByLocation[bomb.Get<Location>()].ContainsKey(bomb.EntityId));
+            Assert.IsTrue(world.EntitiesByLocation.ContainsKey(bomb.Get<WorldLocation>()));
+            Assert.IsTrue(world.EntitiesByLocation[bomb.Get<WorldLocation>()].ContainsKey(bomb.EntityId));
         }
 
         [Test]
@@ -54,7 +54,7 @@ namespace ConsoleGame.Test
             world.RemoveEntity(bomb.EntityId);
 
             Assert.IsFalse(world.Entities.ContainsKey(bomb.EntityId));
-            Assert.IsFalse(world.EntitiesByLocation.ContainsKey(bomb.Get<Location>()));
+            Assert.IsFalse(world.EntitiesByLocation.ContainsKey(bomb.Get<WorldLocation>()));
         }
     }
 }

@@ -9,7 +9,7 @@ namespace ConsoleGame.Components
 {
     public class Memory : Component
     {
-        public ConcurrentDictionary<Location, List<SpaceTimeMemory>> SpaceTimeMemories;
+        public ConcurrentDictionary<WorldLocation, List<SpaceTimeMemory>> SpaceTimeMemories;
 
         public List<SpaceTimeMemory> AllSpaceTimeMemories =>
             SpaceTimeMemories.SelectMany(m => m.Value).ToList();
@@ -25,7 +25,7 @@ namespace ConsoleGame.Components
 
         public Memory() : base()
         {
-            SpaceTimeMemories = new ConcurrentDictionary<Location, List<SpaceTimeMemory>>();
+            SpaceTimeMemories = new ConcurrentDictionary<WorldLocation, List<SpaceTimeMemory>>();
         }
 
         public void AddMemory(SpaceTimeMemory newMemory)
@@ -50,7 +50,7 @@ namespace ConsoleGame.Components
             }
         }
 
-        public void RemoveMemory(Location location, string contentType)
+        public void RemoveMemory(WorldLocation location, string contentType)
         {
             if (!SpaceTimeMemories.ContainsKey(location))
                 return;
@@ -68,14 +68,14 @@ namespace ConsoleGame.Components
                 SpaceTimeMemories.TryRemove(location, out var _);
         }
 
-        public List<SpaceTimeMemory> Knowledge(Location location) =>
+        public List<SpaceTimeMemory> Knowledge(WorldLocation location) =>
             SpaceTimeMemories.AtLocation(location)
             .OrderByDescending(m => m.LastEventTime)
             .ToList();
 
-        public bool Knows(Location location) => Knowledge(location).Count > 0;
+        public bool Knows(WorldLocation location) => Knowledge(location).Count > 0;
 
-        public void Remember(Location location, string contentType, string content, 
+        public void Remember(WorldLocation location, string contentType, string content, 
             double strength = 1, double bias = 0)
         {
             AddMemory(new SpaceTimeMemory

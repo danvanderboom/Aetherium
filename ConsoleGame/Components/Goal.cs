@@ -9,6 +9,6 @@ namespace ConsoleGame.Components
     {
         public DateTime Created { get; set; }
 
-        public Location Location { get; set; }
+        public WorldLocation Location { get; set; } = WorldLocation.None;
     }
 }

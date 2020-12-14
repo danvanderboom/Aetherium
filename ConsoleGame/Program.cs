@@ -11,34 +11,34 @@ namespace ConsoleGame
 {
     class Program
     {
-        ConsoleDungeonGame Game;
+        //ConsoleDungeonGame Game;
 
-        Character player;
+        //Character player;
 
-        Character followedMonster1;
-        Character followedMonster2;
-        Character followedMonster3;
-        Character followedMonster4;
-        Character followedMonster5;
-        Character followedMonster6;
-        Character followedMonster7;
+        //Character? followedMonster1;
+        //Character? followedMonster2;
+        //Character? followedMonster3;
+        //Character? followedMonster4;
+        //Character? followedMonster5;
+        //Character? followedMonster6;
+        //Character? followedMonster7;
 
-        Size3d gameWorldSize = new Size3d(200, 200, 5);
-        int monsterCount = 200;
+        //var gameWorldSize = new Size3d(200, 200, 5);
+        //int monsterCount = 200;
 
-        Size mapSize = new Size(20, 10);
-        Point mapLocation = new Point(2, 2);
+        //var mapSize = new Size(20, 10);
+        //var mapLocation = new Point(2, 2);
 
-        ConsoleColor backgroundColor = ConsoleColor.DarkRed;
-        ConsoleColor oldBackgroundColor;
-        ConsoleColor oldForegroundColor;
+        //ConsoleColor backgroundColor = ConsoleColor.DarkRed;
+        //ConsoleColor oldBackgroundColor;
+        //ConsoleColor oldForegroundColor;
 
-        Location playerHomeLocation;
+        //WorldLocation playerHomeLocation;
 
-        int interMapDistanceX = 4;
-        int interMapDistanceY = 6;
+        //int interMapDistanceX = 4;
+        //int interMapDistanceY = 6;
 
-        int lockLevel = 0;
+        //int lockLevel = 0;
 
         static void Main(string[] args) => new ConsoleDungeonGame().Run();
 
@@ -80,16 +80,16 @@ namespace ConsoleGame
         //    Console.ForegroundColor = oldForegroundColor;
         //}
 
-        void ClearScreen(ConsoleColor? backgroundColor = null)
-        {
-            if (backgroundColor.HasValue)
-            {
-                this.backgroundColor = backgroundColor.Value;
-                Console.BackgroundColor = backgroundColor.Value;
-            }
+        //void ClearScreen(ConsoleColor? backgroundColor = null)
+        //{
+        //    if (backgroundColor.HasValue)
+        //    {
+        //        this.backgroundColor = backgroundColor.Value;
+        //        Console.BackgroundColor = backgroundColor.Value;
+        //    }
 
-            Console.Clear();
-        }
+        //    Console.Clear();
+        //}
 
         //private void DrawMapFrames()
         //{

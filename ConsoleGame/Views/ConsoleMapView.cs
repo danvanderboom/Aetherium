@@ -10,29 +10,23 @@ namespace ConsoleGame.Views
 {
     public class ConsoleMapView : ConsoleView
     {
-        World _World;
-        public World World
+        World? _World;
+        public World? World
         {
             get => _World;
             set
             {
                 if (value != _World)
                 {
-                    if (_World != null)
-                        _World.WorldEvents -= HandleWorldEvent;
-
                     _World = value;
-
-                    if (_World != null)
-                        _World.WorldEvents += HandleWorldEvent;
 
                     DrawContents();
                 }
             }
         }
 
-        Location _WorldLocation;
-        public Location WorldLocation
+        WorldLocation? _WorldLocation;
+        public WorldLocation? WorldLocation
         {
             get => _WorldLocation;
             set
@@ -67,27 +61,16 @@ namespace ConsoleGame.Views
             TileTypes = new List<TileType>();
         }
 
-        private void HandleWorldEvent(WorldEvent worldEvent)
-        {
-            if (WorldLocation.Z != worldEvent.Location.Z)
-                return;
-
-            if (!VisibleWorldRectangle.Contains(
-                new Point(worldEvent.Location.X, worldEvent.Location.Y)))
-                return;
-
-            DrawContents();
-        }
-
         public Point CenterScreenPosition => new Point(
             ScreenPosition.X + (Size.Width + 1) / 2,
             ScreenPosition.Y + (Size.Height + 1) / 2);
 
-        public Rectangle VisibleWorldRectangle => new Rectangle(
-            location: new Point(
-                WorldLocation.X - (CenterScreenPosition.X - ScreenPosition.X),
-                WorldLocation.Y - (CenterScreenPosition.Y - ScreenPosition.Y)),
-            size: ContentSize);
+        public Rectangle? VisibleWorldRectangle => WorldLocation is null ? (Rectangle?)null :
+            new Rectangle(
+                location: new Point(
+                    WorldLocation.X - (CenterScreenPosition.X - ScreenPosition.X),
+                    WorldLocation.Y - (CenterScreenPosition.Y - ScreenPosition.Y)),
+                size: ContentSize);
 
         protected override void DrawContents(Point screenPosition, Size size)
         {
@@ -119,7 +102,7 @@ namespace ConsoleGame.Views
                     var xoffset = centerScreenPosition.X - screenPosition.X - 1;
                     var yoffset = centerScreenPosition.Y - screenPosition.Y - 1;
 
-                    var worldLocation = new Location(
+                    var worldLocation = new WorldLocation(
                         WorldLocation.X + x - xoffset,
                         WorldLocation.Y + y - yoffset,
                         WorldLocation.Z);
@@ -186,7 +169,7 @@ namespace ConsoleGame.Views
                 ScreenPosition.Y + size.Height + 2); // skip line
 
             Console.Write(
-                CenterText($"Visible World Rectangle: {VisibleWorldRectangle.X}, {VisibleWorldRectangle.Y}, {VisibleWorldRectangle.Width}, {VisibleWorldRectangle.Height}",
+                CenterText($"Visible World Rectangle: {VisibleWorldRectangle?.X}, {VisibleWorldRectangle?.Y}, {VisibleWorldRectangle?.Width}, {VisibleWorldRectangle?.Height}",
                 Size.Width));
 
             //

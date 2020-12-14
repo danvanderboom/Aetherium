@@ -6,8 +6,8 @@ namespace ConsoleGame.Core
     {
         public WorldEventType EventType { get; set; }
 
-        public Location Location { get; set; }
+        public WorldLocation Location { get; set; } = WorldLocation.None;
 
-        public Entity Entity { get; set; }
+        public Entity? Entity { get; set; }
     }
 }

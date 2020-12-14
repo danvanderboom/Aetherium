@@ -16,8 +16,6 @@ namespace ConsoleGame.Test
         [Test]
         public void IsGood()
         {
-            var world = new GameWorld(100, 100, 1);
-
         }
     }
 }

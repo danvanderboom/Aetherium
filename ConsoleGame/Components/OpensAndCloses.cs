@@ -7,11 +7,11 @@ namespace ConsoleGame.Components
 {
     public class OpensAndCloses : Component
     {
-        public bool IsOpen { get; set; }
+        public bool IsOpen { get; set; } = false;
 
-        public bool IsLocked { get; set; }
+        public bool IsLocked { get; set; } = false;
 
-        public string KeyShape { get; set; }
+        public string KeyShape { get; set; } = string.Empty;
 
         public OpensAndCloses() : base() { }
     }
