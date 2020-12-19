@@ -11,15 +11,12 @@ namespace ConsoleGame.Core
     public class World
     {
         public Dictionary<string, TileType> TileTypes { get; protected set; }
-
         public Dictionary<string, TerrainType> TerrainTypes { get; protected set; }
+
+        public List<WorldFeature> Features { get; set; }
 
         public ConcurrentDictionary<string, Entity> Entities { get; set; }
         public ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>> EntitiesByLocation { get; set; }
-
-        public ConcurrentDictionary<string, ConcurrentDictionary<string, WorldFeature>> WorldFeaturesByName { get; set; }
-
-        Random rand = new Random();
 
         public World()
         {
@@ -28,7 +25,7 @@ namespace ConsoleGame.Core
 
             Entities = new ConcurrentDictionary<string, Entity>();
             EntitiesByLocation = new ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>>();
-            WorldFeaturesByName = new ConcurrentDictionary<string, ConcurrentDictionary<string, WorldFeature>>();
+            Features = new List<WorldFeature>();
         }
 
         public void AddTileTypes(IList<TileType> tileTypes)
@@ -85,6 +82,12 @@ namespace ConsoleGame.Core
                 //    Entity = entity
                 //});
             }
+        }
+
+        public void Build()
+        {
+            foreach (var feature in Features)
+                feature.FeatureBuilder?.Invoke(this, feature).Build();
         }
     }
 }

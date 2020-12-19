@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ConsoleGame;
 using ConsoleGame.Core;
 using ConsoleGame.Components;
+using ConsoleGame.WorldBuilders;
 
 namespace ConsoleGame
 {
@@ -40,7 +41,10 @@ namespace ConsoleGame
 
         //int lockLevel = 0;
 
-        static void Main(string[] args) => new ConsoleDungeonGame().Run();
+        //static void Main(string[] args) => new ConsoleDungeonGame().Run();
+
+        //static void Main() => new ConsoleDungeonGame(new DungeonCrawlerWorldBuilder()).Run();
+        static void Main() => new ConsoleDungeonGame(new TorusWorldBuilder()).Run();
 
         //void Run()
         //{

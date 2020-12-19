@@ -77,5 +77,7 @@ namespace ConsoleGame.Core
         public static bool operator ==(Size3d lhs, Size3d rhs) => Equals(lhs, rhs);
 
         public static bool operator !=(Size3d lhs, Size3d rhs) => !Equals(lhs, rhs);
+
+        public override string ToString() => $"Length: {Length}, Width: {Width}, Depth: {Depth}";
     }
 }

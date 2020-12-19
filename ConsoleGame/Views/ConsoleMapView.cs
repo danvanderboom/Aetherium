@@ -10,6 +10,8 @@ namespace ConsoleGame.Views
 {
     public class ConsoleMapView : ConsoleView
     {
+        int symbolWidth = 2;
+
         World? _World;
         public World? World
         {
@@ -93,13 +95,14 @@ namespace ConsoleGame.Views
                 screenPosition.X + (size.Width + 1) / 2,
                 screenPosition.Y + (size.Height + 1) / 2);
 
+
             for (int y = 0; y < size.Height; y++)
             {
-                for (int x = 0; x < size.Width; x++)
+                for (int x = 0; x < size.Width / 2; x++)
                 {
-                    Console.SetCursorPosition(screenPosition.X + x, screenPosition.Y + y);
+                    Console.SetCursorPosition(screenPosition.X + (x * symbolWidth), screenPosition.Y + y);
 
-                    var xoffset = centerScreenPosition.X - screenPosition.X - 1;
+                    var xoffset = (centerScreenPosition.X - screenPosition.X) / symbolWidth - 1;
                     var yoffset = centerScreenPosition.Y - screenPosition.Y - 1;
 
                     var worldLocation = new WorldLocation(
@@ -142,7 +145,7 @@ namespace ConsoleGame.Views
                     else
                     {
                         Console.BackgroundColor = BackgroundColor;
-                        Console.Write(' ');
+                        Console.Write(new string(' ', symbolWidth));
                     }
                 }
             }
@@ -188,7 +191,8 @@ namespace ConsoleGame.Views
             Console.BackgroundColor = Enum.Parse<ConsoleColor>(tileType.Settings["BackgroundColor"]);
             Console.ForegroundColor = Enum.Parse<ConsoleColor>(tileType.Settings["ForegroundColor"]);
 
-            Console.Write(tileType.Settings["MapCharacter"]);
+            for (int i = 0; i < symbolWidth; i++)
+                Console.Write(tileType.Settings["MapCharacter"]);
         }
 
         public void DrawTile(Tile tile)
@@ -196,7 +200,8 @@ namespace ConsoleGame.Views
             Console.BackgroundColor = Enum.Parse<ConsoleColor>(tile.Type.Settings["BackgroundColor"]);
             Console.ForegroundColor = Enum.Parse<ConsoleColor>(tile.Type.Settings["ForegroundColor"]);
 
-            Console.Write(tile.Type.Settings["MapCharacter"]);
+            for (int i = 0; i < symbolWidth; i++)
+                Console.Write(tile.Type.Settings["MapCharacter"]);
         }
     }
 }

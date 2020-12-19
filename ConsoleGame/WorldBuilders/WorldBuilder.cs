@@ -8,53 +8,18 @@ using ConsoleGame.Components;
 
 namespace ConsoleGame.WorldBuilders
 {
+    // var builder = new WorldBuilder().Build().Populate();
     public abstract class WorldBuilder
     {
-        World world;
+        public World? World { get; set; }
 
-        public WorldBuilder(World world)
+        public List<WorldFeature> Features { get; set; }
+
+        public WorldBuilder()
         {
-            this.world = world;
+            Features = new List<WorldFeature>();
         }
 
-        public abstract World Build(WorldBuilderOptions options = null);
-
-        public abstract World Expand(WorldBuilderOptions options = null);
-
-        protected List<Terrain> GetTerrain(WorldLocation location, Size3d size)
-        {
-            var results = new List<Terrain>();
-
-            for (int z = 0; z < size.Depth; z++)
-                for (int y = 0; y < size.Length; y++)
-                    for (int x = 0; x < size.Width; x++)
-                        foreach (var terrainEntity in world.EntitiesByLocation[location.FromDelta(x, y, z)].Values.OfType<Terrain>())
-                            results.Add(terrainEntity);
-
-            return results;
-        }
-
-        protected void AddTerrain(string name, WorldLocation location, Size3d size)
-        {
-            for (int z = 0; z < size.Depth; z++)
-                for (int y = 0; y < size.Length; y++)
-                    for (int x = 0; x < size.Width; x++)
-                        AddTerrain(name, location.FromDelta(x, y, z));
-        }
-
-        protected Terrain? AddTerrain(string name, WorldLocation location)
-        {
-            var terrainType = world.TerrainTypes[name];
-            if (terrainType == null)
-                throw new InvalidOperationException($"Terrain not registered: '{name}'");
-
-            var terrain = new Terrain();
-            terrain.Set(new Tile { Type = terrainType?.TileType ?? TileType.None });
-            terrain.Set(location);
-
-            world.AddEntity(terrain);
-
-            return terrain;
-        }
+        public abstract World Build();
     }
 }

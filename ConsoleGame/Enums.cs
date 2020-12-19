@@ -4,6 +4,13 @@ using System.Text;
 
 namespace ConsoleGame
 {
+    public enum Axis
+    {
+        X,
+        Y,
+        Z
+    }
+
     public enum Direction
     {
         North,

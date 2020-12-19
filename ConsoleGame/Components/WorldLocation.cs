@@ -84,5 +84,9 @@ namespace ConsoleGame.Components
         public static bool operator !=(WorldLocation? lhs, WorldLocation? rhs) => !Equals(lhs, rhs);
 
         public override string ToString() => $"{X}, {Y}, {Z}";
+
+        public List<int> ToList() => new List<int> { X, Y, Z };
+
+        public static WorldLocation FromCoordinates(IList<int> loc) => new WorldLocation(loc[0], loc[1], loc[2]);
     }
 }

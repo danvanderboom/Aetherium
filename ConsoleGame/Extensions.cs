@@ -32,6 +32,9 @@ public static class Extensions
     public static Size FromDelta(this Size size, int dWidth, int dHeight) =>
         new Size(size.Width + dWidth, size.Height + dHeight);
 
+    public static int ForceInRange(this int value, int min, int max) => 
+        Math.Min(max, Math.Max(min, value));
+
     //public static TileType ToTileType(this TerrainType terrainType) =>
     //    (TileType)Enum.Parse(typeof(TileType), terrainType.ToString());
 }

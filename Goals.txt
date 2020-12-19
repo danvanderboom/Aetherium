@@ -7,7 +7,89 @@ Game Goals
   - bind ConsoleMapView contents to a Character's Perception component
 - create separate projects for client, server, and a shared model
 - host server components in Orleans cluster in Azure
-- create a GameClient class able to connect to a GameGrain in Orelans
+- create a GameClient class able to connect to a GameGrain in Orleans
   - GameClient connects to SignalR endpoint, from which it receives a stream of Perception data
   - GameClient sends Control data to move, pick up items, etc
 - use SimplexNoise package to generate terrain in one or more WorldBuilders
+- add Unicode character support in Console windows:
+  - https://docs.microsoft.com/en-us/dotnet/api/system.console?view=net-5.0#unicode-support-for-the-console
+  - https://stackoverflow.com/questions/38533903/set-c-sharp-console-application-to-unicode-output
+- implement maze builder
+  - write Manhattan distance function
+  - write Chebyshev distance function
+  - https://www.gamasutra.com/blogs/HermanTulleken/20161005/282629/Algorithms_for_making_more_interesting_mazes.php
+
+
+
+
+
+- define toroid size and location
+  - toroid center point
+    - ensure only one level of the world is generated at z = 0, everything else < 0 (including toroid center)
+  - toroid radius: distance from toroid center point to center of orbiting circle
+  - radius of orbiting circle
+- define toroid envelope (a cuboid WorldChunk)
+- iterate through all possible WorldLocations within the 3D envelope
+  - write function to test if point is within toroid:
+    - test the sign of this function's output: (x^2 + y^2 + z^2 - (a^2 + b^2))^2 - 4 * a * b * (b^2 - z^2)
+  - for each location within the toroid, create that location in the world and set to default terrain (None)
+
+
+example
+  - toroid standing up like a wheel, with the very top layer above ground, the rest underground in mazes and caves
+  - starting parameters:
+    - toroid center: x = 0, y = 0, z = -58
+    - toroid radius: 60
+    - orbiting circle radius: 30
+
+
+
+
+Surface of Revolution
+https://mathworld.wolfram.com/SurfaceofRevolution.html
+
+3D transformation matrices
+https://medium.com/swlh/understanding-3d-matrix-transforms-with-pixijs-c76da3f8bd8
+
+Partitioning a polygon into one or more convex polygons
+https://mathoverflow.net/questions/60212/partitioning-a-polygon-into-convex-parts/60215
+
+Use raycasting to detect if a point is within a polygon
+https://stackoverflow.com/questions/217578/how-can-i-determine-whether-a-2d-point-is-within-a-polygon/2922778
+
+Distance from a point to a plane
+https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_plane
+
+Ellipse
+var x = h + a * r * Math.Cos(theta);
+var y = k - b * r * Math.Sin(theta); 
+
+
+Point of Intersection
+(x, y)  = [ (b1 * c2 − b2 * c1) / (a1 * b2 − a2 * b1), (a2 * c1 − a1 * c2) / (a1 * b2 − a2 * b1) ]
+
+3d Line
+⟨x,y,z⟩ = ⟨x0,y0,z0⟩ + t⟨mx,my,mz⟩
+
+
+
+
+Plane.Point
+Plane.Vector
+
+
+
+
+Plane
+ax + by + cz = d
+
+Point on Plane
+x = ad / (a^2 + b^2 + c^2)
+y = bd / (a^2 + b^2 + c^2)
+z = cd / (a^2 + b^2 + c^2)
+
+
+
+
+    <PackageReference Include="Accord.Math" Version="3.8.0" />
+    <PackageReference Include="SimplexNoise" Version="2.0.0" />

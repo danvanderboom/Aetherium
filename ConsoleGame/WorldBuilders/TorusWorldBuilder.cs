@@ -1,18 +1,19 @@
 ﻿using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Text;
 using ConsoleGame.Core;
+using ConsoleGame.WorldBuilders;
 using ConsoleGame.Components;
-using ConsoleGame.Entities;
 using ConsoleGameClient.WorldBuilders.Features;
 
 namespace ConsoleGame.WorldBuilders
 {
-    public class DungeonCrawlerWorldBuilder : WorldBuilder
+    public class TorusWorldBuilder : WorldBuilder
     {
         Random rand = new Random();
 
-        public DungeonCrawlerWorldBuilder() : base()
+        public TorusWorldBuilder() : base()
         {
         }
 
@@ -23,25 +24,23 @@ namespace ConsoleGame.WorldBuilders
             world.AddTileTypes(TileTypes);
             world.AddTerrainTypes(CreateTerrainTypes(TileTypes));
 
-            world.Features.Add(new WorldFeature
-            {
-                FeatureBuilder = (w, f) => new RiverFeatureBuilder(w, f),
-                Settings = new Dictionary<string, string> { { "Name", "Muraalu" } },
-                Chunk = new WorldChunk
-                {
-                    Location = new WorldLocation(x: -1000, y: -1000, z: 0),
-                    Size = new Size3d(length: 500, width: 50, depth: 1)
-                }
-            });
+            // toroid standing up like a wheel, with the very top layer above ground
+            // the rest underground in mazes and caves
 
             world.Features.Add(new WorldFeature
             {
-                FeatureBuilder = (w, f) => new RiverFeatureBuilder(w, f),
-                Settings = new Dictionary<string, string> { { "Name", "Sahlin" } },
-                Chunk = new WorldChunk
+                FeatureBuilder = (w, f) => new TorusFeatureBuilder(w, f),
+                Settings = new Dictionary<string, string> 
                 {
-                    Location = new WorldLocation(x: -950, y: -1000, z: 0),
-                    Size = new Size3d(length: 500, width: 50, depth: 1)
+                    { "Name", "Torus of Doom" },
+                    { "RadialSymmetryAxis", "Z" },
+                    //{ "MajorRadius", "50" },
+                    //{ "MinorRadius", "20" },
+                },
+                Chunk = new WorldChunk // this is ignored for first tests
+                {
+                    Location = new WorldLocation(x: -50, y: -50, z: -28),
+                    Size = new Size3d(length: 100, width: 100, depth: 30)
                 }
             });
 

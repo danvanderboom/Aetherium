@@ -1,7 +1,8 @@
 ﻿using System;
+using System.Linq;
+using System.Text;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using ConsoleGame;
 using ConsoleGame.Components;
 using ConsoleGame.WorldBuilders;
@@ -15,6 +16,8 @@ namespace ConsoleGame.Core
 
         public Character? player { get; protected set; }
 
+        WorldBuilder worldBuilder;
+
         List<ConsoleView> Views;
 
         ConsoleMapView mapView;
@@ -24,27 +27,24 @@ namespace ConsoleGame.Core
 
         Random rand = new Random();
 
-        public ConsoleDungeonGame() 
+        public ConsoleDungeonGame(WorldBuilder worldBuilder) 
         {
-            World = new World();
-            World.AddTileTypes(CreateTileTypes());
-            World.AddTerrainTypes(CreateTerrainTypes());
+            this.worldBuilder = worldBuilder;
 
-            var builder = new DungeonCrawlerWorldBuilder(World);
-            builder.Build();
+            World = worldBuilder.Build();
 
             Views = new List<ConsoleView>();
 
             mapView = new ConsoleMapView
             {
                 ScreenPosition = new Point(3, 2),
-                Size = new Size(41, 21),
+                Size = new Size(42, 22),
                 BackgroundColor = ConsoleColor.Black,
                 HasFrame = true,
                 FrameBackgroundColor = ConsoleColor.DarkGray,
                 FrameForegroundColor = ConsoleColor.Black,
-                TileTypes = CreateTileTypes(),
-                World = this.World
+                World = this.World,
+                TileTypes = World.TileTypes.Values.ToList()
             };
 
             Views.Add(mapView);
@@ -59,9 +59,11 @@ namespace ConsoleGame.Core
 
         public void Run()
         {
-            Console.CursorVisible = false;
             oldBackgroundColor = Console.BackgroundColor;
             oldForegroundColor = Console.ForegroundColor;
+
+            Console.CursorVisible = false;
+            Console.OutputEncoding = Encoding.Unicode;
 
             Clear(ConsoleColor.Black);
 
@@ -70,23 +72,39 @@ namespace ConsoleGame.Core
             while (true)
             {
                 var keyInfo = Console.ReadKey(true);
+                //var controlPressed = Console.CapsLock;
                 switch (keyInfo.Key)
                 {
+                    case ConsoleKey.D0:
+                        if (mapView?.WorldLocation != null)
+                        {
+                            var z = mapView.WorldLocation.Z;
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, -z);
+                        }
+                        break;
                     case ConsoleKey.UpArrow:
                         if (mapView?.WorldLocation != null)
-                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, -1, 0);
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, Console.CapsLock ? -10 : -1, 0);
                         break;
                     case ConsoleKey.DownArrow:
                         if (mapView?.WorldLocation != null)
-                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, +1, 0);
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, Console.CapsLock ? +10 : +1, 0);
                         break;
                     case ConsoleKey.LeftArrow:
                         if (mapView?.WorldLocation != null)
-                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(-1, 0, 0);
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(Console.CapsLock ? -10 : -1, 0, 0);
                         break;
                     case ConsoleKey.RightArrow:
                         if (mapView?.WorldLocation != null)
-                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(+1, 0, 0);
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(Console.CapsLock ? +10 : +1, 0, 0);
+                        break;
+                    case ConsoleKey.U:
+                        if (mapView?.WorldLocation != null)
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, Console.CapsLock ? +10 : +1);
+                        break;
+                    case ConsoleKey.D:
+                        if (mapView?.WorldLocation != null)
+                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, Console.CapsLock ? -10 : -1);
                         break;
                     case ConsoleKey.C:
                         if (mapView != null)
@@ -117,7 +135,9 @@ namespace ConsoleGame.Core
         {
             foreach (var view in Views)
             {
-                view.DrawFrame();
+                if (view.HasFrame)
+                    view.DrawFrame();
+
                 view.DrawContents();
             }
         }
@@ -149,177 +169,5 @@ namespace ConsoleGame.Core
 
             Console.Clear();
         }
-
-        string[] TerrainTypeNames => new string[]
-        {
-            "None",
-            "Indoors",
-            "Wall",
-            "Mountain",
-            "Road",
-            "Plains",
-            "Forest",
-            "Water",
-            "Cave",
-            "Upstairs",
-            "Downstairs"
-        };
-
-        public List<TerrainType> CreateTerrainTypes() =>
-            CreateTileTypes()
-            .Select(t => new TerrainType 
-            { 
-                Name = t.Name, 
-                TileType = World.TileTypes[t.Name], 
-                Settings = t.Settings 
-            })
-            .Where(t => TerrainTypeNames.Contains(t.Name))
-            .ToList();
-
-        public List<TileType> CreateTileTypes() => new List<TileType>
-        {
-            new TileType
-            {
-                Name = "None",
-                DefaultComponents = new List<Component> { new ObstructsMovement(), new ObstructsView() },
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", " " },
-                    { "BackgroundColor", ConsoleColor.Black.ToString() },
-                    { "ForegroundColor", ConsoleColor.Black.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Indoors",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", " " },
-                    { "BackgroundColor", ConsoleColor.Gray.ToString() },
-                    { "ForegroundColor", ConsoleColor.Black.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Wall",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "|" },
-                    { "BackgroundColor", ConsoleColor.Gray.ToString() },
-                    { "ForegroundColor", ConsoleColor.DarkRed.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Mountain",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "^" },
-                    { "BackgroundColor", ConsoleColor.DarkGray.ToString() },
-                    { "ForegroundColor", ConsoleColor.White.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Road",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "=" },
-                    { "BackgroundColor", ConsoleColor.Black.ToString() },
-                    { "ForegroundColor", ConsoleColor.White.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Plains",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "." },
-                    { "BackgroundColor", ConsoleColor.DarkYellow.ToString() },
-                    { "ForegroundColor", ConsoleColor.Yellow.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Forest",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "t" },
-                    { "BackgroundColor", ConsoleColor.Black.ToString() },
-                    { "ForegroundColor", ConsoleColor.Green.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Water",
-                DefaultComponents = new List<Component> { new ObstructsMovement() },
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "~" },
-                    { "BackgroundColor", ConsoleColor.Blue.ToString() },
-                    { "ForegroundColor", ConsoleColor.White.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Cave",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "t" },
-                    { "BackgroundColor", ConsoleColor.Black.ToString() },
-                    { "ForegroundColor", ConsoleColor.DarkGray.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Player",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "*" },
-                    { "BackgroundColor", ConsoleColor.White.ToString() },
-                    { "ForegroundColor", ConsoleColor.Blue.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Monster",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "!" },
-                    { "BackgroundColor", ConsoleColor.Red.ToString() },
-                    { "ForegroundColor", ConsoleColor.Black.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "DeadMonster",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "!" },
-                    { "BackgroundColor", ConsoleColor.DarkRed.ToString() },
-                    { "ForegroundColor", ConsoleColor.Black.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Upstairs",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "+" },
-                    { "BackgroundColor", ConsoleColor.Gray.ToString() },
-                    { "ForegroundColor", ConsoleColor.Yellow.ToString() },
-                }
-            },
-            new TileType
-            {
-                Name = "Downstairs",
-                Settings = new Dictionary<string, string>
-                {
-                    { "MapCharacter", "-" },
-                    { "BackgroundColor", ConsoleColor.Gray.ToString() },
-                    { "ForegroundColor", ConsoleColor.Yellow.ToString() },
-                }
-            }
-        };
     }
 }
