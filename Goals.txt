@@ -93,3 +93,7 @@ z = cd / (a^2 + b^2 + c^2)
 
     <PackageReference Include="Accord.Math" Version="3.8.0" />
     <PackageReference Include="SimplexNoise" Version="2.0.0" />
+
+
+dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true
+

@@ -17,34 +17,9 @@ namespace ConsoleGame.Views
 
         public ConsoleColor[,]? GridColoring { get; set; }
 
-        World? _World;
-        public World? World
-        {
-            get => _World;
-            set
-            {
-                if (value != _World)
-                {
-                    _World = value;
+        public World? World { get; set; }
 
-                    DrawContents();
-                }
-            }
-        }
-
-        WorldLocation? _WorldLocation;
-        public WorldLocation? WorldLocation
-        {
-            get => _WorldLocation;
-            set
-            {
-                if (value != _WorldLocation)
-                {
-                    _WorldLocation = value;
-                    DrawContents();
-                }
-            }
-        }
+        public WorldLocation? WorldLocation { get; set; }
 
         public List<TileType> TileTypes { get; set; }
 
@@ -109,8 +84,8 @@ namespace ConsoleGame.Views
                 screenPosition.X + (size.Width + 1) / 2,
                 screenPosition.Y + (size.Height + 1) / 2);
 
-            var xoffset = (centerScreenPosition.X - screenPosition.X) / symbolWidth - 1;
-            var yoffset = centerScreenPosition.Y - screenPosition.Y - 1;
+            var xoffset = (centerScreenPosition.X - screenPosition.X) / symbolWidth;
+            var yoffset = centerScreenPosition.Y - screenPosition.Y;
 
             var center = WorldLocation.AsVector3();
 
@@ -157,9 +132,24 @@ namespace ConsoleGame.Views
                         color = GridColoring[
                             Math.Abs(location.Y % gridColorHeight), 
                             Math.Abs(location.X % gridColorWidth)];
+
+                        if (location == WorldLocation) // TODO: remove this part
+                        {
+                            DrawTileType(World.TileTypes["Player"], ConsoleColor.Magenta);
+                            continue;
+                        }
+                        else if (World.EntitiesByLocation.ContainsKey(location))
+                        {
+                            DrawTileType(World.TileTypes["None"], color);
+                            continue;
+                        }
                     }
 
-                    if (World.EntitiesByLocation.TryGetValue(location, out var entities))
+                    if (location == WorldLocation) // TODO: remove this part
+                    {
+                        DrawTileType(World.TileTypes["Player"], color);
+                    }
+                    else if (World.EntitiesByLocation.TryGetValue(location, out var entities))
                     {
                         var characterEntities = entities.Values.OfType<Character>().ToList<Entity>();
                         var terrainEntities = entities.Values.OfType<Terrain>().ToList<Entity>();

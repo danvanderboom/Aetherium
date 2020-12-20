@@ -3,6 +3,7 @@ using System.Linq;
 
 namespace ConsoleGame.Geometry
 {
+    // TODO: use System.Numerics.Vector3
     public struct Vector3
     {
         public double X { get; set; }

@@ -46,7 +46,7 @@ namespace ConsoleGame.Core
                 World = this.World,
                 TileTypes = World.TileTypes.Values.ToList()
             };
-
+            
             Views.Add(mapView);
 
             var locations = World.EntitiesByLocation.Keys.ToList();
