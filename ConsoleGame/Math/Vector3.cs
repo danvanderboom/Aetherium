@@ -46,7 +46,18 @@ namespace ConsoleGame.Geometry
         public Vector3 Subtract(Vector3 other) =>
             new Vector3(X - other.X, Y - other.Y, Z - other.Z);
 
+        public Vector3 Rotate90CCW() =>
+            new Vector3(-Y, X, Z);
+
+        public Vector3 Rotate90CW() =>
+            new Vector3(Y, -X, Z);
+
+        public Vector3 Rotate180() =>
+            new Vector3(-X, -Y, Z);
+
         public double Dot(Vector3 other) =>
             X * other.X + Y * other.Y + Z * other.Z;
+
+        public override string ToString() => $"X: {X}, Y: {Y}, Z: {Z}, Magnitude: {Magnitude}";
     }
 }

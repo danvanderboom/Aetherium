@@ -122,9 +122,9 @@ namespace ConsoleGame
         //    Get<Memory>().Remember(location, "Terrain", world.GetTerrain(location).ToString());
         //}
 
-        public Direction SelectRandomDirection()
+        public WorldDirection SelectRandomDirection()
         {
-            return (Direction)rand.Next(0, Enum.GetNames(typeof(Direction)).Length);
+            return (WorldDirection)rand.Next(0, Enum.GetNames(typeof(WorldDirection)).Length);
         }
     }
 }

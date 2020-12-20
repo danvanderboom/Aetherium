@@ -11,7 +11,7 @@ namespace ConsoleGame
         Z
     }
 
-    public enum Direction
+    public enum WorldDirection
     {
         North,
         South,
@@ -19,6 +19,14 @@ namespace ConsoleGame
         West,
         Up,
         Down
+    }
+
+    public enum RelativeDirection
+    {
+        Up,
+        Right,
+        Down,
+        Left
     }
 
     public enum WorldEventType
