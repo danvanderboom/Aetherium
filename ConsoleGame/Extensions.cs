@@ -11,19 +11,19 @@ public static class Extensions
 {
     public static RelativeDirection RotateRight(this RelativeDirection dir) => dir switch
     {
-        RelativeDirection.Up => RelativeDirection.Right,
-        RelativeDirection.Right => RelativeDirection.Down,
-        RelativeDirection.Down => RelativeDirection.Left,
-        RelativeDirection.Left => RelativeDirection.Up,
+        RelativeDirection.Forward => RelativeDirection.Right,
+        RelativeDirection.Right => RelativeDirection.Backward,
+        RelativeDirection.Backward => RelativeDirection.Left,
+        RelativeDirection.Left => RelativeDirection.Forward,
         _ => throw new InvalidOperationException("Invalid RelativeDirection")
     };
 
     public static RelativeDirection RotateLeft(this RelativeDirection dir) => dir switch
     {
-        RelativeDirection.Up => RelativeDirection.Left,
-        RelativeDirection.Left => RelativeDirection.Down,
-        RelativeDirection.Down => RelativeDirection.Right,
-        RelativeDirection.Right => RelativeDirection.Up,
+        RelativeDirection.Forward => RelativeDirection.Left,
+        RelativeDirection.Left => RelativeDirection.Backward,
+        RelativeDirection.Backward => RelativeDirection.Right,
+        RelativeDirection.Right => RelativeDirection.Forward,
         _ => throw new InvalidOperationException("Invalid RelativeDirection")
     };
 

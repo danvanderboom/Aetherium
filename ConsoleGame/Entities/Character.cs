@@ -11,6 +11,7 @@ namespace ConsoleGame
         public Character() : base()
         {
             Set(new Health());
+            Set(new HasHeading());
             Set(new Perception());
             Set(new Memory());
         }

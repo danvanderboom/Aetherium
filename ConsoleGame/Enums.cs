@@ -23,10 +23,12 @@ namespace ConsoleGame
 
     public enum RelativeDirection
     {
-        Up,
+        Forward,
+        Backward,
+        Left,
         Right,
-        Down,
-        Left
+        Up,
+        Down
     }
 
     public enum WorldEventType
@@ -36,41 +38,6 @@ namespace ConsoleGame
         EntityRemoved
     }
 
-    //public enum TileType
-    //{
-    //    None,
-    //    Indoors,
-    //    Soil,
-    //    TreeRoots,
-    //    Rock,
-    //    Wall,
-    //    Mountain,
-    //    Road,
-    //    Plains,
-    //    Forest,
-    //    Water,
-    //    Cave,
-    //    Player,
-    //    Monster,
-    //    DeadMonster,
-    //    Upstairs,
-    //    Downstairs
-    //}
-
-    //public enum TerrainType
-    //{
-    //    None,
-    //    Indoors,
-    //    Wall,
-    //    Mountain,
-    //    Road,
-    //    Plains,
-    //    Forest,
-    //    Water,
-    //    Cave,
-    //    Upstairs,
-    //    Downstairs
-    //}
 
     public enum VisualType
     {

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 using ConsoleGame;
 using ConsoleGame.Components;
+using ConsoleGame.Entities;
 
 namespace ConsoleGame.Core
 {
@@ -18,6 +19,8 @@ namespace ConsoleGame.Core
         public ConcurrentDictionary<string, Entity> Entities { get; set; }
         public ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>> EntitiesByLocation { get; set; }
 
+        public Guid CharacterMoveTimestamp { get; protected set; } = Guid.NewGuid();
+
         public World()
         {
             TerrainTypes = new Dictionary<string, TerrainType>();
@@ -26,6 +29,68 @@ namespace ConsoleGame.Core
             Entities = new ConcurrentDictionary<string, Entity>();
             EntitiesByLocation = new ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>>();
             Features = new List<WorldFeature>();
+        }
+
+        public TerrainType? GetTerrainType(WorldLocation location)
+        {
+            var terrain = GetTerrain(location);
+            if (terrain == null)
+                return null;
+
+            return TerrainTypes[terrain.EntityId];
+        }
+
+        public Terrain? GetTerrain(WorldLocation location) =>
+            EntitiesByLocation[location].Values
+            .OfType<Terrain>()
+            .FirstOrDefault();
+
+        public List<Terrain> GetTerrain(WorldChunk chunk) =>
+            GetTerrain(chunk.Location, chunk.Size);
+
+        public List<Terrain> GetTerrain(WorldLocation location, Size3d size)
+        {
+            var results = new List<Terrain>();
+
+            for (int z = 0; z < size.Depth; z++)
+                for (int y = 0; y < size.Length; y++)
+                    for (int x = 0; x < size.Width; x++)
+                        foreach (var terrainEntity in EntitiesByLocation[location.FromDelta(x, y, z)].Values.OfType<Terrain>())
+                            results.Add(terrainEntity);
+
+            return results;
+        }
+
+        public void SetTerrain(string name, WorldChunk chunk) =>
+            SetTerrain(name, chunk.Location, chunk.Size);
+
+        public void SetTerrain(string name, WorldLocation location, Size3d size)
+        {
+            for (int z = 0; z < size.Depth; z++)
+                for (int y = 0; y < size.Length; y++)
+                    for (int x = 0; x < size.Width; x++)
+                        SetTerrain(name, location.FromDelta(x, y, z));
+        }
+
+        public Terrain? SetTerrain(string name, WorldLocation location)
+        {
+            var terrainType = TerrainTypes[name];
+            if (terrainType == null)
+                throw new InvalidOperationException($"Terrain not registered: '{name}'");
+
+            var terrain = new Terrain();
+            terrain.Set(new Tile { Type = terrainType?.TileType ?? TileType.None });
+            terrain.Set(location);
+
+            AddEntity(terrain);
+
+            return terrain;
+        }
+
+        public void Build()
+        {
+            foreach (var feature in Features)
+                feature.FeatureBuilder?.Invoke(this, feature).Build();
         }
 
         public void AddTileTypes(IList<TileType> tileTypes)
@@ -84,10 +149,142 @@ namespace ConsoleGame.Core
             }
         }
 
-        public void Build()
+        public void MoveEntity(string Id, WorldLocation destination)
         {
-            foreach (var feature in Features)
-                feature.FeatureBuilder?.Invoke(this, feature).Build();
+            if (Entities.TryGetValue(Id, out var entity))
+            {
+                if (entity.Get<WorldLocation>() == destination)
+                    return;
+
+                // remove from location index
+                if (EntitiesByLocation.TryGetValue(entity.Get<WorldLocation>(), out var entitiesAtLocation)
+                    && entitiesAtLocation.TryRemove(Id, out var _))
+                {
+                    // update location on entity
+                    entity.Set(destination);
+
+                    // add entity back to location index
+                    if (entitiesAtLocation.TryAdd(entity.EntityId, entity))
+                    {
+                        //WorldEvents?.Invoke(new WorldEvent
+                        //{
+                        //    EventType = WorldEventType.EntityMoved,
+                        //    Location = entity.Get<WorldLocation>(),
+                        //    Entity = entity
+                        //});
+                    }
+                }
+            }
+        }
+
+        public bool TryMove(Character character, RelativeDirection direction)
+        {
+            var location = character.Get<WorldLocation>();
+            if (location == null)
+                throw new InvalidOperationException("Character is missing WorldLocation");
+
+            // TODO: transform RelativeDirection into WorldDirection
+            // if player heading is North, and direction is Forward, go North
+            // if player heading is East, and direction is Forward, go East
+            // if player heading is South, and direction is Left, go East
+            var destination = location.FromDelta(0, 0, 0);
+
+            return TryMove(character, destination);
+        }
+
+        public bool TryMove(Character character, WorldDirection direction)
+        {
+            var location = character.Get<WorldLocation>();
+            if (location == null)
+                throw new InvalidOperationException("Character is missing WorldLocation");
+
+            switch (direction)
+            {
+                case WorldDirection.North:
+                    return TryMove(character, location.FromDelta(0, -1, 0));
+                case WorldDirection.South:
+                    return TryMove(character, location.FromDelta(0, +1, 0));
+                case WorldDirection.West:
+                    return TryMove(character, location.FromDelta(0, -1, 0));
+                case WorldDirection.East:
+                    return TryMove(character, location.FromDelta(0, +1, 0));
+                case WorldDirection.Up:
+                    return TryMove(character, location.FromDelta(0, 0, +1));
+                case WorldDirection.Down:
+                    return TryMove(character, location.FromDelta(0, 0, -1));
+                default:
+                    return false;
+            }
+        }
+
+        public bool TryMove(Character character, WorldLocation location)
+        {
+            if (!EntitiesByLocation.ContainsKey(location))
+                return false;
+
+            // stop players (including monsters) from existing in the same location
+            var other = Entities.OfType<Character>()
+                .FirstOrDefault(p => p.Get<WorldLocation>() == location);
+            if (other != null)
+            {
+                var health = character.Get<Health>();
+                if (health != null)
+                {
+                    if (health.Level > 0)
+                        health.Level--;
+
+                    //if (health.Level == 0)
+                    //    CharacterDied?.Invoke(character);
+
+                    return false;
+                }
+            }
+
+            var currentLocation = character.Get<WorldLocation>();
+            if (currentLocation == null)
+                return false;
+
+            var up = currentLocation.FromDelta(0, 0, +1);
+            var down = currentLocation.FromDelta(0, 0, -1);
+
+            if (location == up && currentLocation.Has<CanAscend>())
+                return false;
+            else if (location == down && currentLocation.Has<CanDescend>())
+                return false;
+
+            if (PassableTerrain(location))
+            {
+                MoveEntity(character.EntityId, location);
+
+                CharacterMoveTimestamp = Guid.NewGuid();
+
+                return true;
+            }
+
+            return false;
+        }
+
+        public bool PassableTerrain(WorldLocation location) =>
+            EntitiesByLocation.ContainsKey(location) && PassableTerrain(GetTerrainType(location));
+
+        public bool PassableTerrain(TerrainType? terrainType)
+        {
+            if (terrainType == null)
+                return false;
+
+            switch (terrainType.Name)
+            {
+                case "Indoors":
+                case "Upstairs":
+                case "Downstairs":
+                case "Road":
+                case "Plains":
+                case "Forest":
+                case "Cave":
+                    return true;
+                default:
+                    return false;
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Text;
 
 namespace ConsoleGame.Geometry
 {
+    // TODO: use System.Numerics.Plane
     public struct Plane
     {
         public Vector3 Point { get; set; }

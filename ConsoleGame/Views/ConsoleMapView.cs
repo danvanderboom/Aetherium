@@ -135,6 +135,7 @@ namespace ConsoleGame.Views
 
                         if (location == WorldLocation) // TODO: remove this part
                         {
+                            // TODO: move these specific TileType references out of here
                             DrawTileType(World.TileTypes["Player"], ConsoleColor.Magenta);
                             continue;
                         }
@@ -188,18 +189,6 @@ namespace ConsoleGame.Views
                     }
                 }
             }
-
-            // TODO: move to separate view
-
-            //Console.SetCursorPosition(
-            //    mapLocation.X - 1, // start at the map frame
-            //    mapLocation.Y + size.Height + 2); // map frame + blank line
-
-            //Console.BackgroundColor = backgroundColor;
-            //Console.ForegroundColor = ConsoleColor.Cyan;
-            //Console.Write(
-            //    CenterText($"{location.X}, {location.Y}, {location.FromDelta(0, 0, -gameWorldSize.Depth + 1).Z}",
-            //    size.Width + 2));
 
             Console.BackgroundColor = BackgroundColor;
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -270,9 +259,9 @@ namespace ConsoleGame.Views
 
             var rightAngleRotationsCounterclockwise = direction switch
             {
-                RelativeDirection.Up => 0,
+                RelativeDirection.Forward => 0,
                 RelativeDirection.Left => 1,
-                RelativeDirection.Down => 2,
+                RelativeDirection.Backward => 2,
                 RelativeDirection.Right => 3,
                 _ => throw new InvalidOperationException("Invalid RelativeDirection")
             };

@@ -48,18 +48,18 @@ namespace ConsoleGameClient.WorldBuilders.Features
 
                 // left border of river
                 var leftBorderWidth = rand.Next(riverMinBorderWidth, riverMaxBorderWidth + 1);
-                SetTerrain(riverBorderTerrainName,
+                World.SetTerrain(riverBorderTerrainName,
                     new WorldLocation(x - leftBorderWidth, y, 0),
                     new Size3d(1, leftBorderWidth, 1));
 
                 // river
-                SetTerrain("Water",
+                World.SetTerrain("Water",
                     new WorldLocation(x, y, 0),
                     new Size3d(1, riverWidth, 1));
 
                 // right border of river
                 var rightBorderWidth = rand.Next(riverMinBorderWidth, riverMaxBorderWidth + 1);
-                SetTerrain(riverBorderTerrainName,
+                World.SetTerrain(riverBorderTerrainName,
                     new WorldLocation(x + riverWidth, y, 0),
                     new Size3d(1, rightBorderWidth, 1));
 

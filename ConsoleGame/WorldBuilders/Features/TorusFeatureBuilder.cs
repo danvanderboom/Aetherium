@@ -2,10 +2,10 @@
 using System.Linq;
 using System.Collections.Generic;
 using System.Text;
+using ConsoleGame;
 using ConsoleGame.Core;
 using ConsoleGame.Components;
 using ConsoleGame.WorldBuilders;
-using ConsoleGame;
 
 namespace ConsoleGameClient.WorldBuilders.Features
 {
@@ -20,25 +20,9 @@ namespace ConsoleGameClient.WorldBuilders.Features
         public override void Build()
         {
             var borderWidth = 2;
+            var size = Feature.Chunk.Size;
 
             var axis = Enum.Parse<Axis>(Feature.Settings["RadialSymmetryAxis"]);
-
-            //var coordinates = Feature.Chunk.Location.ToList();
-
-            //var minAxisValue = coordinates.Min();
-            //var minAxisIndex = coordinates.IndexOf(minAxisValue);
-
-            //var maxAxisValue = coordinates.Max();
-            //var maxAxisIndex = coordinates.IndexOf(maxAxisValue);
-
-            //var axes = Enumerable.Range(0, 3).ToList();
-            //axes.Remove(radialSymmetryAxis);
-            //axes.Remove(minAxisIndex);
-            //axes.Remove(maxAxisIndex);
-            //var midAxisIndex = axes.First();
-            //var midAxisValue = coordinates[midAxisIndex];
-
-            var size = Feature.Chunk.Size;
 
             var minorRadius = axis switch
             {
@@ -56,31 +40,8 @@ namespace ConsoleGameClient.WorldBuilders.Features
                 _ => throw new ArgumentException("radialSymmetryAxis must be 0, 1, or 2")
             };
 
-
-            //var startCoordinates = new int[3]; // x, y, z
-
-            //startCoordinates[radialSymmetryAxis] = -minorRadius;
-
-            //var otherAxes = new int[3] { 0, 1, 2 }.Where(a => a != radialSymmetryAxis).ToList();
-            //foreach (var axis in otherAxes)
-            //    startCoordinates[axis] = -(majorRadius * 2) - (minorRadius * 2);
-
-
-            //var torusChunk = new WorldChunk(
-            //    //new WorldLocation(
-            //    //    x: -minorRadius - padding,
-            //    //    z: -(majorRadius * 2) - minorRadius + 2),
-            //    WorldLocation.FromCoordinates(startCoordinates),
-            //    //new Size3d(
-            //    //    length: (majorRadius + (minorRadius / 2)) * 2 + (padding * 2),
-            //    //    width: minorRadius * 2 + (padding * 2),
-            //    //    depth: (majorRadius + (minorRadius / 2)) * 2)
-            //    new Size3d(0, 0, 0)
-            //);
-
             var levelCounts = new Dictionary<int, int>();
 
-            //foreach (var location in torusChunk.AllLocations)
             foreach (var location in Feature.Chunk.AllLocations)
             {
                 if (levelCounts.ContainsKey(location.Z))
@@ -91,9 +52,9 @@ namespace ConsoleGameClient.WorldBuilders.Features
                 if (location.Z < 0)
                 {
                     if (InsideTorus(location, axis, majorRadius, minorRadius))
-                        SetTerrain("Indoors", location);
+                        World.SetTerrain("Indoors", location);
                     else if (InsideTorus(location, axis, majorRadius, minorRadius + 2))
-                        SetTerrain("Mountain", location);
+                        World.SetTerrain("Mountain", location);
                 }
                 else if (location.Z == 0)
                 {
@@ -102,15 +63,15 @@ namespace ConsoleGameClient.WorldBuilders.Features
                         var terrainType = rand.NextDouble();
 
                         if (terrainType < 0.75)
-                            SetTerrain("Plains", location);
+                            World.SetTerrain("Plains", location);
                         else if (terrainType < 0.90)
-                            SetTerrain("Forest", location);
+                            World.SetTerrain("Forest", location);
                         else
-                            SetTerrain("Water", location);
+                            World.SetTerrain("Water", location);
 
                     }
                     else if (InsideTorus(location, axis, majorRadius, minorRadius + borderWidth))
-                        SetTerrain("Mountain", location);
+                        World.SetTerrain("Mountain", location);
                 }
             }
         }
@@ -136,6 +97,4 @@ namespace ConsoleGameClient.WorldBuilders.Features
             }
         }
     }
-
-    
 }

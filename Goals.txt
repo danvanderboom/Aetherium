@@ -1,7 +1,6 @@
 
 Game Goals
 - implement Field-of-View (FOV)
-  - use efficient spiral method
 - finish implementing Perception handling
   - use Field-of-View output for generating vision Perception data
   - bind ConsoleMapView contents to a Character's Perception component
@@ -10,7 +9,6 @@ Game Goals
 - create a GameClient class able to connect to a GameGrain in Orleans
   - GameClient connects to SignalR endpoint, from which it receives a stream of Perception data
   - GameClient sends Control data to move, pick up items, etc
-- use SimplexNoise package to generate terrain in one or more WorldBuilders
 - add Unicode character support in Console windows:
   - https://docs.microsoft.com/en-us/dotnet/api/system.console?view=net-5.0#unicode-support-for-the-console
   - https://stackoverflow.com/questions/38533903/set-c-sharp-console-application-to-unicode-output
@@ -35,12 +33,6 @@ Game Goals
   - for each location within the toroid, create that location in the world and set to default terrain (None)
 
 
-example
-  - toroid standing up like a wheel, with the very top layer above ground, the rest underground in mazes and caves
-  - starting parameters:
-    - toroid center: x = 0, y = 0, z = -58
-    - toroid radius: 60
-    - orbiting circle radius: 30
 
 
 
@@ -65,34 +57,6 @@ var x = h + a * r * Math.Cos(theta);
 var y = k - b * r * Math.Sin(theta); 
 
 
-Point of Intersection
-(x, y)  = [ (b1 * c2 − b2 * c1) / (a1 * b2 − a2 * b1), (a2 * c1 − a1 * c2) / (a1 * b2 − a2 * b1) ]
-
-3d Line
-⟨x,y,z⟩ = ⟨x0,y0,z0⟩ + t⟨mx,my,mz⟩
-
-
-
-
-Plane.Point
-Plane.Vector
-
-
-
-
-Plane
-ax + by + cz = d
-
-Point on Plane
-x = ad / (a^2 + b^2 + c^2)
-y = bd / (a^2 + b^2 + c^2)
-z = cd / (a^2 + b^2 + c^2)
-
-
-
-
-    <PackageReference Include="Accord.Math" Version="3.8.0" />
-    <PackageReference Include="SimplexNoise" Version="2.0.0" />
 
 
 dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true

@@ -24,18 +24,24 @@ namespace ConsoleGame.Core
             Parent = parent;
         }
 
-        public T Get<T>() where T : Component =>
+        public T? Get<T>() where T : Component =>
             (T)AllComponents.FirstOrDefault(c => c.GetType() == typeof(T));
         
         public void Set<T>(T component) where T : Component
         {
-            Components.TryGetValue(typeof(T), out var existingComponent);
-            if (existingComponent != null)
-                Components.TryRemove(typeof(T), out var _);
+            if (Components.TryGetValue(typeof(T), out var existingComponent))
+                if (existingComponent != null)
+                    Components.TryRemove(typeof(T), out var _);
 
             if (Components.TryAdd(component.GetType(), component))
                 component.Parent = this;
         }
+
+        public bool Clear<T>() where T : Component => 
+            Components.TryRemove(typeof(T), out var _);
+
+        public bool Has<T>() where T : Component
+            => AllComponents.Any(c => c.GetType() == typeof(T));
 
         public IEnumerable<Component> AllComponents
         {

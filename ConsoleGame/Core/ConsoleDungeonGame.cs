@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Collections.Generic;
 using System.Drawing;
 using ConsoleGame;
@@ -24,6 +25,8 @@ namespace ConsoleGame.Core
 
         ConsoleColor oldBackgroundColor;
         ConsoleColor oldForegroundColor;
+
+        Guid characterMoves = Guid.Empty;
 
         Random rand = new Random();
 
@@ -71,100 +74,17 @@ namespace ConsoleGame.Core
 
             while (true)
             {
-                var keyInfo = Console.ReadKey(true);
-                switch (keyInfo.Key)
+                while (!Console.KeyAvailable)
                 {
-                    case ConsoleKey.D0:
-                        if (mapView?.WorldLocation != null)
-                        {
-                            var z = mapView.WorldLocation.Z;
-                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, -z);
-                        }
-                        break;
-                    case ConsoleKey.M:
-                        if (mapView?.WorldLocation != null)
-                        {
-                            if (mapView.GridColoring == null)
-                            {
-                                var choice = Console.ReadKey(true).KeyChar.ToString();
-                                if (int.TryParse(choice, out var gridIndex))
-                                {
-                                    if (gridIndex == 0)
-                                        mapView.GridColoring = new ConsoleColor[2, 2]
-                                        {
-                                            { ConsoleColor.Red, ConsoleColor.Blue },
-                                            { ConsoleColor.Blue, ConsoleColor.White }
-                                        };
-                                    else if (gridIndex == 1)
-                                        mapView.GridColoring = new ConsoleColor[3, 3]
-                                        {
-                                            { ConsoleColor.White, ConsoleColor.Yellow, ConsoleColor.Yellow },
-                                            { ConsoleColor.Blue, ConsoleColor.Blue, ConsoleColor.Yellow },
-                                            { ConsoleColor.Blue, ConsoleColor.Yellow, ConsoleColor.Blue }
-                                        };
-                                    else if (gridIndex == 2)
-                                        mapView.GridColoring = new ConsoleColor[3, 3]
-                                        {
-                                            { ConsoleColor.White, ConsoleColor.Yellow, ConsoleColor.Yellow },
-                                            { ConsoleColor.Blue, ConsoleColor.Cyan, ConsoleColor.Yellow },
-                                            { ConsoleColor.Blue, ConsoleColor.Yellow, ConsoleColor.Cyan }
-                                        };
-                                }
-                            }
-                            else
-                            {
-                                mapView.GridColoring = null;
-                            }
-                        }
-                        break;
-                    case ConsoleKey.UpArrow:
-                        if (mapView?.WorldLocation != null)
-                            mapView.Move(RelativeDirection.Up, Console.CapsLock ? 10 : 1);
-                        break;
-                    case ConsoleKey.DownArrow:
-                        if (mapView?.WorldLocation != null)
-                            mapView.Move(RelativeDirection.Down, Console.CapsLock ? 10 : 1);
-                        break;
-                    case ConsoleKey.LeftArrow:
-                        if (mapView?.WorldLocation != null)
-                            mapView.Move(RelativeDirection.Left, Console.CapsLock ? 10 : 1);
-                        break;
-                    case ConsoleKey.RightArrow:
-                        if (mapView?.WorldLocation != null)
-                            mapView.Move(RelativeDirection.Right, Console.CapsLock ? 10 : 1);
-                        break;
-                    case ConsoleKey.Z:
-                        if (mapView?.WorldLocation != null)
-                            mapView.RotateLeft();
-                        break;
-                    case ConsoleKey.X:
-                        if (mapView?.WorldLocation != null)
-                            mapView.RotateRight();
-                        break;
-                    case ConsoleKey.U:
-                        if (mapView?.WorldLocation != null)
-                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, Console.CapsLock ? +10 : +1);
-                        break;
-                    case ConsoleKey.D:
-                        if (mapView?.WorldLocation != null)
-                            mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, Console.CapsLock ? -10 : -1);
-                        break;
-                    case ConsoleKey.C:
-                        if (mapView != null)
-                            Clear(mapView.ContentScreenPosition, mapView.ContentSize, ConsoleColor.DarkYellow);
-                        continue;
-                    case ConsoleKey.J:
-                        var locationCount = World.EntitiesByLocation.Keys.Count;
-                        if (mapView == null || locationCount == 0)
-                            continue;
+                    Thread.Sleep(10);
 
-                        var location = World.EntitiesByLocation.Keys
-                            .Skip(rand.Next(0, locationCount))
-                            .First();
-
-                        mapView.WorldLocation = location;
-                        break;
+                    if (characterMoves != World.CharacterMoveTimestamp)
+                        DisplayViewContents();
                 }
+
+                var keyInfo = Console.ReadKey(true);
+
+                HandleCommand(keyInfo);
 
                 DisplayViewContents();
             }
@@ -172,6 +92,103 @@ namespace ConsoleGame.Core
             //Console.CursorVisible = false;
             //Console.BackgroundColor = oldBackgroundColor;
             //Console.ForegroundColor = oldForegroundColor;
+        }
+
+        private void HandleCommand(ConsoleKeyInfo keyInfo)
+        {
+            switch (keyInfo.Key)
+            {
+                case ConsoleKey.D0: // digit zero
+                    if (mapView?.WorldLocation != null)
+                    {
+                        var z = mapView.WorldLocation.Z;
+                        mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, -z);
+                    }
+                    break;
+                case ConsoleKey.M:
+                    if (mapView?.WorldLocation != null)
+                    {
+                        if (mapView.GridColoring == null)
+                        {
+                            var choice = Console.ReadKey(true).KeyChar.ToString();
+                            if (int.TryParse(choice, out var gridIndex))
+                            {
+                                if (gridIndex == 0)
+                                    mapView.GridColoring = new ConsoleColor[2, 2]
+                                    {
+                                            { ConsoleColor.Red, ConsoleColor.Blue },
+                                            { ConsoleColor.Blue, ConsoleColor.White }
+                                    };
+                                else if (gridIndex == 1)
+                                    mapView.GridColoring = new ConsoleColor[3, 3]
+                                    {
+                                            { ConsoleColor.White, ConsoleColor.Yellow, ConsoleColor.Yellow },
+                                            { ConsoleColor.Blue, ConsoleColor.Blue, ConsoleColor.Yellow },
+                                            { ConsoleColor.Blue, ConsoleColor.Yellow, ConsoleColor.Blue }
+                                    };
+                                else if (gridIndex == 2)
+                                    mapView.GridColoring = new ConsoleColor[3, 3]
+                                    {
+                                            { ConsoleColor.White, ConsoleColor.Yellow, ConsoleColor.Yellow },
+                                            { ConsoleColor.Blue, ConsoleColor.Cyan, ConsoleColor.Yellow },
+                                            { ConsoleColor.Blue, ConsoleColor.Yellow, ConsoleColor.Cyan }
+                                    };
+                            }
+                        }
+                        else
+                        {
+                            mapView.GridColoring = null;
+                        }
+                    }
+                    break;
+                case ConsoleKey.UpArrow:
+                    if (mapView?.WorldLocation != null)
+                        mapView.Move(RelativeDirection.Forward, Console.CapsLock ? 10 : 1);
+                    break;
+                case ConsoleKey.DownArrow:
+                    if (mapView?.WorldLocation != null)
+                        mapView.Move(RelativeDirection.Backward, Console.CapsLock ? 10 : 1);
+                    break;
+                case ConsoleKey.LeftArrow:
+                    if (mapView?.WorldLocation != null)
+                        mapView.Move(RelativeDirection.Left, Console.CapsLock ? 10 : 1);
+                    break;
+                case ConsoleKey.RightArrow:
+                    if (mapView?.WorldLocation != null)
+                        mapView.Move(RelativeDirection.Right, Console.CapsLock ? 10 : 1);
+                    break;
+                case ConsoleKey.Z:
+                    if (mapView?.WorldLocation != null)
+                        mapView.RotateLeft();
+                    break;
+                case ConsoleKey.X:
+                    if (mapView?.WorldLocation != null)
+                        mapView.RotateRight();
+                    break;
+                case ConsoleKey.U:
+                    if (mapView?.WorldLocation != null)
+                        mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, Console.CapsLock ? +10 : +1);
+                    break;
+                case ConsoleKey.D:
+                    if (mapView?.WorldLocation != null)
+                        mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, Console.CapsLock ? -10 : -1);
+                    break;
+                case ConsoleKey.C:
+                    if (mapView != null)
+                        Clear(mapView.ContentScreenPosition, mapView.ContentSize, ConsoleColor.DarkYellow);
+                    break;
+                case ConsoleKey.J:
+                    var locationCount = World.EntitiesByLocation.Keys.Count;
+                    if (mapView == null || locationCount == 0)
+                        break;
+
+                    var location = World.EntitiesByLocation.Keys
+                        .Skip(rand.Next(0, locationCount))
+                        .First();
+
+                    mapView.WorldLocation = location;
+                    break;
+            }
         }
 
         public void DisplayViews()
