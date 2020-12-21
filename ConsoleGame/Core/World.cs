@@ -18,17 +18,48 @@ namespace ConsoleGame.Core
 
         public ConcurrentDictionary<string, Entity> Entities { get; set; }
         public ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>> EntitiesByLocation { get; set; }
+        public ConcurrentDictionary<string, Character> Characters { get; set; }
 
         public Guid CharacterMoveTimestamp { get; protected set; } = Guid.NewGuid();
+
+        Random rand = new Random();
 
         public World()
         {
             TerrainTypes = new Dictionary<string, TerrainType>();
             TileTypes = new Dictionary<string, TileType>();
 
+            Features = new List<WorldFeature>();
+
             Entities = new ConcurrentDictionary<string, Entity>();
             EntitiesByLocation = new ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>>();
-            Features = new List<WorldFeature>();
+            Characters = new ConcurrentDictionary<string, Character>();
+        }
+
+        public WorldLocation? SelectRandomPassableLocation()
+        {
+            if (EntitiesByLocation.Count == 0)
+                return null;
+
+            while (true)
+            {
+                var es = EntitiesByLocation.ToList();
+                var location = es[rand.Next(0, es.Count)].Key;
+
+                if (PassableTerrain(location))
+                    return location;
+            }
+        }
+
+        public T SelectRandomEntity<T>(IList<string>? excludedEntityIds = null)
+            where T : Entity
+        {
+            var exclusions = excludedEntityIds ?? new List<string>();
+
+            var cs = Entities.OfType<T>()
+                .Where(e => !exclusions.Contains(e.EntityId))
+                .ToList();
+            return cs[rand.Next(0, cs.Count)];
         }
 
         public TerrainType? GetTerrainType(WorldLocation location)
@@ -37,7 +68,7 @@ namespace ConsoleGame.Core
             if (terrain == null)
                 return null;
 
-            return TerrainTypes[terrain.EntityId];
+            return TerrainTypes[terrain.Type.Name];
         }
 
         public Terrain? GetTerrain(WorldLocation location) =>
@@ -78,8 +109,8 @@ namespace ConsoleGame.Core
             if (terrainType == null)
                 throw new InvalidOperationException($"Terrain not registered: '{name}'");
 
-            var terrain = new Terrain();
-            terrain.Set(new Tile { Type = terrainType?.TileType ?? TileType.None });
+            var terrain = new Terrain(terrainType);
+            terrain.Set(new Tile { Type = terrainType.TileType ?? TileType.None });
             terrain.Set(location);
 
             AddEntity(terrain);
@@ -121,25 +152,36 @@ namespace ConsoleGame.Core
                     EntitiesByLocation.TryAdd(entity.Get<WorldLocation>(), dict);
                 }
 
-                dict.TryAdd(entity.EntityId, entity);
+                if (dict.TryAdd(entity.EntityId, entity))
+                {
+                    if (entity is Character)
+                        Characters.TryAdd(entity.EntityId, entity as Character);
 
-                //if (dict.TryAdd(entity.EntityId, entity))
-                //    WorldEvents?.Invoke(new WorldEvent
-                //    {
-                //        EventType = WorldEventType.EntityAdded,
-                //        Location = entity.Get<WorldLocation>(),
-                //        Entity = entity
-                //    });
+                    //if (dict.TryAdd(entity.EntityId, entity))
+                    //    WorldEvents?.Invoke(new WorldEvent
+                    //    {
+                    //        EventType = WorldEventType.EntityAdded,
+                    //        Location = entity.Get<WorldLocation>(),
+                    //        Entity = entity
+                    //    });
+                }
             }
         }
 
         public void RemoveEntity(string Id)
         {
+            var e = Entities[Id];
+            if (e == null)
+                throw new ArgumentException("EntityId not found");
+
             if (Entities.TryGetValue(Id, out var entity)
                 && EntitiesByLocation.TryGetValue(entity.Get<WorldLocation>(), out var entitiesAtLocation)
                 && entitiesAtLocation.TryRemove(Id, out var _)
                 && Entities.TryRemove(Id, out var _))
             {
+                if (e is Character)
+                    Characters.TryRemove(e.EntityId, out var _);
+
                 //WorldEvents?.Invoke(new WorldEvent
                 //{
                 //    EventType = WorldEventType.EntityRemoved,
@@ -157,14 +199,14 @@ namespace ConsoleGame.Core
                     return;
 
                 // remove from location index
-                if (EntitiesByLocation.TryGetValue(entity.Get<WorldLocation>(), out var entitiesAtLocation)
-                    && entitiesAtLocation.TryRemove(Id, out var _))
+                if (EntitiesByLocation.TryGetValue(entity.Get<WorldLocation>(), out var entitiesAtSource)
+                    && entitiesAtSource.TryRemove(Id, out var _))
                 {
                     // update location on entity
                     entity.Set(destination);
 
-                    // add entity back to location index
-                    if (entitiesAtLocation.TryAdd(entity.EntityId, entity))
+                    if (EntitiesByLocation.TryGetValue(destination, out var entitiesAtDestination)
+                        && entitiesAtDestination.TryAdd(Id, entity))
                     {
                         //WorldEvents?.Invoke(new WorldEvent
                         //{
@@ -223,7 +265,7 @@ namespace ConsoleGame.Core
                 return false;
 
             // stop players (including monsters) from existing in the same location
-            var other = Entities.OfType<Character>()
+            var other = Entities.Values.Where(e => e is Character)
                 .FirstOrDefault(p => p.Get<WorldLocation>() == location);
             if (other != null)
             {
@@ -247,9 +289,9 @@ namespace ConsoleGame.Core
             var up = currentLocation.FromDelta(0, 0, +1);
             var down = currentLocation.FromDelta(0, 0, -1);
 
-            if (location == up && currentLocation.Has<CanAscend>())
+            if (location == up && !currentLocation.Has<CanAscend>())
                 return false;
-            else if (location == down && currentLocation.Has<CanDescend>())
+            else if (location == down && !currentLocation.Has<CanDescend>())
                 return false;
 
             if (PassableTerrain(location))

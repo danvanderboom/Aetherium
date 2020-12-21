@@ -12,9 +12,7 @@ namespace ConsoleGame.WorldBuilders
     {
         Random rand = new Random();
 
-        public DungeonCrawlerWorldBuilder() : base()
-        {
-        }
+        public DungeonCrawlerWorldBuilder() : base() { }
 
         public override World Build()
         {

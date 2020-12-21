@@ -24,8 +24,8 @@ namespace ConsoleGame.Core
             Parent = parent;
         }
 
-        public T? Get<T>() where T : Component =>
-            (T)AllComponents.FirstOrDefault(c => c.GetType() == typeof(T));
+        public T Get<T>() where T : Component =>
+            (T)AllComponents.First(c => c.GetType() == typeof(T));
         
         public void Set<T>(T component) where T : Component
         {

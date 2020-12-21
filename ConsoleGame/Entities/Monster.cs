@@ -10,6 +10,8 @@ namespace ConsoleGame
 {
     public class Monster : Character
     {
+        WorldDirection? PreviousDirection;
+
         World world;
 
         Random rand;
@@ -21,50 +23,70 @@ namespace ConsoleGame
             rand = new Random();
 
             Set(new Memory());
+            Set(new Tile { Type = world.TileTypes["Monster"] });
         }
 
-        public void Heartbeat()
+        public virtual void Heartbeat()
         {
             //if (goal == null)
             //    SetGoal();
 
-            var rest = rand.NextDouble() < 0.1; // 10% chance of resting
-            if (!rest)
-            {
-                //var validDirections = GetValidDirections();
-                //var direction = validDirections[rand.Next(0, validDirections.Count)];
+            var validDirections = GetValidDirections();
 
-                //if (world.TryMove(this, direction))
-                //{
-                //    PerceiveEnvironment();
-                //    //PreviousDirection = direction;
-                //}
+            var r = rand.NextDouble();
+            if (PreviousDirection.HasValue && validDirections.Contains(PreviousDirection.Value) && r < 0.5)
+            {
+                world.TryMove(this, PreviousDirection.Value);
+                return;
+            }
+
+            var direction = validDirections[rand.Next(0, validDirections.Count)];
+
+            if (world.TryMove(this, direction))
+            {
+                //PerceiveEnvironment();
+                PreviousDirection = direction;
             }
         }
 
-        //private IList<Direction> GetValidDirections()
-        //{
-        //    var directions = Enum.GetValues(typeof(Direction)).Cast<Direction>().ToList();
+        private IList<WorldDirection> GetValidDirections()
+        {
+            var location = Get<WorldLocation>();
+            if (location == null)
+                throw new InvalidOperationException("WorldLocation is missing from Monster");
 
-        //    foreach (var direction in Enum.GetValues(typeof(Direction)).Cast<Direction>())
-        //    {
-        //        var target = direction switch
-        //        {
-        //            Direction.North => Get<Location>().FromDelta(0, +1, 0),
-        //            Direction.South => Get<Location>().FromDelta(0, -1, 0),
-        //            Direction.East => Get<Location>().FromDelta(+1, 0, 0),
-        //            Direction.West => Get<Location>().FromDelta(-1, 0, 0),
-        //            Direction.Up => Get<Location>().FromDelta(0, 0, +1),
-        //            Direction.Down => Get<Location>().FromDelta(0, 0, -1),
-        //            _ => throw new NotImplementedException()
-        //        };
+            var directions = Enum.GetValues(typeof(WorldDirection)).Cast<WorldDirection>().ToList();
 
-        //        if (!world.PassableTerrain(target))
-        //            directions.Remove(direction);
-        //    }
+            if (!location.Has<CanAscend>())
+                directions.Remove(WorldDirection.Up);
 
-        //    return directions;
-        //}
+            if (!location.Has<CanDescend>())
+                directions.Remove(WorldDirection.Down);
+
+            var invalidDirections = new List<WorldDirection>();
+
+            foreach (var direction in directions)
+            {
+                var target = direction switch
+                {
+                    WorldDirection.North => location.FromDelta(0, +1, 0),
+                    WorldDirection.South => location.FromDelta(0, -1, 0),
+                    WorldDirection.East => location.FromDelta(+1, 0, 0),
+                    WorldDirection.West => location.FromDelta(-1, 0, 0),
+                    WorldDirection.Up => location.FromDelta(0, 0, +1),
+                    WorldDirection.Down => location.FromDelta(0, 0, -1),
+                    _ => throw new NotImplementedException()
+                };
+
+                if (!world.PassableTerrain(target))
+                    invalidDirections.Add(direction);
+            }
+
+            foreach (var item in invalidDirections)
+                directions.Remove(item);
+
+            return directions;
+        }
 
         //public void SetGoal()
         //{

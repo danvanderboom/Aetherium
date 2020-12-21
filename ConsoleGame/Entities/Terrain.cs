@@ -7,6 +7,11 @@ namespace ConsoleGame.Entities
 {
     public class Terrain : Entity
     {
-        public Terrain() : base() { }
+        public TerrainType Type { get; set; }
+
+        public Terrain(TerrainType type) : base() 
+        {
+            Type = type;
+        }
     }
 }

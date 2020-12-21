@@ -2,12 +2,14 @@
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Drawing;
 using ConsoleGame;
 using ConsoleGame.Components;
 using ConsoleGame.WorldBuilders;
 using ConsoleGame.Views;
+using ConsoleGame.Entities;
 
 namespace ConsoleGame.Core
 {
@@ -27,6 +29,8 @@ namespace ConsoleGame.Core
         ConsoleColor oldForegroundColor;
 
         Guid characterMoves = Guid.Empty;
+
+        Task? MonsterHeartbeatTask;
 
         Random rand = new Random();
 
@@ -62,6 +66,11 @@ namespace ConsoleGame.Core
 
         public void Run()
         {
+            AddPlayerCharacter();
+            AddMonsters(100);
+
+            MonsterHeartbeatTask = Task.Run(MonsterHeartbeat);
+
             oldBackgroundColor = Console.BackgroundColor;
             oldForegroundColor = Console.ForegroundColor;
 
@@ -79,19 +88,69 @@ namespace ConsoleGame.Core
                     Thread.Sleep(10);
 
                     if (characterMoves != World.CharacterMoveTimestamp)
+                    {
                         DisplayViewContents();
+                        characterMoves = World.CharacterMoveTimestamp;
+                    }
                 }
 
                 var keyInfo = Console.ReadKey(true);
-
                 HandleCommand(keyInfo);
 
                 DisplayViewContents();
             }
+        }
 
-            //Console.CursorVisible = false;
-            //Console.BackgroundColor = oldBackgroundColor;
-            //Console.ForegroundColor = oldForegroundColor;
+        void AddPlayerCharacter()
+        {
+            var location = World.SelectRandomPassableLocation();
+            if (location != null)
+            {
+                var player = new Character();
+                player.Set(new Health { Level = 100, MaxLevel = 100 });
+                player.Set(new HasHeading { Heading = rand.Next(0, 4) * 90 });
+                player.Set(location);
+
+                World.AddEntity(player);
+            }
+        }
+
+        void AddMonsters(int count = 1)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var location = World.SelectRandomPassableLocation();
+                if (location != null)
+                {
+                    var zombie = new Zombie(World);
+                    zombie.Set(new Health { Level = 10, MaxLevel = 10 });
+                    zombie.Set(new HasHeading { Heading = rand.Next(0, 4) * 90 });
+                    zombie.Set(location);
+
+                    World.AddEntity(zombie);
+                }
+            }
+        }
+
+        async Task MonsterHeartbeat()
+        {
+            while (true)
+            {
+                try
+                {
+                    var characters = World.Characters.Values.ToList();
+
+                    foreach (Character character in characters)
+                        if (character is Monster monster && monster.Get<Health>().Level > 0)
+                            monster.Heartbeat();
+
+                    await Task.Delay(20);
+                }
+                catch (Exception ex)
+                {
+
+                }
+            }
         }
 
         private void HandleCommand(ConsoleKeyInfo keyInfo)
