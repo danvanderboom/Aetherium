@@ -11,12 +11,13 @@ namespace ConsoleGame.WorldBuilders
 {
     public class TorusWorldBuilder : WorldBuilder
     {
-        Random rand = new Random();
+        Random rand;
 
         MazeGenerator? mazeGenerator;
 
-        public TorusWorldBuilder() : base()
+        public TorusWorldBuilder(Random? rand = null) : base()
         {
+            this.rand = rand ?? new Random();
         }
 
         public bool BuildMazeStep() => mazeGenerator?.BuildNext() ?? false;
@@ -87,16 +88,7 @@ namespace ConsoleGame.WorldBuilders
                     _ => MazeLocationType.Pillar
                 });
 
-            CreateMaze(target,
-                coloring: coloring303,
-                colorMapping: color => color switch
-                {
-                    "White" => MazeLocationType.Room,
-                    "Yellow" => MazeLocationType.Wall,
-                    "Blue" => MazeLocationType.Wall,
-                    _ => MazeLocationType.Pillar
-                }
-            );
+            CreateMaze(target, coloring303, color303map);
 
             return World;
         }
