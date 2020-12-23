@@ -106,6 +106,15 @@ namespace ConsoleGame.Core
                         if (torusBuilder != null && continueMaze)
                         {
                             continueMaze = torusBuilder.BuildMazeStep();
+
+                            // double step
+                            if (continueMaze)
+                                continueMaze = torusBuilder.BuildMazeStep();
+
+                            // triple step
+                            if (continueMaze)
+                                continueMaze = torusBuilder.BuildMazeStep();
+
                             mazeSteps++;
                         }
                     }

@@ -2,9 +2,9 @@
 using System.Linq;
 using System.Text;
 using System.Collections.Generic;
-using ConsoleGame.Components;
-using ConsoleGame.Geometry;
 using ConsoleGame.Core;
+using ConsoleGame.Geometry;
+using ConsoleGame.Components;
 
 namespace ConsoleGame
 {

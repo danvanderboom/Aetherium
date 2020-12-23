@@ -88,7 +88,68 @@ namespace ConsoleGame.WorldBuilders
                     _ => MazeLocationType.Pillar
                 });
 
-            CreateMaze(target, coloring202, color202map);
+            var coloring313 = new GridColoring<string>(
+                new string[,]
+                {
+                    { "DarkYellow", "White", "DarkYellow" },
+                    { "Blue", "Blue", "Yellow" },
+                    { "Blue", "Yellow", "Cyan" },
+                    { "White", "DarkYellow", "DarkYellow" },
+                    { "Blue", "Yellow", "Blue" },
+                    { "Yellow", "Cyan", "Blue" },
+                    { "DarkYellow", "DarkYellow", "White" },
+                    { "Yellow", "Blue", "Blue" },
+                    { "Cyan", "Blue", "Yellow" },
+                });
+            var color313map = new Func<string, MazeLocationType>(
+                color => color switch
+                {
+                    "White" => MazeLocationType.Room,
+                    "Yellow" => MazeLocationType.Wall,
+                    "Blue" => MazeLocationType.Wall,
+                    _ => MazeLocationType.Pillar
+                });
+
+            var coloring323 = new GridColoring<string>(
+                new string[,]
+                {
+                    { "DarkYellow", "DarkYellow", "White" },
+                    { "Yellow", "Blue", "Blue" },
+                    { "Blue", "Blue", "Yellow" },
+                    { "White", "DarkYellow", "DarkYellow" },
+                    { "Blue", "Yellow", "Blue" },
+                    { "Yellow", "Blue", "Blue" },
+                    { "DarkYellow", "White", "DarkYellow" },
+                    { "Blue", "Blue", "Yellow" },
+                    { "Blue", "Yellow", "Blue" },
+                });
+            var color323map = new Func<string, MazeLocationType>(
+                color => color switch
+                {
+                    "White" => MazeLocationType.Room,
+                    "DarkYellow" => MazeLocationType.Wall,
+                    "Blue" => MazeLocationType.Wall,
+                    _ => MazeLocationType.Pillar
+                });
+
+            var coloringThickWalls = new GridColoring<string>(
+                new string[,]
+                {
+                    { "White", "DarkYellow", "DarkYellow" },
+                    { "Blue", "Cyan", "Yellow" },
+                    { "Blue", "Yellow", "Cyan" }
+                });
+            var thinkWallsColorMap = new Func<string, MazeLocationType>(
+                color => color switch
+                {
+                    "White" => MazeLocationType.Room,
+                    "DarkYellow" => MazeLocationType.Wall,
+                    "Blue" => MazeLocationType.Wall,
+                    _ => MazeLocationType.Pillar
+                });
+
+            //CreateMaze(target, coloring323, color323map);
+            CreateMaze(target, coloring303, color303map);
 
             return World;
         }
