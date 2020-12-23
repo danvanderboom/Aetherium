@@ -88,7 +88,7 @@ namespace ConsoleGame.WorldBuilders
                     _ => MazeLocationType.Pillar
                 });
 
-            CreateMaze(target, coloring303, color303map);
+            CreateMaze(target, coloring202, color202map);
 
             return World;
         }

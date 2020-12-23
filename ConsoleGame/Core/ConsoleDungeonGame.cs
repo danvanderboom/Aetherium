@@ -78,8 +78,8 @@ namespace ConsoleGame.Core
 
         public void Run()
         {
-            AddPlayerCharacter();
-            AddMonsters(100);
+            //AddPlayerCharacter();
+            //AddMonsters(100);
 
             MonsterHeartbeatTask = Task.Run(MonsterHeartbeat);
 
@@ -114,10 +114,10 @@ namespace ConsoleGame.Core
                         Thread.Sleep(50);
                     }
 
-                    if (characterMoves != World.CharacterMoveTimestamp)
+                    //if (characterMoves != World.CharacterMoveTimestamp)
                     {
                         DisplayViewContents();
-                        characterMoves = World.CharacterMoveTimestamp;
+                        //characterMoves = World.CharacterMoveTimestamp;
                     }
                 }
 

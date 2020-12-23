@@ -12,7 +12,6 @@ namespace ConsoleGame
     {
         public IList<WorldLocation> AllLocations { get; set; }
 
-        //public List<WorldLocation> Locations { get; set; }
         public List<WorldLocation> Rooms { get; set; }
         public List<WorldLocation> Walls { get; set; }
         public List<WorldLocation> Pillars { get; set; }
