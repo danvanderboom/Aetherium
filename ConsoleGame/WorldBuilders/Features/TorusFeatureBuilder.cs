@@ -7,10 +7,12 @@ using ConsoleGame.Core;
 using ConsoleGame.Components;
 using ConsoleGame.WorldBuilders;
 
-namespace ConsoleGameClient.WorldBuilders.Features
+namespace ConsoleGame.WorldBuilders.Features
 {
     public class TorusFeatureBuilder : WorldFeatureBuilder
     {
+        const int borderWidth = 2;
+
         Random rand = new Random();
 
         public TorusFeatureBuilder(World world, WorldFeature feature) : base(world, feature)
@@ -19,9 +21,7 @@ namespace ConsoleGameClient.WorldBuilders.Features
 
         public override void Build()
         {
-            var borderWidth = 2;
             var size = Feature.Chunk.Size;
-
             var axis = Enum.Parse<Axis>(Feature.Settings["RadialSymmetryAxis"]);
 
             var minorRadius = axis switch
@@ -40,7 +40,7 @@ namespace ConsoleGameClient.WorldBuilders.Features
                 _ => throw new ArgumentException("radialSymmetryAxis must be 0, 1, or 2")
             };
 
-            var levelCounts = new Dictionary<int, int>();
+            var levelCounts = new Dictionary<int, int>(); // count of entities per Z layer
 
             foreach (var location in Feature.Chunk.AllLocations)
             {
@@ -49,14 +49,14 @@ namespace ConsoleGameClient.WorldBuilders.Features
                 else
                     levelCounts.Add(location.Z, 1);
 
-                if (location.Z < 0)
+                if (location.Z < 0) // underground levels
                 {
                     if (InsideTorus(location, axis, majorRadius, minorRadius))
                         World.SetTerrain("Indoors", location);
-                    else if (InsideTorus(location, axis, majorRadius, minorRadius + 2))
-                        World.SetTerrain("Mountain", location);
+                    else if (InsideTorus(location, axis, majorRadius, minorRadius + borderWidth))
+                        World.SetTerrain("Mountain", location); // 3D torus border
                 }
-                else if (location.Z == 0)
+                else if (location.Z == 0) // above ground level
                 {
                     if (InsideTorus(location, axis, majorRadius, minorRadius))
                     {

@@ -126,8 +126,8 @@ namespace ConsoleGame.Views
                     ConsoleColor? color = null;
                     if (GridColoring != null)
                     {
-                        var gridColorHeight = GridColoring.GetUpperBound(0) + 1;
-                        var gridColorWidth = GridColoring.GetUpperBound(1) + 1;
+                        var gridColorHeight = GridColoring.GetLength(0);
+                        var gridColorWidth = GridColoring.GetLength(1);
 
                         color = GridColoring[
                             Math.Abs(location.Y % gridColorHeight), 

@@ -3,9 +3,9 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Text;
 using ConsoleGame.Core;
-using ConsoleGame.WorldBuilders;
 using ConsoleGame.Components;
-using ConsoleGameClient.WorldBuilders.Features;
+using ConsoleGame.Geometry;
+using ConsoleGame.WorldBuilders.Features;
 
 namespace ConsoleGame.WorldBuilders
 {
@@ -13,21 +13,25 @@ namespace ConsoleGame.WorldBuilders
     {
         Random rand = new Random();
 
+        MazeGenerator mazeGenerator;
+
         public TorusWorldBuilder() : base()
         {
         }
 
+        public bool BuildMazeStep() => mazeGenerator.BuildNext();
+
         public override World Build()
         {
-            var world = new World();
+            World = new World();
 
-            world.AddTileTypes(TileTypes);
-            world.AddTerrainTypes(CreateTerrainTypes(TileTypes));
+            World.AddTileTypes(TileTypes);
+            World.AddTerrainTypes(CreateTerrainTypes(TileTypes));
 
             // toroid standing up like a wheel, with the very top layer above ground
             // the rest underground in mazes and caves
 
-            world.Features.Add(new WorldFeature
+            var torusFeature = new WorldFeature
             {
                 FeatureBuilder = (w, f) => new TorusFeatureBuilder(w, f),
                 Settings = new Dictionary<string, string> 
@@ -42,11 +46,63 @@ namespace ConsoleGame.WorldBuilders
                     Location = new WorldLocation(x: -50, y: -50, z: -28),
                     Size = new Size3d(length: 100, width: 100, depth: 30)
                 }
-            });
+            };
 
-            world.Build();
+            World.Features.Add(torusFeature);
 
-            return world;
+            World.Build();
+
+
+            var target = World.EntitiesByLocation.Keys
+                .Where(loc => loc.Z == -1 && World.PassableTerrain(loc))
+                .ToList();
+            var dist = World.GetTerrainDistribution(target);
+
+            CreateMaze(target);
+
+            return World;
+        }
+
+        private void CreateMaze(IEnumerable<WorldLocation> firstUndergroundLevel)
+        {
+            if (World == null)
+                throw new InvalidOperationException("World is null");
+
+            var coloring = new GridColoring<string>(
+                new string[,]
+                {
+                    { "White", "Yellow", "Yellow" },
+                    { "Blue", "Blue", "Yellow" },
+                    { "Blue", "Yellow", "Blue" }
+                });
+
+            mazeGenerator = new MazeGenerator(World, firstUndergroundLevel, coloring,
+                color => color switch
+                {
+                    "White" => MazeLocationType.Room,
+                    "Yellow" => MazeLocationType.Wall,
+                    "Blue" => MazeLocationType.Wall,
+                    _ => MazeLocationType.Pillar
+                },
+                setRoom: loc => World.SetTerrain("Indoors", loc), 
+                setPillar: loc => World.SetTerrain("Mountain", loc),
+                setWall: loc => World.SetTerrain("Mountain", loc),
+                removeWall: loc =>
+                {
+                    foreach (var wall in coloring.GetConnectedCells(loc.X, loc.Y))
+                        World.SetTerrain("Indoors", loc);
+                });
+
+            mazeGenerator.CurrentLocationSet += MazeGenerator_CurrentLocationSet;
+
+            mazeGenerator.Build();
+        }
+
+        public event Action<WorldLocation>? MazeLocationSet;
+
+        private void MazeGenerator_CurrentLocationSet(WorldLocation location)
+        {
+            MazeLocationSet?.Invoke(location);
         }
 
         string[] TerrainTypeNames => new string[]

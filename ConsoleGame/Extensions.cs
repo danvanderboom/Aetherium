@@ -3,12 +3,16 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Text;
+using ConsoleGame;
 using ConsoleGame.Components;
 using ConsoleGame.Geometry;
-using ConsoleGame;
 
 public static class Extensions
 {
+    public static T? SelectRandom<T>(this IList<T> items, Random? rand = null)
+        => items.Count == 0 ? default(T)
+        : items[(rand ?? new Random()).Next(0, items.Count)];
+
     public static RelativeDirection RotateRight(this RelativeDirection dir) => dir switch
     {
         RelativeDirection.Forward => RelativeDirection.Right,

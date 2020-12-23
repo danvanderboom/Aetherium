@@ -59,6 +59,7 @@ namespace ConsoleGame.Core
             var cs = Entities.OfType<T>()
                 .Where(e => !exclusions.Contains(e.EntityId))
                 .ToList();
+
             return cs[rand.Next(0, cs.Count)];
         }
 
@@ -72,7 +73,8 @@ namespace ConsoleGame.Core
         }
 
         public Terrain? GetTerrain(WorldLocation location) =>
-            EntitiesByLocation[location].Values
+            !EntitiesByLocation.ContainsKey(location) ? null
+            : EntitiesByLocation[location].Values
             .OfType<Terrain>()
             .FirstOrDefault();
 
@@ -109,11 +111,18 @@ namespace ConsoleGame.Core
             if (terrainType == null)
                 throw new InvalidOperationException($"Terrain not registered: '{name}'");
 
-            var terrain = new Terrain(terrainType);
-            terrain.Set(new Tile { Type = terrainType.TileType ?? TileType.None });
-            terrain.Set(location);
-
-            AddEntity(terrain);
+            var terrain = GetTerrain(location);
+            if (terrain == null)
+            {
+                terrain = new Terrain(terrainType);
+                terrain.Set(new Tile { Type = terrainType.TileType ?? TileType.None });
+                terrain.Set(location);
+                AddEntity(terrain);
+            }
+            else
+            {
+                terrain.Set(new Tile { Type = terrainType.TileType ?? TileType.None });
+            }
 
             return terrain;
         }
@@ -136,8 +145,11 @@ namespace ConsoleGame.Core
                 TerrainTypes.Add(terrainType.Name, terrainType);
         }
 
+        int addEntityCalls = 0;
         public void AddEntity(Entity entity)
         {
+            addEntityCalls++;
+
             if (Entities.TryAdd(entity.EntityId, entity))
             {
                 ConcurrentDictionary<string, Entity> dict;
@@ -149,13 +161,16 @@ namespace ConsoleGame.Core
                 else
                 {
                     dict = new ConcurrentDictionary<string, Entity>();
-                    EntitiesByLocation.TryAdd(entity.Get<WorldLocation>(), dict);
+
+                    if (!EntitiesByLocation.TryAdd(entity.Get<WorldLocation>(), dict))
+                        throw new Exception("Failed to add to EntitiesByLocation");
                 }
 
                 if (dict.TryAdd(entity.EntityId, entity))
                 {
-                    if (entity is Character)
-                        Characters.TryAdd(entity.EntityId, entity as Character);
+                    var character = entity as Character;
+                    if (character != null && !Characters.TryAdd(entity.EntityId, character))
+                        throw new Exception("Couldn't add to Character index");
 
                     //if (dict.TryAdd(entity.EntityId, entity))
                     //    WorldEvents?.Invoke(new WorldEvent
@@ -165,6 +180,14 @@ namespace ConsoleGame.Core
                     //        Entity = entity
                     //    });
                 }
+                else
+                {
+                    throw new Exception("Couldn't add to EntitiesByLocation index");
+                }
+            }
+            else
+            {
+                throw new Exception("Couldn't add to Entities index");
             }
         }
 
@@ -304,6 +327,28 @@ namespace ConsoleGame.Core
             }
 
             return false;
+        }
+
+        public IDictionary<string, int> GetTerrainDistribution(IEnumerable<WorldLocation> locations)
+        {
+            var results = new Dictionary<string, int>();
+
+            foreach (var loc in locations)
+            {
+                var terrainName = EntitiesByLocation.ContainsKey(loc) 
+                    ? GetTerrain(loc)?.Type.Name
+                    : "None";
+
+                if (terrainName == null)
+                    throw new InvalidOperationException("Terrain name is missing");
+
+                if (results.ContainsKey(terrainName))
+                    results[terrainName]++;
+                else
+                    results.Add(terrainName, 1);
+            }
+
+            return results;
         }
 
         public bool PassableTerrain(WorldLocation location) =>

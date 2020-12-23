@@ -68,8 +68,8 @@ namespace ConsoleGame.Components
 
         public static bool Equals(WorldLocation? rhs, WorldLocation? lhs)
         {
-            if (rhs is null && lhs is null)
-                return true;
+            //if (rhs is null && lhs is null)
+            //    return true;
 
             if (rhs is null || lhs is null)
                 return false;
@@ -83,7 +83,7 @@ namespace ConsoleGame.Components
 
         public static bool operator !=(WorldLocation? lhs, WorldLocation? rhs) => !Equals(lhs, rhs);
 
-        public override string ToString() => $"{X}, {Y}, {Z}";
+        public override string ToString() => $"x: {X}, y: {Y}, z: {Z}";
 
         public List<int> ToList() => new List<int> { X, Y, Z };
 

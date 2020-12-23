@@ -33,9 +33,11 @@ Game Goals
   - for each location within the toroid, create that location in the world and set to default terrain (None)
 
 
+Maze Algorithms
+https://www.diva-portal.org/smash/get/diva2:1237178/FULLTEXT02
 
-
-
+Hex Math
+http://www.gamelogic.co.za/downloads/HexMath2.pdf
 
 Surface of Revolution
 https://mathworld.wolfram.com/SurfaceofRevolution.html
@@ -61,3 +63,9 @@ var y = k - b * r * Math.Sin(theta);
 
 dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true
 
+   at System.ThrowHelper.ThrowInvalidOperationException_InvalidOperation_EnumFailedVersion()
+   at System.Collections.Generic.List`1.Enumerator.MoveNextRare()
+   at System.Collections.Generic.List`1.Enumerator.MoveNext()
+   at ConsoleGame.Monster.GetValidDirections() in C:\Source\ConsoleGame\ConsoleGame\Entities\Monster.cs:line 70
+   at ConsoleGame.Monster.Heartbeat() in C:\Source\ConsoleGame\ConsoleGame\Entities\Monster.cs:line 34
+   at ConsoleGame.Core.ConsoleDungeonGame.<MonsterHeartbeat>d__20.MoveNext() in C:\Source\ConsoleGame\ConsoleGame\Core\ConsoleDungeonGame.cs:line 145

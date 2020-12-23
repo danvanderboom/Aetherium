@@ -30,6 +30,8 @@ namespace ConsoleGame.Core
 
         Guid characterMoves = Guid.Empty;
 
+        bool followMazeBuilder = false;
+
         Task? MonsterHeartbeatTask;
 
         Random rand = new Random();
@@ -39,6 +41,10 @@ namespace ConsoleGame.Core
             this.worldBuilder = worldBuilder;
 
             World = worldBuilder.Build();
+
+            var torusBuilder = worldBuilder as TorusWorldBuilder;
+            if (torusBuilder != null)
+                torusBuilder.MazeLocationSet += ConsoleDungeonGame_MazeLocationSet;
 
             Views = new List<ConsoleView>();
 
@@ -64,6 +70,12 @@ namespace ConsoleGame.Core
             }
         }
 
+        private void ConsoleDungeonGame_MazeLocationSet(WorldLocation location)
+        {
+            if (followMazeBuilder)
+                mapView.WorldLocation = location;
+        }
+
         public void Run()
         {
             AddPlayerCharacter();
@@ -81,11 +93,26 @@ namespace ConsoleGame.Core
 
             DisplayViews();
 
+            bool continueMaze = true;
+            int mazeSteps = 0;
+
             while (true)
             {
                 while (!Console.KeyAvailable)
                 {
-                    Thread.Sleep(10);
+                    if (continueMaze)
+                    {
+                        var torusBuilder = worldBuilder as TorusWorldBuilder;
+                        if (torusBuilder != null && continueMaze)
+                        {
+                            continueMaze = torusBuilder.BuildMazeStep();
+                            mazeSteps++;
+                        }
+                    }
+                    else
+                    {
+                        Thread.Sleep(50);
+                    }
 
                     if (characterMoves != World.CharacterMoveTimestamp)
                     {
@@ -109,6 +136,7 @@ namespace ConsoleGame.Core
                 var player = new Character();
                 player.Set(new Health { Level = 100, MaxLevel = 100 });
                 player.Set(new HasHeading { Heading = rand.Next(0, 4) * 90 });
+                player.Set(new Tile { Type = World.TileTypes["Player"] });
                 player.Set(location);
 
                 World.AddEntity(player);
@@ -120,7 +148,7 @@ namespace ConsoleGame.Core
             for (int i = 0; i < count; i++)
             {
                 var location = World.SelectRandomPassableLocation();
-                if (location != null)
+                if (location != null && location.Z != -1)
                 {
                     var zombie = new Zombie(World);
                     zombie.Set(new Health { Level = 10, MaxLevel = 10 });
@@ -157,11 +185,15 @@ namespace ConsoleGame.Core
         {
             switch (keyInfo.Key)
             {
+                case ConsoleKey.Spacebar:
+                    followMazeBuilder = !followMazeBuilder;
+                    break;
                 case ConsoleKey.D0: // digit zero
                     if (mapView?.WorldLocation != null)
                     {
                         var z = mapView.WorldLocation.Z;
                         mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, -z);
+                        followMazeBuilder = false;
                     }
                     break;
                 case ConsoleKey.M:
@@ -175,22 +207,22 @@ namespace ConsoleGame.Core
                                 if (gridIndex == 0)
                                     mapView.GridColoring = new ConsoleColor[2, 2]
                                     {
-                                            { ConsoleColor.Red, ConsoleColor.Blue },
-                                            { ConsoleColor.Blue, ConsoleColor.White }
+                                        { ConsoleColor.Red, ConsoleColor.Blue },
+                                        { ConsoleColor.Blue, ConsoleColor.White }
                                     };
                                 else if (gridIndex == 1)
                                     mapView.GridColoring = new ConsoleColor[3, 3]
                                     {
-                                            { ConsoleColor.White, ConsoleColor.Yellow, ConsoleColor.Yellow },
-                                            { ConsoleColor.Blue, ConsoleColor.Blue, ConsoleColor.Yellow },
-                                            { ConsoleColor.Blue, ConsoleColor.Yellow, ConsoleColor.Blue }
+                                        { ConsoleColor.White, ConsoleColor.Yellow, ConsoleColor.Yellow },
+                                        { ConsoleColor.Blue, ConsoleColor.Blue, ConsoleColor.Yellow },
+                                        { ConsoleColor.Blue, ConsoleColor.Yellow, ConsoleColor.Blue }
                                     };
                                 else if (gridIndex == 2)
                                     mapView.GridColoring = new ConsoleColor[3, 3]
                                     {
-                                            { ConsoleColor.White, ConsoleColor.Yellow, ConsoleColor.Yellow },
-                                            { ConsoleColor.Blue, ConsoleColor.Cyan, ConsoleColor.Yellow },
-                                            { ConsoleColor.Blue, ConsoleColor.Yellow, ConsoleColor.Cyan }
+                                        { ConsoleColor.White, ConsoleColor.Yellow, ConsoleColor.Yellow },
+                                        { ConsoleColor.Blue, ConsoleColor.Cyan, ConsoleColor.Yellow },
+                                        { ConsoleColor.Blue, ConsoleColor.Yellow, ConsoleColor.Cyan }
                                     };
                             }
                         }
@@ -202,19 +234,31 @@ namespace ConsoleGame.Core
                     break;
                 case ConsoleKey.UpArrow:
                     if (mapView?.WorldLocation != null)
+                    {
                         mapView.Move(RelativeDirection.Forward, Console.CapsLock ? 10 : 1);
+                        followMazeBuilder = false;
+                    }
                     break;
                 case ConsoleKey.DownArrow:
                     if (mapView?.WorldLocation != null)
+                    {
                         mapView.Move(RelativeDirection.Backward, Console.CapsLock ? 10 : 1);
+                        followMazeBuilder = false;
+                    }
                     break;
                 case ConsoleKey.LeftArrow:
                     if (mapView?.WorldLocation != null)
+                    {
                         mapView.Move(RelativeDirection.Left, Console.CapsLock ? 10 : 1);
+                        followMazeBuilder = false;
+                    }
                     break;
                 case ConsoleKey.RightArrow:
                     if (mapView?.WorldLocation != null)
+                    {
                         mapView.Move(RelativeDirection.Right, Console.CapsLock ? 10 : 1);
+                        followMazeBuilder = false;
+                    }
                     break;
                 case ConsoleKey.Z:
                     if (mapView?.WorldLocation != null)
@@ -226,11 +270,17 @@ namespace ConsoleGame.Core
                     break;
                 case ConsoleKey.U:
                     if (mapView?.WorldLocation != null)
+                    {
                         mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, Console.CapsLock ? +10 : +1);
+                        followMazeBuilder = false;
+                    }
                     break;
                 case ConsoleKey.D:
                     if (mapView?.WorldLocation != null)
+                    {
                         mapView.WorldLocation = mapView.WorldLocation.FromDelta(0, 0, Console.CapsLock ? -10 : -1);
+                        followMazeBuilder = false;
+                    }
                     break;
                 case ConsoleKey.C:
                     if (mapView != null)
@@ -246,6 +296,8 @@ namespace ConsoleGame.Core
                         .First();
 
                     mapView.WorldLocation = location;
+
+                    followMazeBuilder = false;
                     break;
             }
         }

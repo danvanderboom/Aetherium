@@ -4,6 +4,13 @@ using System.Text;
 
 namespace ConsoleGame
 {
+    public enum MazeLocationType
+    {
+        Room,
+        Wall,
+        Pillar
+    }
+
     public enum Axis
     {
         X,
