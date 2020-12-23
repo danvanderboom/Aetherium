@@ -32,8 +32,6 @@ namespace ConsoleGame.Test
             for (int y = 0; y < 10; y++)
                 for (int x = 0; x < 10; x++)
                     colors[y, x] = coloring.GetColor(x, y);
-            
-
         }
 
         GridColoring<string> GridColoring2x2() => new GridColoring<string>(

@@ -10,7 +10,13 @@ using ConsoleGame.Geometry;
 public static class Extensions
 {
     public static T? SelectRandom<T>(this IList<T> items, Random? rand = null)
+        where T : class
         => items.Count == 0 ? default(T)
+        : items[(rand ?? new Random()).Next(0, items.Count)];
+
+    public static T? SelectRandomValue<T>(this IList<T> items, Random? rand = null)
+        where T : struct
+        => items.Count == 0 ? (T?)null
         : items[(rand ?? new Random()).Next(0, items.Count)];
 
     public static RelativeDirection RotateRight(this RelativeDirection dir) => dir switch

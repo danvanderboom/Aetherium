@@ -139,7 +139,7 @@ namespace ConsoleGame
 
             if (unvisitedNeighbors.Any())
             {
-                var selectedNeighbor = unvisitedNeighbors.SelectRandom(rand);
+                var selectedNeighbor = unvisitedNeighbors[rand.Next(0, unvisitedNeighbors.Count)];
                 Connect(selectedNeighbor.Value);
                 CurrentLocation = selectedNeighbor.Key;
             }
@@ -156,7 +156,7 @@ namespace ConsoleGame
                     if (!Visited.Contains(loc) && visitedNeighbors.Any())
                     {
                         CurrentLocation = loc;
-                        var neighbor = visitedNeighbors.SelectRandom(rand);
+                        var neighbor = visitedNeighbors[rand.Next(0, visitedNeighbors.Count)];
                         Connect(neighbor.Value);
                         break;
                     }

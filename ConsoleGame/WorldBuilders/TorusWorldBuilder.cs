@@ -13,13 +13,13 @@ namespace ConsoleGame.WorldBuilders
     {
         Random rand = new Random();
 
-        MazeGenerator mazeGenerator;
+        MazeGenerator? mazeGenerator;
 
         public TorusWorldBuilder() : base()
         {
         }
 
-        public bool BuildMazeStep() => mazeGenerator.BuildNext();
+        public bool BuildMazeStep() => mazeGenerator?.BuildNext() ?? false;
 
         public override World Build()
         {
@@ -38,8 +38,6 @@ namespace ConsoleGame.WorldBuilders
                 {
                     { "Name", "Torus of Doom" },
                     { "RadialSymmetryAxis", "Z" },
-                    //{ "MajorRadius", "50" },
-                    //{ "MinorRadius", "20" },
                 },
                 Chunk = new WorldChunk // this is ignored for first tests
                 {
@@ -58,32 +56,60 @@ namespace ConsoleGame.WorldBuilders
                 .ToList();
             var dist = World.GetTerrainDistribution(target);
 
-            CreateMaze(target);
+            var coloring202 = new GridColoring<string>(
+                new string[,]
+                {
+                    { "Red", "Blue" },
+                    { "Blue", "White" },
+                });
+            var color202map = new Func<string, MazeLocationType>(
+                color => color switch
+                {
+                    "White" => MazeLocationType.Room,
+                    "Blue" => MazeLocationType.Wall,
+                    "Red" => MazeLocationType.Pillar,
+                    _ => MazeLocationType.Pillar
+                });
 
-            return World;
-        }
-
-        private void CreateMaze(IEnumerable<WorldLocation> firstUndergroundLevel)
-        {
-            if (World == null)
-                throw new InvalidOperationException("World is null");
-
-            var coloring = new GridColoring<string>(
+            var coloring303 = new GridColoring<string>(
                 new string[,]
                 {
                     { "White", "Yellow", "Yellow" },
                     { "Blue", "Blue", "Yellow" },
                     { "Blue", "Yellow", "Blue" }
                 });
-
-            mazeGenerator = new MazeGenerator(World, firstUndergroundLevel, coloring,
+            var color303map = new Func<string, MazeLocationType>(
                 color => color switch
                 {
                     "White" => MazeLocationType.Room,
                     "Yellow" => MazeLocationType.Wall,
                     "Blue" => MazeLocationType.Wall,
                     _ => MazeLocationType.Pillar
-                },
+                });
+
+            CreateMaze(target,
+                coloring: coloring303,
+                colorMapping: color => color switch
+                {
+                    "White" => MazeLocationType.Room,
+                    "Yellow" => MazeLocationType.Wall,
+                    "Blue" => MazeLocationType.Wall,
+                    _ => MazeLocationType.Pillar
+                }
+            );
+
+            return World;
+        }
+
+        private void CreateMaze(IEnumerable<WorldLocation> firstUndergroundLevel,
+            GridColoring<string> coloring,
+            Func<string, MazeLocationType> colorMapping)
+        {
+            if (World == null)
+                throw new InvalidOperationException("World is null");
+
+            mazeGenerator = new MazeGenerator(World, firstUndergroundLevel, coloring,
+                colorMapping,
                 setRoom: loc => World.SetTerrain("Indoors", loc), 
                 setPillar: loc => World.SetTerrain("Mountain", loc),
                 setWall: loc => World.SetTerrain("Mountain", loc),
