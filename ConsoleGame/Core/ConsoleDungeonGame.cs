@@ -86,7 +86,17 @@ namespace ConsoleGame.Core
             oldBackgroundColor = Console.BackgroundColor;
             oldForegroundColor = Console.ForegroundColor;
 
-            Console.CursorVisible = false;
+            try
+            {
+                if (!Console.IsOutputRedirected)
+                    Console.CursorVisible = false;
+            }
+            catch (System.IO.IOException)
+            {
+            }
+            catch (PlatformNotSupportedException)
+            {
+            }
             Console.OutputEncoding = Encoding.Unicode;
 
             Clear(ConsoleColor.Black);
