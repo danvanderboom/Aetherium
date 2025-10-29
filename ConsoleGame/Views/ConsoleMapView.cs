@@ -6,6 +6,7 @@ using ConsoleGame.Core;
 using ConsoleGame.Components;
 using ConsoleGame.Entities;
 using ConsoleGame.Geometry;
+using ConsoleGame.Systems;
 
 namespace ConsoleGame.Views
 {
@@ -22,6 +23,12 @@ namespace ConsoleGame.Views
         public WorldLocation? WorldLocation { get; set; }
 
         public List<TileType> TileTypes { get; set; }
+
+        public VisionFrame? Vision { get; set; }
+
+        VisionSystem visionSystem = new VisionSystem();
+        Guid lastMoveTimestamp = Guid.Empty;
+        WorldLocation lastOrigin = WorldLocation.None;
 
         public Point ContentScreenPosition =>
             HasFrame ? ScreenPosition.FromDelta(+1, +1) : ScreenPosition;
@@ -69,6 +76,16 @@ namespace ConsoleGame.Views
                 }
 
                 return;
+            }
+
+            // Recompute vision when player moved or origin changed
+            var bounds = VisibleWorldRectangle ?? new Rectangle(WorldLocation.X, WorldLocation.Y, size.Width / symbolWidth, size.Height);
+            var maxRange = Math.Max(bounds.Width, bounds.Height) / 2 + 1;
+            if (Vision == null || lastMoveTimestamp != World.CharacterMoveTimestamp || lastOrigin != WorldLocation)
+            {
+                Vision = visionSystem.ComputeVision(World, WorldLocation, bounds, maxRange);
+                lastMoveTimestamp = World.CharacterMoveTimestamp;
+                lastOrigin = WorldLocation;
             }
 
             var rotationDegees = Heading switch
@@ -121,6 +138,14 @@ namespace ConsoleGame.Views
                     }
 
                     var location = new WorldLocation((int)vLocation.X, (int)vLocation.Y, (int)vLocation.Z);
+
+                    // Visibility check: skip rendering if not visible
+                    if (Vision != null && !Vision.Visuals.ContainsKey(location))
+                    {
+                        Console.BackgroundColor = BackgroundColor;
+                        Console.Write(new string(' ', symbolWidth));
+                        continue;
+                    }
 
                     // optionally: display grid coloring
                     ConsoleColor? color = null;

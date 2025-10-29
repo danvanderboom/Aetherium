@@ -236,6 +236,7 @@ namespace ConsoleGame.WorldBuilders
             new TileType
             {
                 Name = "Wall",
+                DefaultComponents = new List<Component> { new ObstructsView { Opacity = 1 } },
                 Settings = new Dictionary<string, string>
                 {
                     { "MapCharacter", "|" },
@@ -246,6 +247,7 @@ namespace ConsoleGame.WorldBuilders
             new TileType
             {
                 Name = "Mountain",
+                DefaultComponents = new List<Component> { new ObstructsView { Opacity = 1 } },
                 Settings = new Dictionary<string, string>
                 {
                     { "MapCharacter", "^" },
@@ -276,6 +278,7 @@ namespace ConsoleGame.WorldBuilders
             new TileType
             {
                 Name = "Forest",
+                DefaultComponents = new List<Component> { new ObstructsView { Opacity = 0.49 } },
                 Settings = new Dictionary<string, string>
                 {
                     { "MapCharacter", "t" },
