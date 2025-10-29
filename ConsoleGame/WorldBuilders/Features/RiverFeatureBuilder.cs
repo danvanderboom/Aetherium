@@ -6,7 +6,7 @@ using ConsoleGame.Components;
 using ConsoleGame.Core;
 using ConsoleGame.WorldBuilders;
 
-namespace ConsoleGameClient.WorldBuilders.Features
+namespace ConsoleGame.WorldBuilders.Features
 {
     public class RiverFeatureBuilder : WorldFeatureBuilder
     {

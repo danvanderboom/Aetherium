@@ -60,7 +60,7 @@ namespace ConsoleGame.Core
             if (lhs is null || rhs is null)
                 return false;
 
-            return lhs.Width == rhs.Width && lhs.Length == rhs.Length && lhs.Depth == lhs.Depth;
+            return lhs.Width == rhs.Width && lhs.Length == rhs.Length && lhs.Depth == rhs.Depth;
         }
 
         public override bool Equals(object? obj)

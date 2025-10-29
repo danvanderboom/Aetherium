@@ -205,6 +205,12 @@ namespace ConsoleGame.Core
                 if (e is Character)
                     Characters.TryRemove(e.EntityId, out var _);
 
+                // If no more entities remain at this location, remove the location index entry
+                if (entitiesAtLocation.IsEmpty)
+                {
+                    EntitiesByLocation.TryRemove(entity.Get<WorldLocation>(), out var _);
+                }
+
                 //WorldEvents?.Invoke(new WorldEvent
                 //{
                 //    EventType = WorldEventType.EntityRemoved,

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using ConsoleGame.Core;
 using ConsoleGame.Components;
 using ConsoleGame.Entities;
-using ConsoleGameClient.WorldBuilders.Features;
+using ConsoleGame.WorldBuilders.Features;
 
 namespace ConsoleGame.WorldBuilders
 {
