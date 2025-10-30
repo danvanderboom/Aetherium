@@ -9,6 +9,13 @@ namespace ConsoleGame
     {
         static async Task Main(string[] args)
         {
+            // Check for audio test argument
+            if (args.Length > 0 && args[0] == "--audio-test")
+            {
+                await AudioTest.RunTest();
+                return;
+            }
+
             // Initialize monitoring service
             var monitoringConfig = new MonitoringConfig
             {
@@ -31,7 +38,7 @@ namespace ConsoleGame
             }
 
             // Client now connects to the server via SignalR
-            var game = new ClientConsoleDungeonGame("http://localhost:5000/gamehub");
+            var game = new ClientConsoleDungeonGameNew("http://localhost:5000/gamehub");
             await game.Run();
         }
     }
