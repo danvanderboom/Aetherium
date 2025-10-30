@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ConsoleGame.Components;
 using ConsoleGameModel;
+using ConsoleGameServer.MultiWorld;
 using Microsoft.AspNetCore.SignalR;
 using Orleans;
 
@@ -18,8 +19,10 @@ namespace ConsoleGameServer.Management
     {
         private readonly ConcurrentDictionary<string, SessionMetadata> _sessionIndex = new();
         private readonly ConcurrentDictionary<string, string> _connectionToSession = new();
+        private readonly ConcurrentDictionary<string, string> _worldRegistry = new(); // worldId -> worldId (for tracking)
         private readonly IHubContext<GameHub> _hubContext;
         private readonly GameSessionManager _sessionManager;
+        private readonly IGrainFactory _grainFactory;
 
         private class SessionMetadata
         {
@@ -28,10 +31,11 @@ namespace ConsoleGameServer.Management
             public DateTime ConnectedAt { get; set; }
         }
 
-        public GameManagementGrain(IHubContext<GameHub> hubContext, GameSessionManager sessionManager)
+        public GameManagementGrain(IHubContext<GameHub> hubContext, GameSessionManager sessionManager, IGrainFactory grainFactory)
         {
             _hubContext = hubContext ?? throw new ArgumentNullException(nameof(hubContext));
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+            _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
         }
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
@@ -379,6 +383,125 @@ namespace ConsoleGameServer.Management
                 TimeScale = session.TimeScale,
                 ConnectedAt = metadata.ConnectedAt
             };
+        }
+
+        // World Management Methods
+        public Task<List<WorldInfo>> ListWorldsAsync()
+        {
+            var worldInfos = new List<WorldInfo>();
+            
+            // Get info from all registered worlds
+            var tasks = _worldRegistry.Keys
+                .Select(async worldId =>
+                {
+                    var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+                    var info = await worldGrain.GetInfoAsync();
+                    return info;
+                })
+                .ToList();
+
+            // Wait for all tasks and collect results
+            var results = Task.WhenAll(tasks).GetAwaiter().GetResult();
+            worldInfos.AddRange(results.Where(info => info != null)!);
+
+            return Task.FromResult(worldInfos);
+        }
+
+        public async Task<WorldInfo?> GetWorldInfoAsync(string worldId)
+        {
+            if (!_worldRegistry.ContainsKey(worldId))
+                return null;
+
+            var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+            return await worldGrain.GetInfoAsync();
+        }
+
+        public async Task<string> CreateWorldAsync(CreateWorldRequest request)
+        {
+            var worldId = $"world:{Guid.NewGuid()}";
+            var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+
+            var config = new WorldConfig
+            {
+                WorldId = worldId,
+                Name = request.Name,
+                Description = request.Description,
+                GeneratorType = request.GeneratorType,
+                GeneratorParameters = request.GeneratorParameters,
+                NarrativeId = request.NarrativeId,
+                MaxPlayers = request.MaxPlayers,
+                Size = request.Size ?? new WorldSize { Width = 100, Height = 100, Depth = 1 },
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "system"
+            };
+
+            await worldGrain.InitializeAsync(config);
+            _worldRegistry[worldId] = worldId;
+
+            Console.WriteLine($"[GameManagementGrain] Created world {worldId} ({request.Name})");
+            return worldId;
+        }
+
+        public async Task<OperationResult> PauseWorldAsync(string worldId)
+        {
+            try
+            {
+                if (!_worldRegistry.ContainsKey(worldId))
+                    return OperationResult.Error("World not found");
+
+                var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+                await worldGrain.PauseAsync();
+
+                Console.WriteLine($"[GameManagementGrain] Paused world {worldId}");
+                return OperationResult.Ok();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error pausing world: {ex.Message}");
+                return OperationResult.Error($"Failed to pause world: {ex.Message}");
+            }
+        }
+
+        public async Task<OperationResult> ResumeWorldAsync(string worldId)
+        {
+            try
+            {
+                if (!_worldRegistry.ContainsKey(worldId))
+                    return OperationResult.Error("World not found");
+
+                var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+                await worldGrain.ResumeAsync();
+
+                Console.WriteLine($"[GameManagementGrain] Resumed world {worldId}");
+                return OperationResult.Ok();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error resuming world: {ex.Message}");
+                return OperationResult.Error($"Failed to resume world: {ex.Message}");
+            }
+        }
+
+        public async Task<OperationResult> ShutdownWorldAsync(string worldId)
+        {
+            try
+            {
+                if (!_worldRegistry.ContainsKey(worldId))
+                    return OperationResult.Error("World not found");
+
+                var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+                await worldGrain.ShutdownAsync();
+
+                _worldRegistry.TryRemove(worldId, out _);
+
+                Console.WriteLine($"[GameManagementGrain] Shut down world {worldId}");
+                return OperationResult.Ok();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error shutting down world: {ex.Message}");
+                return OperationResult.Error($"Failed to shut down world: {ex.Message}");
+            }
         }
     }
 }

@@ -30,6 +30,14 @@ namespace ConsoleGameServer.Management
         Task<OperationResult> SetVisionModeAsync(string sessionId, VisionMode mode);
         Task<OperationResult> TerminateSessionAsync(string sessionId);
         Task<OperationResult> SetTimeScaleAsync(string sessionId, double scale);
+
+        // World Management
+        Task<List<ConsoleGameServer.MultiWorld.WorldInfo>> ListWorldsAsync();
+        Task<ConsoleGameServer.MultiWorld.WorldInfo?> GetWorldInfoAsync(string worldId);
+        Task<string> CreateWorldAsync(ConsoleGameServer.MultiWorld.CreateWorldRequest request);
+        Task<OperationResult> PauseWorldAsync(string worldId);
+        Task<OperationResult> ResumeWorldAsync(string worldId);
+        Task<OperationResult> ShutdownWorldAsync(string worldId);
     }
 }
 
