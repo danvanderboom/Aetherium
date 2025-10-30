@@ -163,7 +163,7 @@ namespace ConsoleGame.Rendering
                 new Text(""),
                 new Text(data.Mode == CompassMode.Degree ? $"{data.Heading}°" : "").Centered(),
                 new Text(""),
-                new Markup($"[dim][M] Toggle Mode[/]").Centered()
+                new Markup($"[dim][[M]] Toggle Mode[/]").Centered()
             );
 
             var panel = new Panel(content)

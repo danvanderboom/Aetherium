@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using ConsoleGame.Core;
 using ConsoleGame.Components;
@@ -15,6 +16,7 @@ namespace ConsoleGame.WorldBuilders
     public class FovDiagnosticWorldBuilder : WorldBuilder
     {
         private readonly string _testMapName;
+        public WorldLocation? StartLocation { get; private set; }
 
         public FovDiagnosticWorldBuilder(string testMapName)
         {
@@ -23,6 +25,21 @@ namespace ConsoleGame.WorldBuilders
 
         public override World Build()
         {
+            // DIAGNOSTIC - Only write in UI self-test mode
+            var testMode = Environment.GetEnvironmentVariable("UI_SELFTEST_MODE") == "1";
+            if (testMode)
+            {
+                try {
+                    var diagFile = Path.Combine(Environment.CurrentDirectory, "..", ".ui-test", "world_builder_log.txt");
+                    var dir = Path.GetDirectoryName(diagFile);
+                    if (dir != null)
+                    {
+                        Directory.CreateDirectory(dir);
+                        File.WriteAllText(diagFile, $"Build() called, testMapName: '{_testMapName}'\n");
+                    }
+                } catch { /* ignore */ }
+            }
+            
             var world = new World();
             world.AddTileTypes(TileTypes);
             world.AddTerrainTypes(CreateTerrainTypes(TileTypes));
@@ -30,8 +47,10 @@ namespace ConsoleGame.WorldBuilders
             switch (_testMapName.ToLowerInvariant())
             {
                 case "open_space":
+                    var lightLocation = new WorldLocation(15, 15, 0);
+                    StartLocation = lightLocation; // Set StartLocation BEFORE building world
                     BuildOpenSpaceTest(world);
-                    AddLightSourceAtCenter(world, 15, 15, 0); // Add light at player start position
+                    AddLightSourceAtCenter(world, lightLocation.X, lightLocation.Y, lightLocation.Z);
                     break;
                 case "simple_wall":
                     BuildSimpleWallTest(world);
@@ -401,6 +420,21 @@ namespace ConsoleGame.WorldBuilders
             lightEntity.Set(new LightSource(1.0, 50)); // Full intensity, long range
             lightEntity.Set(new WorldLocation(x, y, z));
             world.AddEntity(lightEntity);
+            
+            // DIAGNOSTIC - Only write in UI self-test mode
+            var testMode = Environment.GetEnvironmentVariable("UI_SELFTEST_MODE") == "1";
+            if (testMode)
+            {
+                try {
+                    var diagFile = Path.Combine(Environment.CurrentDirectory, "..", ".ui-test", "world_builder_log.txt");
+                    var dir = Path.GetDirectoryName(diagFile);
+                    if (dir != null)
+                    {
+                        Directory.CreateDirectory(dir);
+                        File.AppendAllText(diagFile, $"Added light source at ({x},{y},{z}), Total entities: {world.Entities.Count}\n");
+                    }
+                } catch { /* ignore */ }
+            }
         }
     }
 }

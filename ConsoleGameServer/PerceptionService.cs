@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using ConsoleGame.Components;
 using ConsoleGame.Core;
@@ -29,11 +30,66 @@ namespace ConsoleGameServer
 
             var maxRange = Math.Max(bounds.Width, bounds.Height) / 2 + 1;
 
+            // Check if we're in UI self-test mode (for all diagnostic code in this method)
+            var testMode = Environment.GetEnvironmentVariable("UI_SELFTEST_MODE") == "1";
+
+            // DIAGNOSTIC: Log light sources before computing lighting (only in UI self-test mode)
+            if (testMode)
+            {
+                try
+                {
+                    var lightSourcesPath = Path.Combine(Environment.CurrentDirectory, ".ui-test", "light_sources_diagnostics.txt");
+                    var dir = Path.GetDirectoryName(lightSourcesPath);
+                    if (dir != null)
+                    {
+                        Directory.CreateDirectory(dir);
+                        File.WriteAllText(lightSourcesPath, $@"World bounds: {bounds}
+Player Z level: {playerLocation.Z}
+Total entities in world: {world.Entities.Count}
+
+Light sources found:
+");
+                        
+                        foreach (var entity in world.Entities.Values)
+                        {
+                            if (entity.Has<WorldLocation>() && entity.Has<LightSource>())
+                            {
+                                var loc = entity.Get<WorldLocation>();
+                                var light = entity.Get<LightSource>();
+                                File.AppendAllText(lightSourcesPath, $"Entity {entity.GetHashCode()}: Location {loc}, Intensity {light.Intensity}, Range {light.Range}, Enabled {light.IsEnabled}{Environment.NewLine}");
+                            }
+                        }
+                    }
+                }
+                catch { /* ignore file write errors */ }
+            }
+
             // Compute lighting
             var lightFrame = lightingSystem.ComputeLighting(world, bounds, playerLocation.Z);
 
             // Compute vision with lighting
             var visionFrame = visionSystem.ComputeVision(world, playerLocation, bounds, maxRange, lightFrame);
+
+            // DIAGNOSTIC: Only write diagnostics in UI self-test mode to avoid interfering with unit tests
+            if (testMode)
+            {
+                try 
+                {
+                    var diagFile = Path.Combine(Environment.CurrentDirectory, "..", ".ui-test", "server_diagnostics.txt");
+                    var lightLevel = lightFrame.GetLightLevel(playerLocation);
+                    var diagText = $"Player WORLD location: {playerLocation.X},{playerLocation.Y},{playerLocation.Z}\n" +
+                                  $"Light level at player: {lightLevel:F3}\n" +
+                                  $"Visuals count: {visionFrame.Visuals.Count}\n" +
+                                  $"Light sources in world: {lightFrame.LightLevels.Count}\n";
+                    var dir = Path.GetDirectoryName(diagFile);
+                    if (dir != null)
+                    {
+                        Directory.CreateDirectory(dir);
+                        File.AppendAllText(diagFile, diagText + "\n");
+                    }
+                } 
+                catch { /* ignore file write errors */ }
+            }
 
             // Convert to DTO with RELATIVE coordinates only (player is always at 0,0,0)
             var perception = new PerceptionDto
@@ -44,6 +100,32 @@ namespace ConsoleGameServer
                 VisibleBounds = bounds.ToDto(),
                 UpdateTimestamp = Guid.NewGuid()
             };
+            
+            // Diagnostic: Log vision stats for debugging (reusing testMode from above)
+            if (testMode)
+            {
+                var originLightLevel2 = lightFrame.GetLightLevel(playerLocation);
+                // Find project root (go up from ConsoleGameServer to root, then .ui-test)
+                var serverDir = System.IO.Directory.GetCurrentDirectory();
+                var projectRoot = System.IO.Directory.GetParent(serverDir)?.Parent?.FullName ?? serverDir;
+                var diagPath = System.IO.Path.Combine(projectRoot, ".ui-test", "server_perception_diagnostics.txt");
+                try
+                {
+                    var dir = System.IO.Path.GetDirectoryName(diagPath);
+                    if (dir != null)
+                    {
+                        System.IO.Directory.CreateDirectory(dir);
+                        var diagContent = $"Player world location: {playerLocation.X},{playerLocation.Y},{playerLocation.Z}\n" +
+                            $"Bounds: {bounds.X},{bounds.Y},{bounds.Width},{bounds.Height}\n" +
+                            $"maxRange: {maxRange}\n" +
+                            $"Origin light level: {originLightLevel2}\n" +
+                            $"VisionFrame.Visuals count: {visionFrame.Visuals.Count}\n" +
+                            $"Sample visual keys (first 10): {string.Join(", ", visionFrame.Visuals.Keys.Take(10).Select(loc => $"{loc.X},{loc.Y},{loc.Z}"))}\n";
+                        System.IO.File.WriteAllText(diagPath, diagContent);
+                    }
+                }
+                catch { /* ignore write errors */ }
+            }
 
             // Convert all visuals to DTOs with RELATIVE coordinates (offsets from player)
             foreach (var visualList in visionFrame.Visuals)

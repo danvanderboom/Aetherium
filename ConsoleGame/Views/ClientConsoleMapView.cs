@@ -77,6 +77,18 @@ namespace ConsoleGame.Views
             var xoffset = worldWidth / 2;
             var yoffset = worldHeight / 2;
 
+            // Diagnostic tracking for test mode (check if .ui-test directory exists in project root)
+            var currentDir = new System.IO.DirectoryInfo(System.IO.Directory.GetCurrentDirectory());
+            var projectRoot = currentDir;
+            // If we're in ConsoleGame subdirectory, go up one level
+            if (currentDir.Name == "ConsoleGame" && currentDir.Parent != null)
+                projectRoot = currentDir.Parent;
+            var uiTestDir = System.IO.Path.Combine(projectRoot.FullName, ".ui-test");
+            var testMode = System.IO.Directory.Exists(uiTestDir) || Environment.GetEnvironmentVariable("UI_SELFTEST_MODE") == "1";
+            var keysLookedUp = new System.Collections.Generic.HashSet<string>();
+            var keysFound = new System.Collections.Generic.HashSet<string>();
+            var keysNotFound = new System.Collections.Generic.HashSet<string>();
+
             for (int y = 0; y < size.Height; y++)
             {
                 for (int x = 0; x < size.Width / symbolWidth; x++)
@@ -90,14 +102,22 @@ namespace ConsoleGame.Views
 
                     // Create location key for looking up in perception visuals (using relative coordinates)
                     var locationKey = $"{relativeX},{relativeY},{relativeZ}";
+                    
+                    if (testMode)
+                        keysLookedUp.Add(locationKey);
 
                     // Check if this location is visible
                     if (!Perception.Visuals.TryGetValue(locationKey, out var visual))
                     {
+                        if (testMode)
+                            keysNotFound.Add(locationKey);
                         Console.BackgroundColor = BackgroundColor;
                         Console.Write(new string(' ', symbolWidth));
                         continue;
                     }
+                    
+                    if (testMode)
+                        keysFound.Add(locationKey);
 
                     // Optionally: display grid coloring
                     ConsoleColor? color = null;
@@ -161,6 +181,24 @@ namespace ConsoleGame.Views
                         }
                     }
                 }
+            }
+            
+            // Diagnostic output (save to file if in test mode)
+            if (testMode && keysLookedUp.Count > 0) // Only log if we tracked anything
+            {
+                var diagPath = System.IO.Path.Combine(uiTestDir, "render_diagnostics.txt");
+                try
+                {
+                    System.IO.Directory.CreateDirectory(uiTestDir);
+                    var diagContent = $"Keys in Perception.Visuals: {string.Join(", ", Perception.Visuals.Keys.Take(10))}\n" +
+                        $"Keys looked up (sample): {string.Join(", ", keysLookedUp.Take(10))}\n" +
+                        $"Keys found: {keysFound.Count}, Keys not found: {keysNotFound.Count}\n" +
+                        $"Sample not found keys: {string.Join(", ", keysNotFound.Take(10))}\n" +
+                        $"worldWidth={worldWidth}, worldHeight={worldHeight}, xoffset={xoffset}, yoffset={yoffset}\n" +
+                        $"size.Width={size.Width}, size.Height={size.Height}, symbolWidth={symbolWidth}\n";
+                    System.IO.File.WriteAllText(diagPath, diagContent);
+                }
+                catch { /* ignore write errors */ }
             }
 
             Console.BackgroundColor = BackgroundColor;

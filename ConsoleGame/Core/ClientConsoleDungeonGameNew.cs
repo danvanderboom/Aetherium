@@ -186,8 +186,8 @@ namespace ConsoleGame.Core
             };
 
             // For now, we render the map view directly (hybrid approach)
-            // Then use renderer for widgets
-            Console.SetCursorPosition(0, 0);
+            // Clear the map region (including frame) to avoid ghosting from previous frames
+            mapView.Clear(clearFrame: true);
             mapView.DrawFrame();
             mapView.DrawContents();
 

@@ -17,14 +17,47 @@ dotnet build --nologo --verbosity quiet
 if ($LASTEXITCODE -ne 0) { popd; throw "Build failed" }
 Write-Host "Build OK" -ForegroundColor Green
 
+# Determine artifacts directory (absolute path in project root)
+$artifactsDir = Join-Path $PWD ".ui-test"
+Write-Host "Artifacts will be written to: $artifactsDir" -ForegroundColor Cyan
+
 # Start server
 Write-Host "Starting server..." -ForegroundColor Yellow
-$server = Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$PWD\ConsoleGameServer'; `$env:AUDIO_TEST='1'; dotnet run" -PassThru -WindowStyle Normal
-Start-Sleep -Seconds 3
+$server = Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$PWD\ConsoleGameServer'; `$env:UI_SELFTEST_MODE='1'; dotnet run" -PassThru -WindowStyle Normal
 
-# Run client in self-test mode
+# Wait for server to be ready by checking if port 5000 is listening
+Write-Host "Waiting for server to be ready..." -ForegroundColor Yellow
+$maxWait = 30 # seconds
+$waited = 0
+$serverReady = $false
+while ($waited -lt $maxWait -and -not $serverReady) {
+    try {
+        $connection = Test-NetConnection -ComputerName localhost -Port 5000 -InformationLevel Quiet -WarningAction SilentlyContinue
+        if ($connection) {
+            $serverReady = $true
+            Write-Host "Server is ready on port 5000" -ForegroundColor Green
+        }
+    } catch {
+        # Ignore connection errors during startup
+    }
+    if (-not $serverReady) {
+        Start-Sleep -Seconds 1
+        $waited++
+        Write-Host "." -NoNewline -ForegroundColor Yellow
+    }
+}
+Write-Host ""
+
+if (-not $serverReady) {
+    Write-Host "ERROR: Server failed to start within $maxWait seconds" -ForegroundColor Red
+    Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+    popd
+    exit 1
+}
+
+# Run client in self-test mode, passing artifacts directory as absolute path
 Write-Host "Running client self-test..." -ForegroundColor Yellow
-$client = Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$PWD\ConsoleGame'; dotnet run -- --ui-selftest" -PassThru -WindowStyle Normal
+$client = Start-Process powershell -ArgumentList "-Command","cd '$PWD\ConsoleGame'; `$env:UI_SELFTEST_MODE='1'; dotnet run -- --ui-selftest $artifactsDir" -PassThru -WindowStyle Normal
 
 Write-Host "Waiting up to $TimeoutSeconds seconds for completion..." -ForegroundColor Yellow
 $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -47,7 +80,11 @@ if ($code -eq 0) {
   Write-Host "UI Self-Test: PASSED" -ForegroundColor Green
   exit 0
 } else {
-  Write-Host "UI Self-Test: FAILED (see .ui-test/before.txt and after.txt)" -ForegroundColor Red
+  Write-Host "UI Self-Test: FAILED" -ForegroundColor Red
+  Write-Host "See artifacts in: $artifactsDir" -ForegroundColor Yellow
+  if (Test-Path "$artifactsDir\before.txt") { Write-Host "  - before.txt exists" }
+  if (Test-Path "$artifactsDir\after.txt") { Write-Host "  - after.txt exists" }
+  if (Test-Path "$artifactsDir\result.txt") { Write-Host "  - result.txt exists" }
   exit 1
 }
 

@@ -22,12 +22,33 @@ namespace ConsoleGame
             if (args.Length > 0 && args[0] == "--ui-selftest")
             {
                 var serverUrl = "http://localhost:5000/gamehub";
-                if (args.Length > 1 && args[1].StartsWith("http"))
-                    serverUrl = args[1];
+                string? artifactsDir = null;
+                
+                if (args.Length > 1)
+                {
+                    if (args[1].StartsWith("http"))
+                    {
+                        serverUrl = args[1];
+                        if (args.Length > 2) artifactsDir = args[2];
+                    }
+                    else
+                    {
+                        artifactsDir = args[1];
+                    }
+                }
 
-                var selfTest = new ConsoleGame.SelfTest.ConsoleUiSelfTest(serverUrl);
-                var exitCode = await selfTest.RunMoveDownScenarioAsync();
-                Environment.Exit(exitCode);
+                var selfTest = new ConsoleGame.SelfTest.ConsoleUiSelfTest(serverUrl, artifactsDir);
+                try
+                {
+                    var exitCode = await selfTest.RunMoveDownScenarioAsync();
+                    Environment.Exit(exitCode);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[FATAL] Unhandled exception in self-test: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                    Environment.Exit(1);
+                }
                 return;
             }
 

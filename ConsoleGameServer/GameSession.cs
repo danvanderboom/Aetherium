@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO;
 using ConsoleGame;
 using ConsoleGame.Components;
 using ConsoleGame.Core;
@@ -29,23 +30,28 @@ namespace ConsoleGameServer
 			// Build the world
 			World = worldBuilder.Build();
 
-			// Determine start location
-			WorldLocation? startLocation = null;
-			if (worldBuilder is AudioTestWorldBuilder audioBuilder)
-			{
-				startLocation = audioBuilder.StartLocation;
-			}
-			else
-			{
-				startLocation = World.SelectRandomPassableLocation();
-			}
+            // Determine start location
+            WorldLocation? startLocation = null;
+            if (worldBuilder is AudioTestWorldBuilder audioBuilder)
+            {
+                startLocation = audioBuilder.StartLocation;
+            }
+            else if (worldBuilder is FovDiagnosticWorldBuilder fovBuilder && fovBuilder.StartLocation != null)
+            {
+                startLocation = fovBuilder.StartLocation;
+            }
+            else
+            {
+                startLocation = World.SelectRandomPassableLocation();
+            }
+
 
 			// Initialize view location and player
-			if (startLocation != null)
+			if (startLocation is WorldLocation loc)
 			{
-				ViewLocation = startLocation;
+				ViewLocation = loc;
 				Player = new Character();
-				Player.Set(new WorldLocation(startLocation.X, startLocation.Y, startLocation.Z));
+				Player.Set(new WorldLocation(loc.X, loc.Y, loc.Z));
 				Player.Set(new Inventory());
 
 				// For audio test, preload a compass into inventory so compass widget is visible

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using ConsoleGame.WorldBuilders;
 using ConsoleGameModel;
@@ -27,6 +28,21 @@ namespace ConsoleGameServer
                 builder = new AudioTestWorldBuilder();
             else
                 builder = new FovDiagnosticWorldBuilder("open_space");
+
+            // DIAGNOSTIC - Only write in UI self-test mode
+            var testMode = Environment.GetEnvironmentVariable("UI_SELFTEST_MODE") == "1";
+            if (testMode)
+            {
+                try {
+                    var diagFile = Path.Combine(Environment.CurrentDirectory, "..", ".ui-test", "gamehub_diagnostics.txt");
+                    var dir = Path.GetDirectoryName(diagFile);
+                    if (dir != null)
+                    {
+                        Directory.CreateDirectory(dir);
+                        File.WriteAllText(diagFile, $"GameHub creating session with builder: {builder.GetType().Name}\nAUDIO_TEST={audioTest}\n");
+                    }
+                } catch { /* ignore */ }
+            }
 
             // Create a new game session for this client
             var session = sessionManager.CreateSession(Context.ConnectionId, builder);
