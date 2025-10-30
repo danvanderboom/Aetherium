@@ -15,6 +15,7 @@ namespace ConsoleGameServer
 	{
 		public string SessionId { get; set; } = Guid.NewGuid().ToString();
 		public string ConnectionId { get; set; } = string.Empty;
+		public string? WorldId { get; set; } // Multi-world support - which world is this session in?
 		public World World { get; set; }
 		public Character? Player { get; set; }
 		public WorldLocation? ViewLocation { get; set; }
@@ -54,67 +55,93 @@ namespace ConsoleGameServer
 		// Heat trail tracking for infrared vision
 		public HeatTrailTracker HeatTracker { get; private set; }
 
-		private readonly PerceptionService perceptionService;
-		private readonly Random rand = new Random();
+	private readonly PerceptionService perceptionService;
+	private readonly Random rand = new Random();
 
-		public GameSession(string connectionId, WorldBuilder worldBuilder)
+	/// <summary>
+	/// Creates a session with a world builder (legacy single-world mode).
+	/// </summary>
+	public GameSession(string connectionId, WorldBuilder worldBuilder)
+	{
+		ConnectionId = connectionId;
+		perceptionService = new PerceptionService();
+		GameStartTime = DateTime.UtcNow;
+		HeatTracker = new HeatTrailTracker();
+
+		// Build the world
+		World = worldBuilder.Build();
+
+		InitializePlayer(worldBuilder);
+	}
+
+	/// <summary>
+	/// Creates a session with an existing world (multi-world mode).
+	/// </summary>
+	public GameSession(string connectionId, string worldId, World world, WorldLocation? startLocation = null)
+	{
+		ConnectionId = connectionId;
+		WorldId = worldId;
+		World = world;
+		perceptionService = new PerceptionService();
+		GameStartTime = DateTime.UtcNow;
+		HeatTracker = new HeatTrailTracker();
+
+		InitializePlayer(null, startLocation);
+	}
+
+	/// <summary>
+	/// Initializes the player at the start location.
+	/// </summary>
+	private void InitializePlayer(WorldBuilder? worldBuilder, WorldLocation? startLocation = null)
+	{
+		// Determine start location
+		if (startLocation == null)
 		{
-			ConnectionId = connectionId;
-			perceptionService = new PerceptionService();
-			GameStartTime = DateTime.UtcNow;
-			HeatTracker = new HeatTrailTracker();
-
-			// Build the world
-			World = worldBuilder.Build();
-
-            // Determine start location
-            WorldLocation? startLocation = null;
-            if (worldBuilder is AudioTestWorldBuilder audioBuilder)
-            {
-                startLocation = audioBuilder.StartLocation;
-            }
-            else if (worldBuilder is FovDiagnosticWorldBuilder fovBuilder && fovBuilder.StartLocation != null)
-            {
-                startLocation = fovBuilder.StartLocation;
-            }
-            else
-            {
-                startLocation = World.SelectRandomPassableLocation();
-            }
-
-
-			// Initialize view location and player
-			if (startLocation is WorldLocation loc)
+			if (worldBuilder is AudioTestWorldBuilder audioBuilder)
 			{
-				ViewLocation = loc;
-				Player = new Character();
-				Player.Set(new WorldLocation(loc.X, loc.Y, loc.Z));
-				Player.Set(new Inventory());
-
-				// For audio test, preload a compass into inventory so compass widget is visible
-				if (worldBuilder is AudioTestWorldBuilder)
-				{
-					var compass = new CompassItem();
-					var inv = Player.Get<Inventory>();
-					inv?.TryAdd(compass.EntityId, compass);
-				}
-
-				World.AddEntity(Player);
+				startLocation = audioBuilder.StartLocation;
+			}
+			else if (worldBuilder is FovDiagnosticWorldBuilder fovBuilder && fovBuilder.StartLocation != null)
+			{
+				startLocation = fovBuilder.StartLocation;
 			}
 			else
 			{
-				// Fallback
-				var locations = World.EntitiesByLocation.Keys;
-				if (locations.Count > 0)
-				{
-					ViewLocation = new WorldLocation(15, 15, 0);
-					Player = new Character();
-					Player.Set(new WorldLocation(15, 15, 0));
-					Player.Set(new Inventory());
-					World.AddEntity(Player);
-				}
+				startLocation = World.SelectRandomPassableLocation();
 			}
 		}
+		// Initialize view location and player
+		if (startLocation is WorldLocation loc)
+		{
+			ViewLocation = loc;
+			Player = new Character();
+			Player.Set(new WorldLocation(loc.X, loc.Y, loc.Z));
+			Player.Set(new Inventory());
+
+			// For audio test, preload a compass into inventory so compass widget is visible
+			if (worldBuilder is AudioTestWorldBuilder)
+			{
+				var compass = new CompassItem();
+				var inv = Player.Get<Inventory>();
+				inv?.TryAdd(compass.EntityId, compass);
+			}
+
+			World.AddEntity(Player);
+		}
+		else
+		{
+			// Fallback
+			var locations = World.EntitiesByLocation.Keys;
+			if (locations.Count > 0)
+			{
+				ViewLocation = new WorldLocation(15, 15, 0);
+				Player = new Character();
+				Player.Set(new WorldLocation(15, 15, 0));
+				Player.Set(new Inventory());
+				World.AddEntity(Player);
+			}
+		}
+	}
 
 	public ConsoleGameModel.PerceptionDto GetPerception()
 	{

@@ -1,9 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using ConsoleGame.Components;
+using ConsoleGame.Core;
 using ConsoleGame.WorldBuilders;
 using ConsoleGameModel;
 using ConsoleGameServer.Management;
+using ConsoleGameServer.MultiWorld;
 using Microsoft.AspNetCore.SignalR;
 using Orleans;
 
@@ -289,6 +294,127 @@ namespace ConsoleGameServer
             // Send updated perception with new vision mode
             var perception = session.GetPerception();
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+        }
+
+        // ============================================================
+        // Multi-World Management Methods
+        // ============================================================
+
+        /// <summary>
+        /// Lists all available game worlds.
+        /// </summary>
+        public async Task<List<WorldInfo>> ListWorlds()
+        {
+            try
+            {
+                var managementGrain = GetManagementGrain();
+                if (managementGrain == null)
+                    return new List<WorldInfo>();
+
+                return await managementGrain.ListWorldsAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Error listing worlds: {ex.Message}");
+                return new List<WorldInfo>();
+            }
+        }
+
+        /// <summary>
+        /// Gets detailed information about a specific world.
+        /// </summary>
+        public async Task<WorldInfo?> GetWorldInfo(string worldId)
+        {
+            try
+            {
+                var managementGrain = GetManagementGrain();
+                if (managementGrain == null)
+                    return null;
+
+                return await managementGrain.GetWorldInfoAsync(worldId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Error getting world info: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Joins a specific world by ID.
+        /// If the client is already in a world, they will be moved to the new world.
+        /// </summary>
+        public async Task<OperationResult> JoinWorld(string worldId)
+        {
+            try
+            {
+                // Remove existing session if any
+                var existingSession = sessionManager.GetSession(Context.ConnectionId);
+                if (existingSession != null)
+                {
+                    sessionManager.RemoveSession(Context.ConnectionId);
+                }
+
+                var managementGrain = GetManagementGrain();
+                if (managementGrain == null)
+                {
+                    return OperationResult.Error("Orleans is not available");
+                }
+
+                // Get world grain
+                if (clusterClient == null)
+                {
+                    return OperationResult.Error("Cluster client not available");
+                }
+
+                var worldGrain = clusterClient.GetGrain<IWorldGrain>(worldId);
+                var worldState = await worldGrain.GetStateAsync();
+
+                if (worldState != WorldState.Active)
+                {
+                    return OperationResult.Error($"World {worldId} is not available (state: {worldState})");
+                }
+
+                // Get the world's primary map (for now, assume map ID = worldId)
+                // TODO: Support multiple maps per world
+                var mapGrain = clusterClient.GetGrain<IGameMapGrain>(worldId);
+                var world = await mapGrain.GetWorldAsync();
+
+                if (world == null)
+                {
+                    return OperationResult.Error($"World {worldId} has no active map");
+                }
+
+                // Determine start location
+                ConsoleGame.Components.WorldLocation? startLocation = null;
+                // TODO: Get start location from world configuration or use spawn points
+                
+                // Create session with the world
+                var session = sessionManager.CreateSession(Context.ConnectionId, worldId, world, startLocation);
+
+                // Register session with management grain
+                await managementGrain.RegisterSessionAsync(session.SessionId, Context.ConnectionId);
+
+                // Send initial game state
+                var initialState = new GameStateDto
+                {
+                    PlayerId = session.SessionId,
+                    PlayerHeading = session.Heading.ToDto()
+                };
+                await Clients.Caller.SendAsync("ReceiveGameState", initialState);
+
+                // Send initial perception
+                var perception = session.GetPerception();
+                await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+
+                Console.WriteLine($"[GameHub] Client {Context.ConnectionId} joined world {worldId}");
+                return OperationResult.Ok($"Joined world {worldId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Error joining world: {ex.Message}");
+                return OperationResult.Error($"Failed to join world: {ex.Message}");
+            }
         }
     }
 }

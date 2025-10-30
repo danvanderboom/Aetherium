@@ -156,7 +156,7 @@ namespace AgentCLI
                     }
                     else
                     {
-                        Console.WriteLine($"✗ Error: {result.Reason}");
+                        Console.WriteLine($"✗ Error: {result.Message}");
                     }
                 }
                 catch (Exception ex)
@@ -182,7 +182,7 @@ namespace AgentCLI
                     }
                     else
                     {
-                        Console.WriteLine($"✗ Error: {result.Reason}");
+                        Console.WriteLine($"✗ Error: {result.Message}");
                     }
                 }
                 catch (Exception ex)
@@ -216,7 +216,7 @@ namespace AgentCLI
                     }
                     else
                     {
-                        Console.WriteLine($"✗ Error: {result.Reason}");
+                        Console.WriteLine($"✗ Error: {result.Message}");
                     }
                 }
                 catch (Exception ex)
@@ -392,7 +392,7 @@ namespace AgentCLI
                     if (result.Success)
                         Console.WriteLine($"✓ World {worldId} paused");
                     else
-                        Console.WriteLine($"✗ Error: {result.Reason}");
+                        Console.WriteLine($"✗ Error: {result.Message}");
                 }
                 catch (Exception ex)
                 {
@@ -414,7 +414,7 @@ namespace AgentCLI
                     if (result.Success)
                         Console.WriteLine($"✓ World {worldId} resumed");
                     else
-                        Console.WriteLine($"✗ Error: {result.Reason}");
+                        Console.WriteLine($"✗ Error: {result.Message}");
                 }
                 catch (Exception ex)
                 {
@@ -436,7 +436,7 @@ namespace AgentCLI
                     if (result.Success)
                         Console.WriteLine($"✓ World {worldId} shut down");
                     else
-                        Console.WriteLine($"✗ Error: {result.Reason}");
+                        Console.WriteLine($"✗ Error: {result.Message}");
                 }
                 catch (Exception ex)
                 {

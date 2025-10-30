@@ -1,20 +1,20 @@
 namespace ConsoleGameServer.Management
 {
     /// <summary>
-    /// Represents the result of a grain operation.
+    /// Represents the result of an operation with success/failure status and an optional message.
     /// </summary>
-    public class OperationResult
+    public struct OperationResult
     {
-        public bool Success { get; set; }
-        public string? Reason { get; set; }
+        public bool Success { get; init; }
+        public string Message { get; init; }
 
-        public static OperationResult Ok() => new OperationResult { Success = true };
-        
-        public static OperationResult Error(string reason) => new OperationResult 
-        { 
-            Success = false, 
-            Reason = reason 
-        };
+        private OperationResult(bool success, string message)
+        {
+            Success = success;
+            Message = message;
+        }
+
+        public static OperationResult Ok(string message = "") => new OperationResult(true, message);
+        public static OperationResult Error(string message) => new OperationResult(false, message);
     }
 }
-
