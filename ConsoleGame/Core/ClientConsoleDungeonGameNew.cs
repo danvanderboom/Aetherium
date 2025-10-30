@@ -280,7 +280,8 @@ namespace ConsoleGame.Core
                         await HandleOpen();
                         break;
                     
-                    case ConsoleKey.C:
+                    case ConsoleKey.L:
+                        // Changed from C to L to avoid conflict with rotation (C = Rotate clockwise)
                         await HandleClose();
                         break;
 
@@ -344,7 +345,8 @@ namespace ConsoleGame.Core
                         statusMessage = $"Audio: {(audioSystem.IsEnabled ? "On" : "Off")}";
                         break;
 
-                    case ConsoleKey.T:
+                    case ConsoleKey.H:
+                        // Changed from T to H to avoid conflict with directional vision toggle (T)
                         // Cycle themes
                         CycleTheme();
                         break;
