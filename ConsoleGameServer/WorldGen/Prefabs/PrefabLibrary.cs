@@ -28,6 +28,14 @@ namespace ConsoleGame.WorldGen.Prefabs
         }
 
         /// <summary>
+        /// Creates a prefab library with specified storage mode.
+        /// </summary>
+        public PrefabLibrary(bool useFileStorage)
+        {
+            _useGrainStorage = !useFileStorage;
+        }
+
+        /// <summary>
         /// Creates a grain-based prefab library (for distributed storage).
         /// </summary>
         public PrefabLibrary(IGrainFactory grainFactory)

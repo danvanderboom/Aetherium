@@ -19,12 +19,65 @@ ConsoleGame is a real-time multiplayer dungeon crawler game with a client-server
 - Prefer composition over inheritance
 - Use `var` for local variables when type is obvious
 
+### Namespace Conventions
+**CRITICAL**: The project has multiple assemblies with specific namespace patterns:
+
+- **ConsoleGameServer** (assembly) uses namespace `ConsoleGameServer.*` for server-specific code:
+  - `ConsoleGameServer.Agents` - Agent system
+  - `ConsoleGameServer.Management` - Orleans management grains
+  - `ConsoleGameServer.MultiWorld` - Multi-world hosting
+  - `ConsoleGameServer.Narrative` - Narrative system
+  - BUT inherits `ConsoleGame.*` namespaces from shared assemblies
+
+- **ConsoleGameModel** (shared assembly) uses namespace `ConsoleGame.*`:
+  - `ConsoleGame.Core` - Core game logic (World, Entity, etc.)
+  - `ConsoleGame.WorldGen` - Procedural generation (generators, algorithms, prefabs)
+  - `ConsoleGame.WorldGen.Generators` - Specific generator implementations
+  - `ConsoleGame.WorldGen.Algorithms` - Reusable algorithms (Perlin, FloodFill, etc.)
+  - `ConsoleGame.WorldGen.Prefabs` - Prefab system
+
+- **ConsoleGameClient** (assembly) uses namespace `ConsoleGame.*` for client code
+
+**Common Mistake**: Using `ConsoleGameServer.WorldGen` when it should be `ConsoleGame.WorldGen`
+- WorldGen is in the **shared model** (ConsoleGameModel project)
+- Only server-specific logic goes in `ConsoleGameServer.*` namespaces
+
 ### Architecture Patterns
 - **ECS (Entity-Component-System)**: Game entities are composed of components
 - **Client-Server**: Server maintains authoritative game state, client renders
 - **SignalR**: Real-time communication between client and server
+- **Orleans Grains**: Actor-based concurrency for game state management
 - **Singleton**: Used sparingly for services like monitoring
 - **Observer**: Event-driven updates for perception changes
+
+### Orleans Configuration Patterns
+**Storage Configuration**:
+- Development: Use `AddMemoryGrainStorage()` for in-memory persistence
+- Production: Use Azure Table Storage with environment variable `ORLEANS_STORAGE=azure`
+- Storage names: `narrativeStore`, `worldStore`, `mapStore` (consistent naming)
+
+**Service Registration for Grains**:
+```csharp
+// Host services need to be accessible to Orleans grains via co-hosting
+siloBuilder.Services.AddSingleton<ServiceType>(sp =>
+{
+    var host = sp.GetRequiredService<IHost>();
+    return host.Services.GetRequiredService<ServiceType>();
+});
+```
+
+**Common Services to Register**:
+- `IHubContext<GameHub>` - For grains to send SignalR messages
+- `GameSessionManager` - For accessing active game sessions
+- `IGrainFactory` - Already available, but may need explicit registration
+- Custom services like `MapGeneratorRegistry`, `PrefabLibrary`, `PromptRegistry`
+
+**Environment Variables**:
+- `DISABLE_ORLEANS=1` - Disable Orleans for testing
+- `ORLEANS_STORAGE=memory|azure` - Storage backend selection
+- `AZURE_STORAGE_CONNECTION_STRING` - Required for Azure storage
+- `PREFAB_STORAGE=file` - Force file-based prefab storage
+- `PREFAB_PATH=./Data/Prefabs` - Prefab directory path
 
 ### Testing Strategy
 - Unit tests for core game logic (geometry, FOV, lighting)
@@ -155,9 +208,11 @@ openspec archive [change-id] --yes
 
 ## External Dependencies
 - **SignalR**: Real-time client-server communication
+- **Orleans**: Actor-based framework for distributed systems
 - **Newtonsoft.Json**: JSON serialization for DTOs
 - **System.Net.WebSockets**: Built-in WebSocket support for monitoring
 - **System.Net.HttpListener**: Built-in HTTP server for monitoring
+- **Azure Storage** (optional): Orleans grain persistence in production
 
 ## Development Notes
 - **Monitoring**: Always test with PowerShell client after changes
@@ -165,3 +220,26 @@ openspec archive [change-id] --yes
 - **Testing**: Run `dotnet test` before commits
 - **Documentation**: Update README files when adding features
 - **Specs**: Use OpenSpec for significant changes
+
+## Common Build Errors and Solutions
+
+### "Type or namespace does not exist"
+1. **Check namespace conventions** (see above)
+   - Is it `ConsoleGame.WorldGen` or `ConsoleGameServer.WorldGen`?
+   - WorldGen is in ConsoleGameModel, so use `ConsoleGame.WorldGen`
+2. **Verify project references** in `.csproj` files
+3. **Check assembly name** vs namespace - they can differ
+
+### "Does not contain a definition for 'AddAzureTableGrainStorage'"
+- Missing NuGet package: `Microsoft.Orleans.Persistence.AzureStorage`
+- Or using wrong Orleans storage extension method for your Orleans version
+
+### Orleans Grain Storage Setup
+- Always configure storage in `Program.cs` **before** grains are activated
+- Use named storage: `AddMemoryGrainStorage("storeName")`
+- Match storage names in grain `[StorageProvider(ProviderName = "storeName")]` attributes
+
+### Missing Dependencies in Grains
+- Grains can't use constructor injection for host services directly
+- Use co-hosting pattern (see "Service Registration for Grains" above)
+- Register services in both host DI and Orleans silo DI
