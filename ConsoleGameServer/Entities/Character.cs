@@ -14,6 +14,9 @@ namespace ConsoleGame
             Set(new HasHeading());
             Set(new Perception());
             Set(new Memory());
+            
+            // Characters emit high heat (visible in infrared)
+            Set(new HeatSignature(0.9, TimeSpan.FromSeconds(10)));
         }
     }
 }

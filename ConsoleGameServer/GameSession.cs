@@ -6,6 +6,8 @@ using ConsoleGame.Components;
 using ConsoleGame.Core;
 using ConsoleGame.Entities;
 using ConsoleGame.WorldBuilders;
+using ConsoleGameModel;
+using ConsoleGameServer.Perception;
 
 namespace ConsoleGameServer
 {
@@ -16,8 +18,19 @@ namespace ConsoleGameServer
 		public World World { get; set; }
 		public Character? Player { get; set; }
 		public WorldLocation? ViewLocation { get; set; }
-		public WorldDirection Heading { get; set; } = WorldDirection.North;
+		public ConsoleGame.WorldDirection Heading { get; set; } = ConsoleGame.WorldDirection.North;
 		public Size ViewportSize { get; set; } = new Size(42, 22); // Default console size
+
+		// Game time tracking
+		public DateTime GameStartTime { get; private set; }
+		public double TimeScale { get; set; } = 60.0; // 60x real time (1 real minute = 1 game hour)
+
+		// Lighting and vision modes
+		public LightingMode CurrentLightingMode { get; set; } = LightingMode.Torch;
+		public VisionMode CurrentVisionMode { get; set; } = VisionMode.Normal;
+
+		// Heat trail tracking for infrared vision
+		public HeatTrailTracker HeatTracker { get; private set; }
 
 		private readonly PerceptionService perceptionService;
 		private readonly Random rand = new Random();
@@ -26,6 +39,8 @@ namespace ConsoleGameServer
 		{
 			ConnectionId = connectionId;
 			perceptionService = new PerceptionService();
+			GameStartTime = DateTime.UtcNow;
+			HeatTracker = new HeatTrailTracker();
 
 			// Build the world
 			World = worldBuilder.Build();
@@ -84,8 +99,62 @@ namespace ConsoleGameServer
 			if (ViewLocation == null)
 				throw new InvalidOperationException("ViewLocation is null");
 
-			return perceptionService.ComputePerception(World, ViewLocation, Heading, ViewportSize);
+			// Update heat tracker before computing perception
+			UpdateHeatTracker();
+
+			return perceptionService.ComputePerception(
+				World, 
+				ViewLocation, 
+				Heading, 
+				ViewportSize,
+				CurrentLightingMode,
+				CurrentVisionMode,
+				HeatTracker,
+				GetCurrentGameTime());
 		}
+
+		/// <summary>
+		/// Gets the current game time based on elapsed real time and time scale
+		/// </summary>
+		public DateTime GetCurrentGameTime()
+		{
+			var realElapsed = DateTime.UtcNow - GameStartTime;
+			var gameElapsed = TimeSpan.FromSeconds(realElapsed.TotalSeconds * TimeScale);
+			return GameStartTime.Add(gameElapsed);
+		}
+
+		/// <summary>
+		/// Gets the current time of day as hours (0-24)
+		/// </summary>
+		public double GetGameTimeOfDay()
+		{
+			var gameTime = GetCurrentGameTime();
+			return gameTime.TimeOfDay.TotalHours % 24.0;
+		}
+
+	/// <summary>
+	/// Updates heat tracker with current entity positions
+	/// </summary>
+	private void UpdateHeatTracker()
+	{
+		var currentTime = GetCurrentGameTime();
+
+		// Record heat signatures for all entities with HeatSignature component
+		foreach (var entity in World.Entities.Values)
+		{
+			// Skip entities that don't have required components
+			if (!entity.Has<WorldLocation>() || !entity.Has<HeatSignature>())
+				continue;
+
+			var location = entity.Get<WorldLocation>();
+			var heatSig = entity.Get<HeatSignature>();
+			
+			HeatTracker.RecordEntityPosition(entity, location, currentTime);
+		}
+
+		// Cleanup old trails (remove those older than 60 seconds)
+		HeatTracker.CleanupOldTrails(currentTime.AddSeconds(-60));
+	}
 
 		public void MoveView(ConsoleGameModel.RelativeDirection direction, int distance = 1)
 		{
@@ -96,10 +165,10 @@ namespace ConsoleGameServer
 
 			var rightAngleRotationsCounterclockwise = engineDirection switch
 			{
-				RelativeDirection.Forward => 0,
-				RelativeDirection.Left => 1,
-				RelativeDirection.Backward => 2,
-				RelativeDirection.Right => 3,
+				ConsoleGame.RelativeDirection.Forward => 0,
+				ConsoleGame.RelativeDirection.Left => 1,
+				ConsoleGame.RelativeDirection.Backward => 2,
+				ConsoleGame.RelativeDirection.Right => 3,
 				_ => 0
 			};
 
@@ -109,10 +178,10 @@ namespace ConsoleGameServer
 
 			ViewLocation = bearing switch
 			{
-				WorldDirection.North => ViewLocation.FromDelta(0, -distance, 0),
-				WorldDirection.East => ViewLocation.FromDelta(distance, 0, 0),
-				WorldDirection.South => ViewLocation.FromDelta(0, distance, 0),
-				WorldDirection.West => ViewLocation.FromDelta(-distance, 0, 0),
+				ConsoleGame.WorldDirection.North => ViewLocation.FromDelta(0, -distance, 0),
+				ConsoleGame.WorldDirection.East => ViewLocation.FromDelta(distance, 0, 0),
+				ConsoleGame.WorldDirection.South => ViewLocation.FromDelta(0, distance, 0),
+				ConsoleGame.WorldDirection.West => ViewLocation.FromDelta(-distance, 0, 0),
 				_ => ViewLocation
 			};
 
@@ -130,10 +199,10 @@ namespace ConsoleGameServer
 			{
 				Heading = Heading switch
 				{
-					WorldDirection.North => WorldDirection.East,
-					WorldDirection.East => WorldDirection.South,
-					WorldDirection.South => WorldDirection.West,
-					WorldDirection.West => WorldDirection.North,
+					ConsoleGame.WorldDirection.North => ConsoleGame.WorldDirection.East,
+					ConsoleGame.WorldDirection.East => ConsoleGame.WorldDirection.South,
+					ConsoleGame.WorldDirection.South => ConsoleGame.WorldDirection.West,
+					ConsoleGame.WorldDirection.West => ConsoleGame.WorldDirection.North,
 					_ => Heading
 				};
 			}
@@ -141,10 +210,10 @@ namespace ConsoleGameServer
 			{
 				Heading = Heading switch
 				{
-					WorldDirection.North => WorldDirection.West,
-					WorldDirection.West => WorldDirection.South,
-					WorldDirection.South => WorldDirection.East,
-					WorldDirection.East => WorldDirection.North,
+					ConsoleGame.WorldDirection.North => ConsoleGame.WorldDirection.West,
+					ConsoleGame.WorldDirection.West => ConsoleGame.WorldDirection.South,
+					ConsoleGame.WorldDirection.South => ConsoleGame.WorldDirection.East,
+					ConsoleGame.WorldDirection.East => ConsoleGame.WorldDirection.North,
 					_ => Heading
 				};
 			}

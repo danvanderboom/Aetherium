@@ -131,6 +131,20 @@ namespace ConsoleGame.Client
             return await connection.InvokeAsync<InteractionResultDto>("Close", targetEntityId);
         }
 
+        public async Task SetLightingModeAsync(LightingMode mode)
+        {
+            if (connection == null || !IsConnected)
+                return;
+            await connection.InvokeAsync("SetLightingMode", mode);
+        }
+
+        public async Task SetVisionModeAsync(VisionMode mode)
+        {
+            if (connection == null || !IsConnected)
+                return;
+            await connection.InvokeAsync("SetVisionMode", mode);
+        }
+
         public async Task DisconnectAsync()
         {
             if (connection != null)

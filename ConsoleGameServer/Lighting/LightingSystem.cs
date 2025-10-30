@@ -4,44 +4,82 @@ using System.Drawing;
 using System.Linq;
 using ConsoleGame.Core;
 using ConsoleGame.Components;
+using ConsoleGameModel;
 
 namespace ConsoleGame.Lighting
 {
     /// <summary>
     /// Main lighting system that computes light levels for a view area.
-    /// Aggregates light from all light sources in the world.
+    /// Aggregates light from all light sources in the world and supports different lighting modes.
     /// </summary>
     public class LightingSystem
     {
         private readonly LightCalculator lightCalculator = new LightCalculator();
+        private readonly SunlightCalculator sunlightCalculator = new SunlightCalculator();
 
         /// <summary>
         /// Computes a LightFrame for the specified bounds by aggregating light from all enabled light sources.
         /// </summary>
         public LightFrame ComputeLighting(World world, Rectangle bounds, int zLevel)
         {
+            return ComputeLightingWithMode(world, bounds, zLevel, LightingMode.Ambient, null, 12.0);
+        }
+
+        /// <summary>
+        /// Computes lighting with a specific mode (torch, sunlight, or ambient).
+        /// </summary>
+        public LightFrame ComputeLightingWithMode(
+            World world,
+            Rectangle bounds,
+            int zLevel,
+            LightingMode mode,
+            WorldLocation? playerLocation,
+            double timeOfDay)
+        {
             var lightFrame = new LightFrame();
 
-            // Find all entities with LightSource components that are enabled
-            var lightSources = FindLightSources(world, zLevel);
-
-            // Compute light from each source
-            foreach (var (entity, lightSource, location) in lightSources)
+            switch (mode)
             {
-                if (!lightSource.IsEnabled)
-                    continue;
+                case LightingMode.Torch:
+                    // Add a dynamic light source at player position
+                    if (playerLocation != null)
+                    {
+                        lightCalculator.ComputeLightFromSource(
+                            world,
+                            playerLocation,
+                            0.9, // intensity
+                            6,   // range
+                            bounds,
+                            lightFrame);
+                    }
+                    break;
 
-                // Only process sources whose range might affect the bounds
-                if (IsSourceInRange(location, bounds, lightSource.Range))
-                {
-                    lightCalculator.ComputeLightFromSource(
-                        world,
-                        location,
-                        lightSource.Intensity,
-                        lightSource.Range,
-                        bounds,
-                        lightFrame);
-                }
+                case LightingMode.Sunlight:
+                    // Compute directional sunlight with shadows
+                    sunlightCalculator.ComputeSunlight(world, bounds, zLevel, timeOfDay, lightFrame);
+                    break;
+
+                case LightingMode.Ambient:
+                    // Process all static light sources in the world
+                    var lightSources = FindLightSources(world, zLevel);
+                    foreach (var (entity, lightSource, location) in lightSources)
+                    {
+                        if (!lightSource.IsEnabled)
+                            continue;
+
+                        // Only process sources whose range might affect the bounds
+                        if (IsSourceInRange(location, bounds, lightSource.Range))
+                        {
+                            lightCalculator.ComputeLightFromSource(
+                                world,
+                                location,
+                                lightSource.Intensity,
+                                lightSource.Range,
+                                bounds,
+                                lightFrame);
+                        }
+                    }
+                    break;
             }
 
             // Clamp all light levels to [0.0, 1.0] (in case multiple sources exceeded 1.0)

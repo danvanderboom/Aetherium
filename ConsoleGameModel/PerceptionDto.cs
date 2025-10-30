@@ -20,6 +20,12 @@ namespace ConsoleGameModel
         // Navigation data (compass, maps, etc.)
         public NavigationDataDto? NavigationData { get; set; }
 
+        // Lighting and vision modes
+        public LightingMode CurrentLightingMode { get; set; } = LightingMode.Torch;
+        public VisionMode CurrentVisionMode { get; set; } = VisionMode.Normal;
+        public double GameTimeOfDay { get; set; } = 12.0; // 0-24 hours
+        public (double r, double g, double b) AmbientTint { get; set; } = (1.0, 1.0, 1.0);
+
         public PerceptionDto()
         {
         }

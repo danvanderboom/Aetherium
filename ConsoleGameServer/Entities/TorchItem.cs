@@ -1,3 +1,4 @@
+using System;
 using ConsoleGame.Components;
 using ConsoleGame.Core;
 
@@ -27,6 +28,9 @@ namespace ConsoleGame.Entities
                 EffectValue = 1,
                 Uses = 50 // 50 turns of light
             });
+            
+            // Torches emit moderate heat (burning fire)
+            Set(new HeatSignature(0.6, TimeSpan.FromSeconds(5)));
         }
     }
 }

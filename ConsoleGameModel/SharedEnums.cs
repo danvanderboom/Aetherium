@@ -28,6 +28,19 @@ namespace ConsoleGameModel
         Object,
         Attack
     }
+
+    public enum LightingMode
+    {
+        Torch,
+        Sunlight,
+        Ambient
+    }
+
+    public enum VisionMode
+    {
+        Normal,
+        Infrared
+    }
 }
 
 

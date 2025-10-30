@@ -15,6 +15,9 @@ namespace ConsoleGame.Entities
             rand = new Random();
 
             Set(new Perception());
+            
+            // Snakes are cold-blooded, emit very low heat
+            Set(new HeatSignature(0.4, TimeSpan.FromSeconds(6)));
         }
     }
 }

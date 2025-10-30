@@ -264,9 +264,26 @@ namespace ConsoleGame.Views
             if (icon.Length > symbolWidth)
                 icon = icon.Substring(0, symbolWidth);
 
-            // Apply lighting dimming
-            bgColor = DimColor(bgColor, lightLevel);
-            fgColor = DimColor(fgColor, lightLevel);
+            // Apply lighting/heat dimming based on vision mode
+            if (Perception?.CurrentVisionMode == VisionMode.Infrared)
+            {
+                // Infrared: use heat-based colors
+                bgColor = GetInfraredColor(lightLevel, true); // background
+                fgColor = GetInfraredColor(lightLevel, false); // foreground
+            }
+            else
+            {
+                // Normal vision: dim by light level and apply ambient tint
+                bgColor = DimColor(bgColor, lightLevel);
+                fgColor = DimColor(fgColor, lightLevel);
+                
+                // Apply sunrise/sunset tint if in sunlight mode
+                if (Perception?.CurrentLightingMode == LightingMode.Sunlight)
+                {
+                    bgColor = ApplyAmbientTint(bgColor, Perception.AmbientTint);
+                    fgColor = ApplyAmbientTint(fgColor, Perception.AmbientTint);
+                }
+            }
 
             Console.BackgroundColor = bgColor;
             Console.ForegroundColor = fgColor;
@@ -290,15 +307,88 @@ namespace ConsoleGame.Views
                 ? ch
                 : "?";
 
-            // Apply lighting dimming
-            bgColor = DimColor(bgColor, lightLevel);
-            fgColor = DimColor(fgColor, lightLevel);
+            // Apply lighting/heat dimming based on vision mode
+            if (Perception?.CurrentVisionMode == VisionMode.Infrared)
+            {
+                // Infrared: use heat-based colors
+                bgColor = GetInfraredColor(lightLevel, true); // background
+                fgColor = GetInfraredColor(lightLevel, false); // foreground
+            }
+            else
+            {
+                // Normal vision: dim by light level and apply ambient tint
+                bgColor = DimColor(bgColor, lightLevel);
+                fgColor = DimColor(fgColor, lightLevel);
+                
+                // Apply sunrise/sunset tint if in sunlight mode
+                if (Perception?.CurrentLightingMode == LightingMode.Sunlight)
+                {
+                    bgColor = ApplyAmbientTint(bgColor, Perception.AmbientTint);
+                    fgColor = ApplyAmbientTint(fgColor, Perception.AmbientTint);
+                }
+            }
 
             Console.BackgroundColor = bgColor;
             Console.ForegroundColor = fgColor;
 
             for (int i = 0; i < symbolWidth; i++)
                 Console.Write(mapChar);
+        }
+
+        /// <summary>
+        /// Gets the infrared color for a heat level (0.0-1.0).
+        /// Maps heat intensity to color: Black -> DarkRed -> Red -> DarkYellow -> Yellow -> White
+        /// </summary>
+        private ConsoleColor GetInfraredColor(double heatLevel, bool isBackground)
+        {
+            if (heatLevel <= 0.05)
+                return ConsoleColor.Black;
+            
+            if (heatLevel < 0.15)
+                return ConsoleColor.DarkRed;
+            
+            if (heatLevel < 0.35)
+                return isBackground ? ConsoleColor.DarkRed : ConsoleColor.Red;
+            
+            if (heatLevel < 0.55)
+                return ConsoleColor.Red;
+            
+            if (heatLevel < 0.75)
+                return isBackground ? ConsoleColor.DarkRed : ConsoleColor.DarkYellow;
+            
+            if (heatLevel < 0.90)
+                return ConsoleColor.Yellow;
+            
+            return ConsoleColor.White;
+        }
+
+        /// <summary>
+        /// Applies ambient tint (sunrise/sunset) to a color.
+        /// Blends the color toward the tint color.
+        /// </summary>
+        private ConsoleColor ApplyAmbientTint(ConsoleColor originalColor, (double r, double g, double b) tint)
+        {
+            // If tint is neutral (white), no change needed
+            if (Math.Abs(tint.r - 1.0) < 0.01 && Math.Abs(tint.g - 1.0) < 0.01 && Math.Abs(tint.b - 1.0) < 0.01)
+                return originalColor;
+
+            // For sunrise/sunset (reddish tint), shift colors toward red/orange spectrum
+            if (tint.r > tint.g && tint.r > tint.b)
+            {
+                // Reddish tint
+                return originalColor switch
+                {
+                    ConsoleColor.White => ConsoleColor.Yellow,
+                    ConsoleColor.Gray => ConsoleColor.DarkYellow,
+                    ConsoleColor.Cyan => ConsoleColor.Green,
+                    ConsoleColor.Blue => ConsoleColor.DarkCyan,
+                    ConsoleColor.Green => ConsoleColor.DarkGreen,
+                    ConsoleColor.Yellow => ConsoleColor.DarkYellow,
+                    _ => originalColor // Keep others unchanged
+                };
+            }
+
+            return originalColor;
         }
 
         private ConsoleColor DimColor(ConsoleColor originalColor, double lightLevel)

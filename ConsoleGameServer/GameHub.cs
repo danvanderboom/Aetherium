@@ -182,6 +182,32 @@ namespace ConsoleGameServer
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
         }
+
+        public async Task SetLightingMode(LightingMode mode)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return;
+
+            session.CurrentLightingMode = mode;
+
+            // Send updated perception with new lighting mode
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+        }
+
+        public async Task SetVisionMode(VisionMode mode)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return;
+
+            session.CurrentVisionMode = mode;
+
+            // Send updated perception with new vision mode
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+        }
     }
 }
 

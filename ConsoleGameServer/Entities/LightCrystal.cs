@@ -1,3 +1,4 @@
+using System;
 using ConsoleGame.Components;
 using ConsoleGame.Core;
 
@@ -25,6 +26,9 @@ namespace ConsoleGame.Entities
                 IsDynamic = false,
                 IsEnabled = false // Enabled when placed
             });
+            
+            // Crystals emit low heat (magical/crystal energy)
+            Set(new HeatSignature(0.3, TimeSpan.FromSeconds(3)));
         }
     }
 }

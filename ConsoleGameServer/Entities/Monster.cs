@@ -24,6 +24,9 @@ namespace ConsoleGame
 
             Set(new Memory());
             Set(new Tile { Type = world.TileTypes["Monster"] });
+            
+            // Monsters emit slightly lower heat than characters but still high
+            Set(new HeatSignature(0.8, TimeSpan.FromSeconds(8)));
         }
 
         public virtual void Heartbeat()

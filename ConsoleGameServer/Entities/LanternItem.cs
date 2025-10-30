@@ -1,3 +1,4 @@
+using System;
 using ConsoleGame.Components;
 using ConsoleGame.Core;
 
@@ -27,6 +28,10 @@ namespace ConsoleGame.Entities
                 EffectValue = 1,
                 Uses = 100 // 100 turns of light
             });
+            
+            // Lanterns emit moderate heat (burning oil)
+            Set(new HeatSignature(0.5, TimeSpan.FromSeconds(5)));
         }
     }
 }
+

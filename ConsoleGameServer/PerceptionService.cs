@@ -9,6 +9,7 @@ using ConsoleGame.Entities;
 using ConsoleGame.Lighting;
 using ConsoleGame.Systems;
 using ConsoleGameModel;
+using ConsoleGameServer.Perception;
 
 namespace ConsoleGameServer
 {
@@ -16,8 +17,35 @@ namespace ConsoleGameServer
     {
         private readonly VisionSystem visionSystem = new VisionSystem();
         private readonly LightingSystem lightingSystem = new LightingSystem();
+        private readonly InfraredVisionSystem infraredVisionSystem = new InfraredVisionSystem();
 
-        public PerceptionDto ComputePerception(World world, WorldLocation playerLocation, ConsoleGame.WorldDirection playerHeading, Size viewportSize)
+        public PerceptionDto ComputePerception(
+            World world,
+            WorldLocation playerLocation,
+            ConsoleGame.WorldDirection playerHeading,
+            Size viewportSize)
+        {
+            // Use default modes for backward compatibility
+            return ComputePerception(
+                world,
+                playerLocation,
+                playerHeading,
+                viewportSize,
+                LightingMode.Torch,
+                VisionMode.Normal,
+                null,
+                DateTime.UtcNow);
+        }
+
+        public PerceptionDto ComputePerception(
+            World world,
+            WorldLocation playerLocation,
+            ConsoleGame.WorldDirection playerHeading,
+            Size viewportSize,
+            LightingMode lightingMode,
+            VisionMode visionMode,
+            HeatTrailTracker? heatTracker,
+            DateTime currentTime)
         {
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
@@ -61,14 +89,50 @@ Light sources found:
                         }
                     }
                 }
-                catch { /* ignore file write errors */ }
+                catch { /* ignore file write errors */                 }
             }
 
-            // Compute lighting
-            var lightFrame = lightingSystem.ComputeLighting(world, bounds, playerLocation.Z);
+            // Compute lighting or heat-based vision depending on mode
+            VisionFrame visionFrame;
+            LightFrame lightFrame;
 
-            // Compute vision with lighting
-            var visionFrame = visionSystem.ComputeVision(world, playerLocation, bounds, maxRange, lightFrame);
+            if (visionMode == VisionMode.Infrared)
+            {
+                // Infrared mode: use heat-based vision
+                lightFrame = new LightFrame(); // Empty light frame
+                visionFrame = infraredVisionSystem.ComputeHeatVision(
+                    world,
+                    playerLocation,
+                    bounds,
+                    heatTracker ?? new HeatTrailTracker(),
+                    currentTime);
+            }
+            else
+            {
+                // Normal vision mode: use lighting + FOV
+                lightFrame = lightingSystem.ComputeLightingWithMode(
+                    world,
+                    bounds,
+                    playerLocation.Z,
+                    lightingMode,
+                    playerLocation,
+                    currentTime.TimeOfDay.TotalHours);
+
+                // Compute vision with lighting
+                visionFrame = visionSystem.ComputeVision(world, playerLocation, bounds, maxRange, lightFrame);
+            }
+
+            // Get sunlight color for ambient tint (if in sunlight mode)
+            double ambientR = 1.0, ambientG = 1.0, ambientB = 1.0;
+            if (lightingMode == LightingMode.Sunlight && visionMode == VisionMode.Normal)
+            {
+                var sunlightCalc = new SunlightCalculator();
+                var (_, elevation) = sunlightCalc.CalculateSunPosition(currentTime.TimeOfDay.TotalHours);
+                var (r, g, b, _) = sunlightCalc.GetSunlightColor(elevation);
+                ambientR = r;
+                ambientG = g;
+                ambientB = b;
+            }
 
             // DIAGNOSTIC: Only write diagnostics in UI self-test mode to avoid interfering with unit tests
             if (testMode)
@@ -98,7 +162,13 @@ Light sources found:
                 PlayerLocation = new WorldLocationDto(0, 0, 0),
                 PlayerHeading = playerHeading.ToDto(),
                 VisibleBounds = bounds.ToDto(),
-                UpdateTimestamp = Guid.NewGuid()
+                UpdateTimestamp = Guid.NewGuid(),
+                
+                // Add mode information
+                CurrentLightingMode = lightingMode,
+                CurrentVisionMode = visionMode,
+                GameTimeOfDay = currentTime.TimeOfDay.TotalHours,
+                AmbientTint = (ambientR, ambientG, ambientB)
             };
             
             // Diagnostic: Log vision stats for debugging (reusing testMode from above)

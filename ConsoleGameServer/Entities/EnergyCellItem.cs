@@ -1,3 +1,4 @@
+using System;
 using ConsoleGame.Components;
 using ConsoleGame.Core;
 
@@ -18,6 +19,9 @@ namespace ConsoleGame.Entities
                 MaxEnergy = 100,
                 ConsumesPerUse = 1
             });
+            
+            // Energy cells emit low heat (electrical energy)
+            Set(new HeatSignature(0.2, TimeSpan.FromSeconds(3)));
         }
     }
 }

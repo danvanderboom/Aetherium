@@ -268,6 +268,41 @@ namespace ConsoleGame.Core
 
                     // UI Controls
                     case ConsoleKey.M:
+                        // Map toggle (existing functionality)
+                        break;
+
+                    // Vision/Lighting Mode Switches (Number Keys 1-4)
+                    case ConsoleKey.D1:
+                    case ConsoleKey.NumPad1:
+                        // Mode 1: Normal Vision + Torch Lighting
+                        await gameClient.SetLightingModeAsync(LightingMode.Torch);
+                        await gameClient.SetVisionModeAsync(VisionMode.Normal);
+                        statusMessage = "Mode 1: Normal Vision + Torch";
+                        break;
+
+                    case ConsoleKey.D2:
+                    case ConsoleKey.NumPad2:
+                        // Mode 2: Normal Vision + Sunlight
+                        await gameClient.SetLightingModeAsync(LightingMode.Sunlight);
+                        await gameClient.SetVisionModeAsync(VisionMode.Normal);
+                        statusMessage = "Mode 2: Normal Vision + Sunlight";
+                        break;
+
+                    case ConsoleKey.D3:
+                    case ConsoleKey.NumPad3:
+                        // Mode 3: Infrared Vision + Torch (for comparison)
+                        await gameClient.SetLightingModeAsync(LightingMode.Torch);
+                        await gameClient.SetVisionModeAsync(VisionMode.Infrared);
+                        statusMessage = "Mode 3: Infrared Vision + Torch";
+                        break;
+
+                    case ConsoleKey.D4:
+                    case ConsoleKey.NumPad4:
+                        // Mode 4: Infrared Vision + Sunlight
+                        await gameClient.SetLightingModeAsync(LightingMode.Sunlight);
+                        await gameClient.SetVisionModeAsync(VisionMode.Infrared);
+                        statusMessage = "Mode 4: Infrared Vision + Sunlight";
+                        break;
                         // Toggle compass mode or cycle music
                         if (keyInfo.Modifiers.HasFlag(ConsoleModifiers.Shift))
                         {
