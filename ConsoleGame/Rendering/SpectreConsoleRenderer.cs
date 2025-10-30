@@ -258,13 +258,13 @@ namespace ConsoleGame.Rendering
                 if (x >= 0 && currentY >= 0)
                 {
                     Console.SetCursorPosition(x, currentY);
-                    // Write the line and pad/truncate to the target width to avoid
-                    // leftovers from previous longer lines
-                    var visible = StripAnsi(line);
-                    if (visible.Length < width)
-                        Console.Write(line + new string(' ', width - visible.Length));
-                    else
-                        Console.Write(line);
+                    // Remove ANSI so the console cell count matches our width math
+                    var clean = StripAnsi(line);
+                    if (clean.Length > width)
+                        clean = clean.Substring(0, width);
+                    if (clean.Length < width)
+                        clean = clean + new string(' ', width - clean.Length);
+                    Console.Write(clean);
                 }
                 currentY++;
             }

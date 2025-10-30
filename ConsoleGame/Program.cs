@@ -9,6 +9,7 @@ namespace ConsoleGame
     {
         static async Task Main(string[] args)
         {
+            try { Console.Title = "ConsoleGameClient"; } catch {}
             // Check for audio test argument
             if (args.Length > 0 && args[0] == "--audio-test")
             {
