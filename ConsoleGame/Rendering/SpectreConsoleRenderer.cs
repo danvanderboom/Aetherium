@@ -156,15 +156,27 @@ namespace ConsoleGame.Rendering
             var borderColor = GetSpectreColor(theme.BorderColor);
             var titleColor = GetSpectreColor(theme.GetColor("widget_title", ConsoleColor.White));
 
-            var content = new Rows(
+            // Build content rows
+            var rows = new List<IRenderable>
+            {
                 new Text(""),
                 new Markup($"[bold]{data.DirectionSymbol}[/]", new Style(foreground: GetSpectreColor(theme.AccentColor))).Centered(),
                 new Text(data.DirectionName).Centered(),
                 new Text(""),
-                new Text(data.Mode == CompassMode.Degree ? $"{data.Heading}°" : "").Centered(),
-                new Text(""),
-                new Markup($"[dim][[M]] Toggle Mode[/]").Centered()
-            );
+                new Text(data.Mode == CompassMode.Degree ? $"{data.Heading}°" : "").Centered()
+            };
+
+            // Add directional vision indicator if enabled
+            if (data.IsDirectionalVision)
+            {
+                rows.Add(new Text(""));
+                rows.Add(new Markup($"[yellow]◢ FOV: {data.FieldOfViewDegrees}° ◣[/]").Centered());
+            }
+
+            rows.Add(new Text(""));
+            rows.Add(new Markup($"[dim][[M]] Toggle Mode[/]").Centered());
+
+            var content = new Rows(rows);
 
             var panel = new Panel(content)
                 .Header($"[{titleColor.ToMarkup()}]COMPASS[/]")
