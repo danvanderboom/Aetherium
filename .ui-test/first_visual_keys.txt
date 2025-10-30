@@ -1,0 +1,4 @@
+Visual keys (sample of 5): 2,3,0, 10,3,0, 9,5,0, -2,4,0, 2,9,0
+VisibleBounds: 5,4,21,22
+PlayerHeading: North
+MapView screen pos: 3,2, size: 42x22

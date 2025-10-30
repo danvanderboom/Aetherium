@@ -90,7 +90,9 @@ After deployment, create separate PR to:
 
 ### CLI Commands
 
-```bash
+**Note:** When working in this project (ConsoleGame), call `openspec` via PowerShell rather than directly. This provides better integration and avoids approval prompts for each command.
+
+```powershell
 # Essential commands
 openspec list                  # List active changes
 openspec list --specs          # List specifications
@@ -323,12 +325,12 @@ Example for RENAMED:
 
 ### Validation Tips
 
-```bash
+```powershell
 # Always use strict mode for comprehensive checks
 openspec validate [change] --strict
 
 # Debug delta parsing
-openspec show [change] --json | jq '.deltas'
+openspec show [change] --json | ConvertFrom-Json | Select-Object -ExpandProperty deltas
 
 # Check specific requirement
 openspec show [spec] --json -r 1
@@ -336,7 +338,7 @@ openspec show [spec] --json -r 1
 
 ## Happy Path Script
 
-```bash
+```powershell
 # 1) Explore current state
 openspec spec list --long
 openspec list
@@ -345,13 +347,22 @@ openspec list
 # rg -n "^#|Requirement:" openspec/changes
 
 # 2) Choose change id and scaffold
-CHANGE=add-two-factor-auth
-mkdir -p openspec/changes/$CHANGE/{specs/auth}
-printf "## Why\n...\n\n## What Changes\n- ...\n\n## Impact\n- ...\n" > openspec/changes/$CHANGE/proposal.md
-printf "## 1. Implementation\n- [ ] 1.1 ...\n" > openspec/changes/$CHANGE/tasks.md
+$CHANGE="add-two-factor-auth"
+New-Item -ItemType Directory -Force -Path "openspec/changes/$CHANGE/specs/auth"
+@"
+## Why
+...
+
+## What Changes
+- ...
+
+## Impact
+- ...
+"@ | Out-File -FilePath "openspec/changes/$CHANGE/proposal.md" -Encoding UTF8
+"## 1. Implementation`n- [ ] 1.1 ..." | Out-File -FilePath "openspec/changes/$CHANGE/tasks.md" -Encoding UTF8
 
 # 3) Add deltas (example)
-cat > openspec/changes/$CHANGE/specs/auth/spec.md << 'EOF'
+@"
 ## ADDED Requirements
 ### Requirement: Two-Factor Authentication
 Users MUST provide a second factor during login.
@@ -359,7 +370,7 @@ Users MUST provide a second factor during login.
 #### Scenario: OTP required
 - **WHEN** valid credentials are provided
 - **THEN** an OTP challenge is required
-EOF
+"@ | Out-File -FilePath "openspec/changes/$CHANGE/specs/auth/spec.md" -Encoding UTF8
 
 # 4) Validate
 openspec validate $CHANGE --strict
@@ -465,7 +476,7 @@ Only add complexity with:
 - `spec.md` - Requirements and behavior
 
 ### CLI Essentials
-```bash
+```powershell
 openspec list              # What's in progress?
 openspec show [item]       # View details
 openspec validate --strict # Is it correct?

@@ -1,0 +1,2 @@
+Visuals: 343
+PlayerLocation: 0,0,0

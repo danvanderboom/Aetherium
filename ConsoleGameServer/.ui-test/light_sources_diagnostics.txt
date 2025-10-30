@@ -1,0 +1,6 @@
+World bounds: {X=5,Y=5,Width=21,Height=22}
+Player Z level: 0
+Total entities in world: 902
+
+Light sources found:
+Entity 45934677: Location x: 15, y: 15, z: 0, Intensity 1, Range 50, Enabled True

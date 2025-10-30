@@ -1,0 +1,120 @@
+Player WORLD location: 10,10,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,11,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,10,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,11,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,10,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,11,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,10,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,11,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,10,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 10,11,0
+Light level at player: 0.000
+Visuals count: 5
+Light sources in world: 0
+
+Player WORLD location: 15,15,0
+Light level at player: 1.000
+Visuals count: 339
+Light sources in world: 370
+
+Player WORLD location: 15,16,0
+Light level at player: 0.980
+Visuals count: 343
+Light sources in world: 375
+
+Player WORLD location: 15,15,0
+Light level at player: 1.000
+Visuals count: 339
+Light sources in world: 370
+
+Player WORLD location: 15,16,0
+Light level at player: 0.980
+Visuals count: 343
+Light sources in world: 375
+
+Player WORLD location: 15,15,0
+Light level at player: 1.000
+Visuals count: 339
+Light sources in world: 370
+
+Player WORLD location: 15,16,0
+Light level at player: 0.980
+Visuals count: 343
+Light sources in world: 375
+
+Player WORLD location: 15,15,0
+Light level at player: 1.000
+Visuals count: 339
+Light sources in world: 370
+
+Player WORLD location: 15,16,0
+Light level at player: 0.980
+Visuals count: 343
+Light sources in world: 375
+
+Player WORLD location: 15,15,0
+Light level at player: 1.000
+Visuals count: 339
+Light sources in world: 370
+
+Player WORLD location: 15,16,0
+Light level at player: 0.980
+Visuals count: 343
+Light sources in world: 375
+
+Player WORLD location: 15,15,0
+Light level at player: 1.000
+Visuals count: 339
+Light sources in world: 370
+
+Player WORLD location: 15,16,0
+Light level at player: 0.980
+Visuals count: 343
+Light sources in world: 375
+
+Player WORLD location: 15,15,0
+Light level at player: 1.000
+Visuals count: 339
+Light sources in world: 370
+
+Player WORLD location: 15,16,0
+Light level at player: 0.980
+Visuals count: 343
+Light sources in world: 375
+

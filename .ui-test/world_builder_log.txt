@@ -1,0 +1,2 @@
+Build() called, testMapName: 'open_space'
+Added light source at (15,15,0), Total entities: 901

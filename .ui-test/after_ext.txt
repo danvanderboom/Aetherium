@@ -1,0 +1,28 @@
+                                          ȅ
+                                          ȅ
+                                          ȅ
+                                          
+                                          
+                                          
+                                          8
+                                          8
+                                          8
+                                          8
+                                          8
+                     **                   8
+                                          8
+                                          8
+                                          8
+                               tttttttttt 8
+                               tt         8
+                               tt         8
+                               tt         8
+                               tt         8
+                                          8
+                                          8
+       Visible Bounds: 5, 5, 21, 22       8
+Player Position: (0, 0, 0) [relative coord8
+         Inventory [0/10]: (empty)        8
+lfTest] Second perception has 343 visuals 8
+                                          8
+                                          8
