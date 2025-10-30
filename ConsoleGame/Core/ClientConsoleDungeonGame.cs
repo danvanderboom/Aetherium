@@ -173,9 +173,6 @@ namespace ConsoleGame.Core
                     case ConsoleKey.OemPeriod: // '.' drop
                         await HandleDrop();
                         break;
-                    case ConsoleKey.U:
-                        await gameClient.ChangeLevelAsync(Console.CapsLock ? +10 : +1);
-                        break;
                     case ConsoleKey.E:
                     case ConsoleKey.I: // Unified interact command
                         await HandleInteract();

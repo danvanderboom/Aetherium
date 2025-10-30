@@ -86,7 +86,7 @@ namespace ConsoleGameServer
                     foreach (var entity in atLoc.Values)
                     {
                         // Items are carriable non-character, non-terrain entities
-                        if (!(entity is Character) && !(entity is Entities.Terrain)
+                        if (!(entity is ConsoleGame.Character) && !(entity is ConsoleGame.Entities.Terrain)
                             && entity.AllComponents.OfType<Carriable>().Any())
                         {
                             var itemDto = entity.ToDto();
@@ -106,7 +106,7 @@ namespace ConsoleGameServer
             // If we can find the player entity at playerLocation, include inventory and affordances
             if (world.EntitiesByLocation.TryGetValue(playerLocation, out var here))
             {
-                var player = here.Values.OfType<Character>().FirstOrDefault();
+                var player = here.Values.OfType<ConsoleGame.Character>().FirstOrDefault();
                 if (player != null)
                 {
                     var inv = player.Get<Inventory>();
@@ -116,7 +116,7 @@ namespace ConsoleGameServer
                     // Pickup affordances for items at current tile
                     foreach (var e in here.Values)
                     {
-                        if (!(e is Character) && !(e is Entities.Terrain) && e.AllComponents.OfType<Carriable>().Any())
+                        if (!(e is ConsoleGame.Character) && !(e is ConsoleGame.Entities.Terrain) && e.AllComponents.OfType<Carriable>().Any())
                         {
                             affordances.Add(new AffordanceDto { Action = "pickup", ActorId = player.EntityId, TargetId = e.EntityId });
                         }

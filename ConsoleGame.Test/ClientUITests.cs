@@ -214,7 +214,7 @@ namespace ConsoleGame.Test
             var unknownColor = unknownKey.KeyId?.ToLowerInvariant() switch
             {
                 "red" => ConsoleColor.Red,
-                "blue" => ConsoleColorructive.Blue,
+                "blue" => ConsoleColor.Blue,
                 "green" => ConsoleColor.Green,
                 "yellow" => ConsoleColor.Yellow,
                 _ => ConsoleColor.White
