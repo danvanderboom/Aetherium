@@ -219,12 +219,49 @@ namespace ConsoleGame.Rendering
 
         private void WriteAtWithWidth(IRenderable renderable, int x, int y, int width)
         {
-            var table = new Table().Border(TableBorder.None).HideHeaders();
-            table.AddColumn(new TableColumn("").NoWrap().Width(width));
+            // Create a fixed-width container
+            var table = new Table()
+                .Border(TableBorder.None)
+                .HideHeaders()
+                .NoBorder();
+            
+            table.AddColumn(new TableColumn("").Width(width));
             table.AddRow(renderable);
 
-            Console.SetCursorPosition(x, y);
-            AnsiConsole.Write(table);
+            // Render to string using a memory-based console
+            var stringWriter = new System.IO.StringWriter();
+            var tempConsole = AnsiConsole.Create(new AnsiConsoleSettings
+            {
+                Ansi = AnsiSupport.Yes,
+                ColorSystem = ColorSystemSupport.TrueColor,
+                Out = new AnsiConsoleOutput(stringWriter),
+                Interactive = InteractionSupport.No
+            });
+
+            tempConsole.Write(table);
+            
+            // Get the rendered output and write it line by line at the correct position
+            var output = stringWriter.ToString();
+            var lines = output.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            
+            int currentY = y;
+            foreach (var line in lines)
+            {
+                if (currentY >= Console.BufferHeight || string.IsNullOrEmpty(line))
+                {
+                    if (!string.IsNullOrEmpty(line)) break;
+                    continue;
+                }
+                
+                if (x >= 0 && currentY >= 0)
+                {
+                    Console.SetCursorPosition(x, currentY);
+                    Console.Write(line);
+                }
+                currentY++;
+            }
+            
+            stringWriter.Dispose();
         }
 
         private BoxBorder GetBoxBorder(string style)
