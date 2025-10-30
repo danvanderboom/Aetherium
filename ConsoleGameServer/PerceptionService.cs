@@ -34,7 +34,10 @@ namespace ConsoleGameServer
                 LightingMode.Torch,
                 VisionMode.Normal,
                 null,
-                DateTime.UtcNow);
+                DateTime.UtcNow,
+                false,  // directional vision disabled by default
+                null,   // no heading degrees
+                null);  // no FOV degrees
         }
 
         public PerceptionDto ComputePerception(
@@ -46,6 +49,36 @@ namespace ConsoleGameServer
             VisionMode visionMode,
             HeatTrailTracker? heatTracker,
             DateTime currentTime)
+        {
+            return ComputePerception(
+                world,
+                playerLocation,
+                playerHeading,
+                viewportSize,
+                lightingMode,
+                visionMode,
+                heatTracker,
+                currentTime,
+                false,  // directional vision disabled by default
+                null,   // no heading degrees
+                null);  // no FOV degrees
+        }
+
+        /// <summary>
+        /// Computes perception with full control over vision modes.
+        /// </summary>
+        public PerceptionDto ComputePerception(
+            World world,
+            WorldLocation playerLocation,
+            ConsoleGame.WorldDirection playerHeading,
+            Size viewportSize,
+            LightingMode lightingMode,
+            VisionMode visionMode,
+            HeatTrailTracker? heatTracker,
+            DateTime currentTime,
+            bool directionalVision,
+            int? headingDegrees,
+            int? fovDegrees)
         {
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
@@ -118,8 +151,16 @@ Light sources found:
                     playerLocation,
                     currentTime.TimeOfDay.TotalHours);
 
-                // Compute vision with lighting
-                visionFrame = visionSystem.ComputeVision(world, playerLocation, bounds, maxRange, lightFrame);
+                // Compute vision with lighting - use directional FOV if enabled
+                if (directionalVision && headingDegrees.HasValue && fovDegrees.HasValue)
+                {
+                    visionFrame = visionSystem.ComputeVision(world, playerLocation, bounds, maxRange, lightFrame,
+                        headingDegrees.Value, fovDegrees.Value);
+                }
+                else
+                {
+                    visionFrame = visionSystem.ComputeVision(world, playerLocation, bounds, maxRange, lightFrame);
+                }
             }
 
             // Get sunlight color for ambient tint (if in sunlight mode)
@@ -161,6 +202,9 @@ Light sources found:
                 // PlayerLocation is always (0,0,0) - client should not know absolute world coordinates
                 PlayerLocation = new WorldLocationDto(0, 0, 0),
                 PlayerHeading = playerHeading.ToDto(),
+                HeadingDegrees = headingDegrees ?? ConvertDirectionToDegrees(playerHeading),
+                IsDirectionalVision = directionalVision,
+                FieldOfViewDegrees = fovDegrees ?? 360,  // 360 means omnidirectional
                 VisibleBounds = bounds.ToDto(),
                 UpdateTimestamp = Guid.NewGuid(),
                 

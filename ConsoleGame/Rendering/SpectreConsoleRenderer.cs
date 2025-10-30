@@ -377,6 +377,8 @@ namespace ConsoleGame.Rendering
         public int Heading { get; set; }
         public string DirectionName { get; set; } = "";
         public string DirectionSymbol { get; set; } = "";
+        public bool IsDirectionalVision { get; set; }
+        public int FieldOfViewDegrees { get; set; } = 360;
     }
 
     /// <summary>

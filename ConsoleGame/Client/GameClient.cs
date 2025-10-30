@@ -80,6 +80,22 @@ namespace ConsoleGame.Client
             await connection.InvokeAsync("RotatePlayer", clockwise);
         }
 
+        public async Task RotatePlayerDegreesAsync(int degrees)
+        {
+            if (connection == null || !IsConnected)
+                return;
+
+            await connection.InvokeAsync("RotatePlayerDegrees", degrees);
+        }
+
+        public async Task ToggleDirectionalVisionAsync()
+        {
+            if (connection == null || !IsConnected)
+                return;
+
+            await connection.InvokeAsync("ToggleDirectionalVision");
+        }
+
         public async Task ChangeLevelAsync(int deltaZ)
         {
             if (connection == null || !IsConnected)

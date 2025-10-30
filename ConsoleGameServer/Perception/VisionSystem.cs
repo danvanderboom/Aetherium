@@ -11,6 +11,7 @@ namespace ConsoleGame.Systems
     public class VisionSystem
     {
         private readonly FovCalculator fov = new FovCalculator();
+        private readonly DirectionalFovCalculator directionalFov = new DirectionalFovCalculator();
         private readonly LightingSystem lightingSystem = new LightingSystem();
 
         public VisionFrame ComputeVision(World world, WorldLocation origin, Rectangle bounds, int maxRange)
@@ -19,6 +20,22 @@ namespace ConsoleGame.Systems
         }
 
         public VisionFrame ComputeVision(World world, WorldLocation origin, Rectangle bounds, int maxRange, LightFrame? lightFrame)
+        {
+            return ComputeVision(world, origin, bounds, maxRange, lightFrame, null, null);
+        }
+
+        /// <summary>
+        /// Computes vision with optional directional filtering.
+        /// </summary>
+        /// <param name="world">The game world</param>
+        /// <param name="origin">Observer's location</param>
+        /// <param name="bounds">Bounding rectangle</param>
+        /// <param name="maxRange">Maximum visibility range</param>
+        /// <param name="lightFrame">Pre-computed lighting (optional)</param>
+        /// <param name="headingDegrees">Facing direction in degrees (null = omnidirectional)</param>
+        /// <param name="fovDegrees">Field of view angle (null = omnidirectional)</param>
+        public VisionFrame ComputeVision(World world, WorldLocation origin, Rectangle bounds, int maxRange, 
+            LightFrame? lightFrame, int? headingDegrees, int? fovDegrees)
         {
             var frame = new VisionFrame();
 
@@ -39,7 +56,17 @@ namespace ConsoleGame.Systems
                 effectiveRange = Math.Max(1, effectiveRange); // Always see at least 1 cell
             }
 
-            var visible = fov.ComputeVisible(world, origin, bounds, effectiveRange);
+            // Use directional FOV if heading and FOV are specified
+            bool[,] visible;
+            if (headingDegrees.HasValue && fovDegrees.HasValue && fovDegrees.Value < 360)
+            {
+                visible = directionalFov.ComputeVisible(world, origin, bounds, effectiveRange, 
+                    headingDegrees.Value, fovDegrees.Value);
+            }
+            else
+            {
+                visible = fov.ComputeVisible(world, origin, bounds, effectiveRange);
+            }
 
             for (int y = 0; y < bounds.Height; y++)
             {

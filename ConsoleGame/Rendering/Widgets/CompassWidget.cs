@@ -11,6 +11,8 @@ namespace ConsoleGame.Rendering.Widgets
     {
         private CompassMode currentMode = CompassMode.Arrow;
         private NavigationDataDto? navigationData;
+        private bool isDirectionalVision;
+        private int fovDegrees = 360;
         private ThemeConfig theme;
 
         public CompassWidget(ThemeConfig theme) : base("compass")
@@ -22,9 +24,11 @@ namespace ConsoleGame.Rendering.Widgets
         /// <summary>
         /// Update navigation data from perception
         /// </summary>
-        public void UpdateNavigationData(NavigationDataDto? data)
+        public void UpdateNavigationData(NavigationDataDto? data, bool directionalVision, int fieldOfView)
         {
             navigationData = data;
+            isDirectionalVision = directionalVision;
+            fovDegrees = fieldOfView;
             IsVisible = data?.HasCompass ?? false;
         }
 
@@ -50,7 +54,9 @@ namespace ConsoleGame.Rendering.Widgets
                     Mode = currentMode,
                     Heading = 0,
                     DirectionName = "Unknown",
-                    DirectionSymbol = "?"
+                    DirectionSymbol = "?",
+                    IsDirectionalVision = isDirectionalVision,
+                    FieldOfViewDegrees = fovDegrees
                 };
             }
 
@@ -62,7 +68,9 @@ namespace ConsoleGame.Rendering.Widgets
                 Mode = currentMode,
                 Heading = heading,
                 DirectionName = GetDirectionName(direction),
-                DirectionSymbol = GetDirectionSymbol(heading, direction)
+                DirectionSymbol = GetDirectionSymbol(heading, direction),
+                IsDirectionalVision = isDirectionalVision,
+                FieldOfViewDegrees = fovDegrees
             };
         }
 

@@ -7,6 +7,24 @@ namespace ConsoleGameModel
     {
         public WorldLocationDto PlayerLocation { get; set; } = new WorldLocationDto();
         public WorldDirection PlayerHeading { get; set; } = WorldDirection.North;
+        
+        /// <summary>
+        /// Heading in degrees (0-359). 0 = North, 90 = East, 180 = South, 270 = West.
+        /// More precise than the cardinal PlayerHeading enum.
+        /// </summary>
+        public int HeadingDegrees { get; set; } = 0;
+        
+        /// <summary>
+        /// Whether directional vision mode is active.
+        /// When true, the player can only see within a forward-facing cone.
+        /// </summary>
+        public bool IsDirectionalVision { get; set; } = false;
+        
+        /// <summary>
+        /// Field of view in degrees when directional vision is active.
+        /// </summary>
+        public int FieldOfViewDegrees { get; set; } = 120;
+        
         public Dictionary<string, VisualDto> Visuals { get; set; } = new Dictionary<string, VisualDto>();
         public RectangleDto VisibleBounds { get; set; } = new RectangleDto();
         public Guid UpdateTimestamp { get; set; } = Guid.NewGuid();

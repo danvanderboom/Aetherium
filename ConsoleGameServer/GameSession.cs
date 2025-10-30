@@ -18,7 +18,29 @@ namespace ConsoleGameServer
 		public World World { get; set; }
 		public Character? Player { get; set; }
 		public WorldLocation? ViewLocation { get; set; }
-		public ConsoleGame.WorldDirection Heading { get; set; } = ConsoleGame.WorldDirection.North;
+		
+		/// <summary>
+		/// Heading in degrees (0-359). 0 = North, 90 = East, 180 = South, 270 = West.
+		/// </summary>
+		public int HeadingDegrees { get; set; } = 0;
+		
+		/// <summary>
+		/// Legacy cardinal direction property for backwards compatibility.
+		/// Returns the nearest cardinal direction based on HeadingDegrees.
+		/// </summary>
+		public ConsoleGame.WorldDirection Heading
+		{
+			get => DegreesToWorldDirection(HeadingDegrees);
+			set => HeadingDegrees = WorldDirectionToDegrees(value);
+		}
+		
+		/// <summary>
+		/// Whether directional vision mode is enabled.
+		/// When true, characters can only see within a forward-facing cone.
+		/// When false, omnidirectional vision is used.
+		/// </summary>
+		public bool DirectionalVisionMode { get; set; } = false;
+		
 		public Size ViewportSize { get; set; } = new Size(42, 22); // Default console size
 
 		// Game time tracking
@@ -94,24 +116,36 @@ namespace ConsoleGameServer
 			}
 		}
 
-		public ConsoleGameModel.PerceptionDto GetPerception()
+	public ConsoleGameModel.PerceptionDto GetPerception()
+	{
+		if (ViewLocation == null)
+			throw new InvalidOperationException("ViewLocation is null");
+
+		// Update heat tracker before computing perception
+		UpdateHeatTracker();
+
+		// Determine FOV degrees for directional vision
+		int? fovDegrees = null;
+		if (DirectionalVisionMode && Player != null)
 		{
-			if (ViewLocation == null)
-				throw new InvalidOperationException("ViewLocation is null");
-
-			// Update heat tracker before computing perception
-			UpdateHeatTracker();
-
-			return perceptionService.ComputePerception(
-				World, 
-				ViewLocation, 
-				Heading, 
-				ViewportSize,
-				CurrentLightingMode,
-				CurrentVisionMode,
-				HeatTracker,
-				GetCurrentGameTime());
+			// Try to get FOV from player's HasHeading component, or use default
+			var hasHeading = Player.Get<HasHeading>();
+			fovDegrees = hasHeading?.FieldOfViewDegrees ?? 120; // Default 120 for humans
 		}
+
+		return perceptionService.ComputePerception(
+			World, 
+			ViewLocation, 
+			Heading, 
+			ViewportSize,
+			CurrentLightingMode,
+			CurrentVisionMode,
+			HeatTracker,
+			GetCurrentGameTime(),
+			DirectionalVisionMode,
+			DirectionalVisionMode ? (int?)HeadingDegrees : null,
+			fovDegrees);
+	}
 
 		/// <summary>
 		/// Gets the current game time based on elapsed real time and time scale
@@ -195,28 +229,52 @@ namespace ConsoleGameServer
 
 		public void RotateView(bool clockwise)
 		{
-			if (clockwise)
-			{
-				Heading = Heading switch
-				{
-					ConsoleGame.WorldDirection.North => ConsoleGame.WorldDirection.East,
-					ConsoleGame.WorldDirection.East => ConsoleGame.WorldDirection.South,
-					ConsoleGame.WorldDirection.South => ConsoleGame.WorldDirection.West,
-					ConsoleGame.WorldDirection.West => ConsoleGame.WorldDirection.North,
-					_ => Heading
-				};
-			}
+			// Rotate by 90 degrees
+			RotateView(clockwise ? 90 : -90);
+		}
+
+		/// <summary>
+		/// Rotates the view by a specific number of degrees.
+		/// Positive values rotate clockwise, negative values rotate counter-clockwise.
+		/// </summary>
+		public void RotateView(int degrees)
+		{
+			HeadingDegrees = (HeadingDegrees + degrees) % 360;
+			if (HeadingDegrees < 0)
+				HeadingDegrees += 360;
+		}
+
+		/// <summary>
+		/// Converts degrees to the nearest cardinal WorldDirection.
+		/// </summary>
+		private static ConsoleGame.WorldDirection DegreesToWorldDirection(int degrees)
+		{
+			int normalized = degrees % 360;
+			if (normalized < 0) normalized += 360;
+
+			if (normalized < 45 || normalized >= 315)
+				return ConsoleGame.WorldDirection.North;
+			else if (normalized >= 45 && normalized < 135)
+				return ConsoleGame.WorldDirection.East;
+			else if (normalized >= 135 && normalized < 225)
+				return ConsoleGame.WorldDirection.South;
 			else
+				return ConsoleGame.WorldDirection.West;
+		}
+
+		/// <summary>
+		/// Converts a cardinal WorldDirection to degrees.
+		/// </summary>
+		private static int WorldDirectionToDegrees(ConsoleGame.WorldDirection direction)
+		{
+			return direction switch
 			{
-				Heading = Heading switch
-				{
-					ConsoleGame.WorldDirection.North => ConsoleGame.WorldDirection.West,
-					ConsoleGame.WorldDirection.West => ConsoleGame.WorldDirection.South,
-					ConsoleGame.WorldDirection.South => ConsoleGame.WorldDirection.East,
-					ConsoleGame.WorldDirection.East => ConsoleGame.WorldDirection.North,
-					_ => Heading
-				};
-			}
+				ConsoleGame.WorldDirection.North => 0,
+				ConsoleGame.WorldDirection.East => 90,
+				ConsoleGame.WorldDirection.South => 180,
+				ConsoleGame.WorldDirection.West => 270,
+				_ => 0
+			};
 		}
 
 		public void ChangeLevel(int deltaZ)

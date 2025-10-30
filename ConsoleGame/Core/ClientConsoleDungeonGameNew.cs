@@ -104,7 +104,8 @@ namespace ConsoleGame.Core
 
             // Update widgets based on perception
             widgetManager.UpdateFromPerception(perception);
-            compassWidget?.UpdateNavigationData(perception.NavigationData);
+            compassWidget?.UpdateNavigationData(perception.NavigationData, 
+                perception.IsDirectionalVision, perception.FieldOfViewDegrees);
             inventoryWidget?.UpdateInventoryData(perception.Inventory);
 
             // Render frame
@@ -231,11 +232,28 @@ namespace ConsoleGame.Core
 
                     // Rotation
                     case ConsoleKey.Q:
-                        await gameClient.RotatePlayerAsync(clockwise: false);
+                        // Q: Rotate 15 degrees counter-clockwise (fine adjustment)
+                        await gameClient.RotatePlayerDegreesAsync(-15);
                         break;
                     
                     case ConsoleKey.E:
-                        await gameClient.RotatePlayerAsync(clockwise: true);
+                        // E: Rotate 15 degrees clockwise (fine adjustment)
+                        await gameClient.RotatePlayerDegreesAsync(15);
+                        break;
+
+                    case ConsoleKey.Z:
+                        // Z: Rotate 90 degrees counter-clockwise (sharp turn)
+                        await gameClient.RotatePlayerDegreesAsync(-90);
+                        break;
+
+                    case ConsoleKey.C:
+                        // C: Rotate 90 degrees clockwise (sharp turn)
+                        await gameClient.RotatePlayerDegreesAsync(90);
+                        break;
+
+                    case ConsoleKey.T:
+                        // T: Toggle directional vision mode (test feature)
+                        await gameClient.ToggleDirectionalVisionAsync();
                         break;
 
                     // Level change

@@ -97,6 +97,41 @@ namespace ConsoleGameServer
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
         }
 
+        /// <summary>
+        /// Rotates the player by a specific number of degrees.
+        /// Positive values rotate clockwise, negative values rotate counter-clockwise.
+        /// </summary>
+        public async Task RotatePlayerDegrees(int degrees)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return;
+
+            session.RotateView(degrees);
+
+            // Send updated perception
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+        }
+
+        /// <summary>
+        /// Toggles directional vision mode on or off.
+        /// When enabled, the player can only see within a forward-facing cone.
+        /// </summary>
+        public async Task ToggleDirectionalVision()
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return;
+
+            session.DirectionalVisionMode = !session.DirectionalVisionMode;
+            Console.WriteLine($"Directional vision mode: {(session.DirectionalVisionMode ? "ON" : "OFF")}");
+
+            // Send updated perception with new vision mode
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+        }
+
         public async Task ChangeLevel(int deltaZ)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
