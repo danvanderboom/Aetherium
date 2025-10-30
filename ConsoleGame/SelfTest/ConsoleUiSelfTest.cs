@@ -51,19 +51,26 @@ namespace ConsoleGame.SelfTest
             var gameClient = new GameClient(serverUrl);
 
             PerceptionDto? lastPerception = null;
-            var tcsPerception = new TaskCompletionSource<PerceptionDto>();
+            var tcsFirstPerception = new TaskCompletionSource<PerceptionDto>();
+            var tcsSecondPerception = new TaskCompletionSource<PerceptionDto>();
 
             gameClient.PerceptionUpdated += p =>
             {
                 lastPerception = p;
-                if (!tcsPerception.Task.IsCompleted)
-                    tcsPerception.TrySetResult(p);
+                if (!tcsFirstPerception.Task.IsCompleted)
+                {
+                    tcsFirstPerception.TrySetResult(p);
+                }
+                else if (!tcsSecondPerception.Task.IsCompleted)
+                {
+                    tcsSecondPerception.TrySetResult(p);
+                }
             };
 
             await gameClient.ConnectAsync();
 
             // Wait for first perception
-            var first = await tcsPerception.Task;
+            var first = await tcsFirstPerception.Task;
             mapView.Perception = first;
             mapView.WorldLocation = first.PlayerLocation;
             widgetManager.UpdateFromPerception(first);
@@ -83,18 +90,34 @@ namespace ConsoleGame.SelfTest
             };
             renderer.RenderFrame(state);
 
+            // Small delay to ensure rendering completes
+            await Task.Delay(100);
+
             // Snapshot before
             var beforeLines = ConsoleSnapshotter.CaptureRect(mapView.ScreenPosition.X, mapView.ScreenPosition.Y, mapView.Size.Width, mapView.Size.Height);
             File.WriteAllLines(Path.Combine(artifactsDir, "before.txt"), beforeLines);
 
             // Move down once
+
             await gameClient.MovePlayerAsync(RelativeDirection.Backward, 1);
 
-            // Wait briefly for perception to update
-            await Task.Delay(200);
-            var after = lastPerception;
-            if (after == null)
-                after = first;
+            // Wait for second perception update (with timeout)
+            var timeoutTask = Task.Delay(3000);
+            var completedTask = await Task.WhenAny(tcsSecondPerception.Task, timeoutTask);
+            PerceptionDto? after = null;
+            if (completedTask == tcsSecondPerception.Task)
+            {
+                after = await tcsSecondPerception.Task;
+            }
+            else
+            {
+                // Timeout - use last known perception or fallback to first
+                after = lastPerception ?? first;
+                File.WriteAllText(Path.Combine(artifactsDir, "timeout_warning.txt"), "Second perception update timed out\n");
+            }
+
+            // Small delay to ensure rendering completes
+            await Task.Delay(100);
 
             mapView.Perception = after;
             mapView.WorldLocation = after.PlayerLocation;
