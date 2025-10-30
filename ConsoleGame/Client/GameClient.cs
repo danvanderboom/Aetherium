@@ -1,0 +1,109 @@
+using System;
+using System.Threading.Tasks;
+using ConsoleGameModel;
+using Microsoft.AspNetCore.SignalR.Client;
+
+namespace ConsoleGame.Client
+{
+    public class GameClient
+    {
+        private HubConnection? connection;
+        private readonly string serverUrl;
+        
+        public event Action<PerceptionDto>? PerceptionUpdated;
+        public event Action<GameStateDto>? GameStateReceived;
+        public event Action? Connected;
+        public event Action? Disconnected;
+
+        public bool IsConnected => connection?.State == HubConnectionState.Connected;
+
+        public GameClient(string serverUrl = "http://localhost:5000/gamehub")
+        {
+            this.serverUrl = serverUrl;
+        }
+
+        public async Task ConnectAsync()
+        {
+            connection = new HubConnectionBuilder()
+                .WithUrl(serverUrl)
+                .WithAutomaticReconnect()
+                .Build();
+
+            connection.On<PerceptionDto>("ReceivePerceptionUpdate", (perception) =>
+            {
+                PerceptionUpdated?.Invoke(perception);
+            });
+
+            connection.On<GameStateDto>("ReceiveGameState", (gameState) =>
+            {
+                GameStateReceived?.Invoke(gameState);
+            });
+
+            connection.Closed += async (error) =>
+            {
+                Disconnected?.Invoke();
+                await Task.Delay(new Random().Next(0, 5) * 1000);
+                try
+                {
+                    await connection.StartAsync();
+                }
+                catch
+                {
+                    // Will retry automatically due to WithAutomaticReconnect
+                }
+            };
+
+            connection.Reconnected += (connectionId) =>
+            {
+                Connected?.Invoke();
+                return Task.CompletedTask;
+            };
+
+            await connection.StartAsync();
+            Connected?.Invoke();
+            Console.WriteLine($"Connected to server at {serverUrl}");
+        }
+
+        public async Task MovePlayerAsync(RelativeDirection direction, int distance)
+        {
+            if (connection == null || !IsConnected)
+                return;
+
+            await connection.InvokeAsync("MovePlayer", direction, distance);
+        }
+
+        public async Task RotatePlayerAsync(bool clockwise)
+        {
+            if (connection == null || !IsConnected)
+                return;
+
+            await connection.InvokeAsync("RotatePlayer", clockwise);
+        }
+
+        public async Task ChangeLevelAsync(int deltaZ)
+        {
+            if (connection == null || !IsConnected)
+                return;
+
+            await connection.InvokeAsync("ChangeLevel", deltaZ);
+        }
+
+        public async Task JumpToRandomLocationAsync()
+        {
+            if (connection == null || !IsConnected)
+                return;
+
+            await connection.InvokeAsync("JumpToRandomLocation");
+        }
+
+        public async Task DisconnectAsync()
+        {
+            if (connection != null)
+            {
+                await connection.StopAsync();
+                await connection.DisposeAsync();
+            }
+        }
+    }
+}
+
