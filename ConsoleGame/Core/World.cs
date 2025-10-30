@@ -121,6 +121,7 @@ namespace ConsoleGame.Core
             }
             else
             {
+                terrain.Type = terrainType;
                 terrain.Set(new Tile { Type = terrainType.TileType ?? TileType.None });
             }
 

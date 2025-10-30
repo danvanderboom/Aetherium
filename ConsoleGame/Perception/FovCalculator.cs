@@ -41,18 +41,33 @@ namespace ConsoleGame.Systems
                     foreach (var step in EnumerateLine(origin, target))
                     {
                         var stepPoint = new Point(step.X, step.Y);
+                        
+                        // Get opacity for this cell (even if outside bounds, it can still block)
+                        var cellOpacity = GetCellOpacity(world, step);
+                        var newCumulativeOpacity = cumulativeOpacity + cellOpacity;
 
-                        // Only mark and accumulate if inside our bounds (line may pass briefly outside)
+                        // Check if this cell blocks vision BEFORE marking it visible
+                        // If opacity reaches >= 1.0, this cell is the blocking cell and should be visible
+                        // but nothing beyond it should be visible
+                        if (newCumulativeOpacity > 1.0 - 1e-9)
+                        {
+                            // This cell blocks vision - mark it visible (you can see the blocking object)
+                            // but don't mark anything beyond it
+                            if (bounds.Contains(stepPoint))
+                            {
+                                visible[step.Y - bounds.Y, step.X - bounds.X] = true;
+                            }
+                            break; // fully blocked beyond this cell
+                        }
+
+                        // Cell doesn't block - mark it visible and continue
                         if (bounds.Contains(stepPoint))
                         {
                             visible[step.Y - bounds.Y, step.X - bounds.X] = true;
-
-                            // Accumulate opacity for this cell after marking it visible
-                            cumulativeOpacity += GetCellOpacity(world, step);
                         }
 
-                        if (cumulativeOpacity > 1.0 - 1e-9)
-                            break; // fully blocked beyond this cell
+                        // Update cumulative opacity for next iteration
+                        cumulativeOpacity = newCumulativeOpacity;
                     }
                 }
             }

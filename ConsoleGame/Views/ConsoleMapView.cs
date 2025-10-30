@@ -7,6 +7,7 @@ using ConsoleGame.Components;
 using ConsoleGame.Entities;
 using ConsoleGame.Geometry;
 using ConsoleGame.Systems;
+using ConsoleGame.Lighting;
 
 namespace ConsoleGame.Views
 {
@@ -26,7 +27,10 @@ namespace ConsoleGame.Views
 
         public VisionFrame? Vision { get; set; }
 
+        public LightFrame? Lighting { get; set; }
+
         VisionSystem visionSystem = new VisionSystem();
+        LightingSystem lightingSystem = new LightingSystem();
         Guid lastMoveTimestamp = Guid.Empty;
         WorldLocation lastOrigin = WorldLocation.None;
 
@@ -57,9 +61,9 @@ namespace ConsoleGame.Views
         public Rectangle? VisibleWorldRectangle => WorldLocation is null ? (Rectangle?)null :
             new Rectangle(
                 location: new Point(
-                    WorldLocation.X - (CenterScreenPosition.X - ScreenPosition.X),
-                    WorldLocation.Y - (CenterScreenPosition.Y - ScreenPosition.Y)),
-                size: ContentSize);
+                    WorldLocation.X - (ContentSize.Width / symbolWidth) / 2,
+                    WorldLocation.Y - ContentSize.Height / 2),
+                size: new Size(ContentSize.Width / symbolWidth, ContentSize.Height));
 
         protected override void DrawContents(Point screenPosition, Size size)
         {
@@ -78,12 +82,22 @@ namespace ConsoleGame.Views
                 return;
             }
 
-            // Recompute vision when player moved or origin changed
-            var bounds = VisibleWorldRectangle ?? new Rectangle(WorldLocation.X, WorldLocation.Y, size.Width / symbolWidth, size.Height);
+            // Recompute vision and lighting when player moved or origin changed
+            var worldWidth = size.Width / symbolWidth;
+            var worldHeight = size.Height;
+            var bounds = VisibleWorldRectangle ?? new Rectangle(
+                WorldLocation.X - worldWidth / 2, 
+                WorldLocation.Y - worldHeight / 2, 
+                worldWidth, 
+                worldHeight);
             var maxRange = Math.Max(bounds.Width, bounds.Height) / 2 + 1;
-            if (Vision == null || lastMoveTimestamp != World.CharacterMoveTimestamp || lastOrigin != WorldLocation)
+            if (Vision == null || Lighting == null || lastMoveTimestamp != World.CharacterMoveTimestamp || lastOrigin != WorldLocation)
             {
-                Vision = visionSystem.ComputeVision(World, WorldLocation, bounds, maxRange);
+                // Compute lighting first
+                Lighting = lightingSystem.ComputeLighting(World, bounds, WorldLocation.Z);
+                
+                // Compute vision with lighting integration
+                Vision = visionSystem.ComputeVision(World, WorldLocation, bounds, maxRange, Lighting);
                 lastMoveTimestamp = World.CharacterMoveTimestamp;
                 lastOrigin = WorldLocation;
             }
@@ -101,8 +115,10 @@ namespace ConsoleGame.Views
                 screenPosition.X + (size.Width + 1) / 2,
                 screenPosition.Y + (size.Height + 1) / 2);
 
-            var xoffset = (centerScreenPosition.X - screenPosition.X) / symbolWidth;
-            var yoffset = centerScreenPosition.Y - screenPosition.Y;
+            // Calculate world coordinate offsets based on content size (world coordinates)
+            // Not screen pixel positions - we need half the world width/height
+            var xoffset = worldWidth / 2;
+            var yoffset = worldHeight / 2;
 
             var center = WorldLocation.AsVector3();
 
@@ -116,6 +132,11 @@ namespace ConsoleGame.Views
                         WorldLocation.X + x - xoffset,
                         WorldLocation.Y + y - yoffset,
                         WorldLocation.Z);
+
+                    // Store unrotated world location for FOV visibility check
+                    // FOV is computed in unrotated world coordinates, so we must check visibility
+                    // using the unrotated location, not the rotated one
+                    var unrotatedLocation = new WorldLocation((int)vLocation.X, (int)vLocation.Y, (int)vLocation.Z);
 
                     // rotate worldLocation around Z axis based on Heading property counterclockwise
                     // North = 0 degrees, West = 90, South = 180, East = 270
@@ -140,7 +161,9 @@ namespace ConsoleGame.Views
                     var location = new WorldLocation((int)vLocation.X, (int)vLocation.Y, (int)vLocation.Z);
 
                     // Visibility check: skip rendering if not visible
-                    if (Vision != null && !Vision.Visuals.ContainsKey(location))
+                    // CRITICAL: Use unrotatedLocation for FOV check, not rotated location
+                    // FOV is computed in world coordinates, so Vision.Visuals contains unrotated world coordinates
+                    if (Vision != null && !Vision.Visuals.ContainsKey(unrotatedLocation))
                     {
                         Console.BackgroundColor = BackgroundColor;
                         Console.Write(new string(' ', symbolWidth));
@@ -171,9 +194,12 @@ namespace ConsoleGame.Views
                         }
                     }
 
+                    // Get light level for this location (using unrotated location for lighting)
+                    var lightLevel = Lighting?.GetLightLevel(unrotatedLocation) ?? 0.0;
+
                     if (location == WorldLocation) // TODO: remove this part
                     {
-                        DrawTileType(World.TileTypes["Player"], color);
+                        DrawTileType(World.TileTypes["Player"], color, lightLevel);
                     }
                     else if (World.EntitiesByLocation.TryGetValue(location, out var entities))
                     {
@@ -193,18 +219,18 @@ namespace ConsoleGame.Views
                             
                             var tile = first.Get<Tile>();
                             if (tile != null)
-                                DrawTile(tile, color);
+                                DrawTile(tile, color, lightLevel);
                         }
                         else if (gameObjects.Count > 0) // show game objects on top of terrain
                         {
                             var first = gameObjects.First();
 
                             var tile = first.Get<Tile>();
-                            DrawTile(tile, color);
+                            DrawTile(tile, color, lightLevel);
                         }
                         else if (terrainEntities.Count > 0) // show terrain below everything
                         {
-                            DrawTile(terrainEntities.First().Get<Tile>(), color);
+                            DrawTile(terrainEntities.First().Get<Tile>(), color, lightLevel);
                         }
                     }
                     else
@@ -239,18 +265,104 @@ namespace ConsoleGame.Views
                 Size.Width));
         }
 
-        public void DrawTile(Tile tile, ConsoleColor? gridColor = null) => 
-            DrawTileType(tile.Type, gridColor);
+        public void DrawTile(Tile tile, ConsoleColor? gridColor = null, double lightLevel = 1.0) => 
+            DrawTileType(tile.Type, gridColor, lightLevel);
 
-        public void DrawTileType(TileType tileType, ConsoleColor? gridColor = null)
+        public void DrawTileType(TileType tileType, ConsoleColor? gridColor = null, double lightLevel = 1.0)
         {
-            Console.BackgroundColor = gridColor.HasValue ? gridColor.Value 
-                : Enum.Parse<ConsoleColor>(tileType.Settings["BackgroundColor"]);
+            // Handle missing settings gracefully
+            var bgColor = gridColor.HasValue ? gridColor.Value 
+                : (tileType.Settings.TryGetValue("BackgroundColor", out var bg) 
+                    ? Enum.Parse<ConsoleColor>(bg) 
+                    : ConsoleColor.Black);
 
-            Console.ForegroundColor = Enum.Parse<ConsoleColor>(tileType.Settings["ForegroundColor"]);
+            var fgColor = tileType.Settings.TryGetValue("ForegroundColor", out var fg)
+                ? Enum.Parse<ConsoleColor>(fg)
+                : ConsoleColor.White;
+
+            var mapChar = tileType.Settings.TryGetValue("MapCharacter", out var ch)
+                ? ch
+                : "?";
+
+            // Apply lighting dimming: interpolate between black (no light) and original color (full light)
+            bgColor = DimColor(bgColor, lightLevel);
+            fgColor = DimColor(fgColor, lightLevel);
+
+            Console.BackgroundColor = bgColor;
+            Console.ForegroundColor = fgColor;
 
             for (int i = 0; i < symbolWidth; i++)
-                Console.Write(tileType.Settings["MapCharacter"]);
+                Console.Write(mapChar);
+        }
+
+        /// <summary>
+        /// Dims a console color based on light level.
+        /// Returns a darker shade interpolated toward black when light is low.
+        /// </summary>
+        private ConsoleColor DimColor(ConsoleColor originalColor, double lightLevel)
+        {
+            if (lightLevel >= 1.0)
+                return originalColor;
+            if (lightLevel <= 0.0)
+                return ConsoleColor.Black;
+
+            // For simplicity, map to a darker shade in the palette
+            // We use a simple interpolation: choose between original color and black
+            // Based on available console colors, we'll use DarkGray as intermediate
+            
+            // Map light levels:
+            // 0.0 - 0.3: Black
+            // 0.3 - 0.6: DarkGray
+            // 0.6 - 0.8: Gray
+            // 0.8 - 1.0: Original color
+
+            if (lightLevel < 0.3)
+                return ConsoleColor.Black;
+            else if (lightLevel < 0.6)
+                return ConsoleColor.DarkGray;
+            else if (lightLevel < 0.8)
+            {
+                // Use gray or a slightly brighter version
+                if (originalColor == ConsoleColor.Black)
+                    return ConsoleColor.DarkGray;
+                if (originalColor == ConsoleColor.DarkGray)
+                    return ConsoleColor.Gray;
+                // For other colors, try to get a darker variant if available
+                return GetDarkerVariant(originalColor) ?? ConsoleColor.Gray;
+            }
+            else
+            {
+                // Between 0.8 and 1.0, blend original with gray
+                return GetSlightlyDarkerVariant(originalColor) ?? originalColor;
+            }
+        }
+
+        private ConsoleColor? GetDarkerVariant(ConsoleColor color)
+        {
+            // Map common colors to darker variants
+            return color switch
+            {
+                ConsoleColor.Red => ConsoleColor.DarkRed,
+                ConsoleColor.Green => ConsoleColor.DarkGreen,
+                ConsoleColor.Blue => ConsoleColor.DarkBlue,
+                ConsoleColor.Yellow => ConsoleColor.DarkYellow,
+                ConsoleColor.Cyan => ConsoleColor.DarkCyan,
+                ConsoleColor.Magenta => ConsoleColor.DarkMagenta,
+                ConsoleColor.White => ConsoleColor.Gray,
+                ConsoleColor.Gray => ConsoleColor.DarkGray,
+                _ => null
+            };
+        }
+
+        private ConsoleColor? GetSlightlyDarkerVariant(ConsoleColor color)
+        {
+            // For high light levels, use slightly darker version
+            return color switch
+            {
+                ConsoleColor.White => ConsoleColor.Gray,
+                ConsoleColor.Gray => ConsoleColor.DarkGray,
+                _ => null
+            };
         }
 
         public void RotateRight()
