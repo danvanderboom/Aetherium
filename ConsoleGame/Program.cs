@@ -12,7 +12,8 @@ namespace ConsoleGame
             // Check for audio test argument
             if (args.Length > 0 && args[0] == "--audio-test")
             {
-                await AudioTest.RunTest();
+                Console.WriteLine("Audio test functionality has been removed. Audio is now integrated into the main game.");
+                Console.WriteLine("Run the game normally to hear background music and sound effects.");
                 return;
             }
 
