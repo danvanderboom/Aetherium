@@ -63,9 +63,8 @@ namespace ConsoleGame.Rendering
 
             currentState = state;
 
-            // For now, use a simpler approach without live rendering for compatibility
-            // We'll render directly to console with Spectre.Console panels
-            AnsiConsole.Clear();
+            // Note: The map is rendered by `ClientConsoleMapView` before this call.
+            // Do NOT clear the console here, or you'll erase the map.
 
             if (state.Perception == null || !state.IsConnected)
             {
@@ -91,8 +90,8 @@ namespace ConsoleGame.Rendering
             var mapWidth = 88; // 42 chars * 2 for double-width + borders
             var widgetWidth = 30;
 
-            // Render map section (we'll use direct console rendering for performance)
-            RenderMapSection(state);
+            // Map is already rendered by `ClientConsoleMapView` in the game loop.
+            // Only render widgets here to avoid overwriting the map.
 
             // Render widgets on the right side
             RenderWidgets(state, mapWidth + 2, 2, widgetWidth);
