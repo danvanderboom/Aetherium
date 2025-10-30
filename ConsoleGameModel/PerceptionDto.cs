@@ -17,6 +17,9 @@ namespace ConsoleGameModel
         public List<ItemDto> VisibleItems { get; set; } = new List<ItemDto>();
         public List<AffordanceDto> Affordances { get; set; } = new List<AffordanceDto>();
 
+        // Navigation data (compass, maps, etc.)
+        public NavigationDataDto? NavigationData { get; set; }
+
         public PerceptionDto()
         {
         }

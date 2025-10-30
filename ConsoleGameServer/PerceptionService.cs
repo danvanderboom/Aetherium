@@ -159,7 +159,58 @@ namespace ConsoleGameServer
 
             perception.Affordances = affordances;
 
+            // Add navigation data if player has compass or map
+            perception.NavigationData = ComputeNavigationData(world, playerLocation, playerHeading);
+
             return perception;
+        }
+
+        private NavigationDataDto? ComputeNavigationData(World world, WorldLocation playerLocation, ConsoleGame.WorldDirection playerHeading)
+        {
+            // Check if player has a compass or navigation tool
+            if (world.EntitiesByLocation.TryGetValue(playerLocation, out var here))
+            {
+                var player = here.Values.OfType<ConsoleGame.Character>().FirstOrDefault();
+                if (player != null)
+                {
+                    var inv = player.Get<Inventory>();
+                    if (inv != null)
+                    {
+                        // Check inventory for items with ProvidesNavigation component
+                        foreach (var itemId in inv.ItemEntityIds)
+                        {
+                            if (inv.Items.TryGetValue(itemId, out var item))
+                            {
+                                var navComponent = item.AllComponents.OfType<ProvidesNavigation>().FirstOrDefault();
+                                if (navComponent != null)
+                                {
+                                    // Player has a compass!
+                                    return new NavigationDataDto
+                                    {
+                                        HasCompass = true,
+                                        CardinalDirection = playerHeading.ToDto(),
+                                        HeadingDegrees = ConvertDirectionToDegrees(playerHeading)
+                                    };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return null; // No compass available
+        }
+
+        private int ConvertDirectionToDegrees(ConsoleGame.WorldDirection direction)
+        {
+            return direction switch
+            {
+                ConsoleGame.WorldDirection.North => 0,
+                ConsoleGame.WorldDirection.East => 90,
+                ConsoleGame.WorldDirection.South => 180,
+                ConsoleGame.WorldDirection.West => 270,
+                _ => 0
+            };
         }
     }
 }
