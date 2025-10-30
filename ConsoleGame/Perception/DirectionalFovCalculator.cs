@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using ConsoleGame.Core;
+using ConsoleGame.Components;
 
 namespace ConsoleGame.Systems
 {
@@ -49,9 +50,10 @@ namespace ConsoleGame.Systems
             var filtered = new bool[height, width];
 
             // Convert heading to radians and compute the heading vector
+            // In our coordinate system: North is -Y, South is +Y, East is +X, West is -X
             double headingRadians = headingDegrees * Math.PI / 180.0;
-            double headingVectorX = Math.Sin(headingRadians);  // East is positive X
-            double headingVectorY = Math.Cos(headingRadians);  // North is positive Y
+            double headingVectorX = Math.Sin(headingRadians);   // East is positive X
+            double headingVectorY = -Math.Cos(headingRadians);  // North is negative Y (decreasing)
 
             // Half-angle of the cone in radians
             double halfFovRadians = (fovDegrees / 2.0) * Math.PI / 180.0;
