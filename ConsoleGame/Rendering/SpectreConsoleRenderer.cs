@@ -91,10 +91,13 @@ namespace ConsoleGame.Rendering
             var widgetWidth = 30;
 
             // Map is already rendered by `ClientConsoleMapView` in the game loop.
-            // Only render widgets here to avoid overwriting the map.
+            // Before drawing widgets, clear the sidebar region to prevent artifacting
+            // from previous frames (since we don't clear the whole console).
+            var sidebarX = mapWidth + 2;
+            ClearRegion(sidebarX, 0, widgetWidth + 4, Console.BufferHeight);
 
             // Render widgets on the right side
-            RenderWidgets(state, mapWidth + 2, 2, widgetWidth);
+            RenderWidgets(state, sidebarX, 2, widgetWidth);
         }
 
         private void RenderMapSection(GameViewState state)
@@ -255,12 +258,45 @@ namespace ConsoleGame.Rendering
                 if (x >= 0 && currentY >= 0)
                 {
                     Console.SetCursorPosition(x, currentY);
-                    Console.Write(line);
+                    // Write the line and pad/truncate to the target width to avoid
+                    // leftovers from previous longer lines
+                    var visible = StripAnsi(line);
+                    if (visible.Length < width)
+                        Console.Write(line + new string(' ', width - visible.Length));
+                    else
+                        Console.Write(line);
                 }
                 currentY++;
             }
             
             stringWriter.Dispose();
+        }
+
+        private void ClearRegion(int x, int y, int width, int height)
+        {
+            if (width <= 0 || height <= 0) return;
+            var blank = new string(' ', Math.Max(0, Math.Min(width, Math.Max(0, Console.BufferWidth - x))));
+            for (int row = 0; row < height; row++)
+            {
+                if (y + row >= Console.BufferHeight) break;
+                Console.SetCursorPosition(Math.Min(x, Console.BufferWidth - 1), y + row);
+                Console.Write(blank);
+            }
+        }
+
+        private string StripAnsi(string input)
+        {
+            // Remove ANSI escape sequences when computing visible length
+            // Regex: \x1B\[[0-9;]*[A-Za-z]
+            var pattern = "\u001B\\[[0-9;]*[A-Za-z]";
+            try
+            {
+                return System.Text.RegularExpressions.Regex.Replace(input, pattern, "");
+            }
+            catch
+            {
+                return input;
+            }
         }
 
         private BoxBorder GetBoxBorder(string style)
