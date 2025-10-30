@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Orleans;
 using Orleans.Hosting;
 using ConsoleGameServer.Agents;
+using ConsoleGameServer.Management;
 
 namespace AgentCLI
 {
@@ -46,6 +47,15 @@ namespace AgentCLI
 
             // Use a singleton key for the registry
             return _client.GetGrain<ConsoleGameServer.Agents.IPromptRegistryGrain>("registry");
+        }
+
+        public IGameManagementGrain GetGameManagement()
+        {
+            if (_client == null)
+                throw new InvalidOperationException("Client not connected. Call ConnectAsync first.");
+
+            // Use singleton key "GLOBAL" for the management grain
+            return _client.GetGrain<IGameManagementGrain>("GLOBAL");
         }
 
         public async ValueTask DisposeAsync()

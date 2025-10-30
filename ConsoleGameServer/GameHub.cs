@@ -3,7 +3,9 @@ using System.IO;
 using System.Threading.Tasks;
 using ConsoleGame.WorldBuilders;
 using ConsoleGameModel;
+using ConsoleGameServer.Management;
 using Microsoft.AspNetCore.SignalR;
+using Orleans;
 
 namespace ConsoleGameServer
 {
@@ -11,10 +13,18 @@ namespace ConsoleGameServer
     {
         private readonly GameSessionManager sessionManager;
         private readonly InteractionSystem interactionSystem = new InteractionSystem();
+        private readonly IClusterClient? clusterClient;
 
-        public GameHub(GameSessionManager sessionManager)
+        public GameHub(GameSessionManager sessionManager, IClusterClient? clusterClient = null)
         {
             this.sessionManager = sessionManager;
+            this.clusterClient = clusterClient;
+        }
+
+        private IGameManagementGrain? GetManagementGrain()
+        {
+            if (clusterClient == null) return null; // Orleans disabled
+            return clusterClient.GetGrain<IGameManagementGrain>("GLOBAL");
         }
 
         public override async Task OnConnectedAsync()
@@ -44,10 +54,25 @@ namespace ConsoleGameServer
                 } catch { /* ignore */ }
             }
 
-            // Create a new game session for this client
-            var session = sessionManager.CreateSession(Context.ConnectionId, builder);
+        // Create a new game session for this client
+        var session = sessionManager.CreateSession(Context.ConnectionId, builder);
 
-            // Send initial game state (without world coordinates)
+        // Register session with management grain
+        try
+        {
+            var managementGrain = GetManagementGrain();
+            if (managementGrain != null)
+            {
+                await managementGrain.RegisterSessionAsync(session.SessionId, Context.ConnectionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GameHub] Failed to register session with grain: {ex.Message}");
+            // Continue anyway - grain registration is optional
+        }
+
+        // Send initial game state (without world coordinates)
             var initialState = new GameStateDto
             {
                 PlayerId = session.SessionId,
@@ -67,6 +92,28 @@ namespace ConsoleGameServer
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             Console.WriteLine($"Client disconnected: {Context.ConnectionId}");
+            
+            // Get session ID before removing
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            var sessionId = session?.SessionId;
+
+            // Unregister from management grain
+            if (sessionId != null)
+            {
+                try
+                {
+                    var managementGrain = GetManagementGrain();
+                    if (managementGrain != null)
+                    {
+                        await managementGrain.UnregisterSessionAsync(sessionId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[GameHub] Failed to unregister session from grain: {ex.Message}");
+                }
+            }
+
             sessionManager.RemoveSession(Context.ConnectionId);
             await base.OnDisconnectedAsync(exception);
         }

@@ -134,6 +134,128 @@ namespace AgentCLI
             });
             rootCommand.AddCommand(listPromptsCommand);
 
+            // Vision control commands (note: these require a game session management grain)
+            var visionCommand = new Command("vision", "Control vision modes for game sessions");
+            
+            var visionDirectionalCommand = new Command("directional", "Enable directional vision mode for a session");
+            var sessionIdArg = new Argument<string>("sessionId", "Game session ID");
+            visionDirectionalCommand.AddArgument(sessionIdArg);
+            visionDirectionalCommand.SetHandler(async (string sessionId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var result = await mgmt.SetDirectionalVisionAsync(sessionId, true);
+                    
+                    if (result.Success)
+                    {
+                        Console.WriteLine($"✓ Directional vision enabled for session {sessionId}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"✗ Error: {result.Reason}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Failed: {ex.Message}");
+                }
+            }, sessionIdArg);
+            visionCommand.AddCommand(visionDirectionalCommand);
+
+            var visionOmniCommand = new Command("omnidirectional", "Disable directional vision (use omnidirectional) for a session");
+            var sessionIdArg2 = new Argument<string>("sessionId", "Game session ID");
+            visionOmniCommand.AddArgument(sessionIdArg2);
+            visionOmniCommand.SetHandler(async (string sessionId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var result = await mgmt.SetDirectionalVisionAsync(sessionId, false);
+                    
+                    if (result.Success)
+                    {
+                        Console.WriteLine($"✓ Omnidirectional vision enabled for session {sessionId}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"✗ Error: {result.Reason}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Failed: {ex.Message}");
+                }
+            }, sessionIdArg2);
+            visionCommand.AddCommand(visionOmniCommand);
+
+            var visionFovCommand = new Command("fov", "Set field of view degrees for a session");
+            var fovSessionIdArg = new Argument<string>("sessionId", "Game session ID");
+            var degreesArg = new Argument<int>("degrees", "FOV in degrees (1-360)");
+            visionFovCommand.AddArgument(fovSessionIdArg);
+            visionFovCommand.AddArgument(degreesArg);
+            visionFovCommand.SetHandler(async (string sessionId, int degrees) =>
+            {
+                if (degrees < 1 || degrees > 360)
+                {
+                    Console.WriteLine("✗ Error: FOV must be between 1 and 360 degrees");
+                    return;
+                }
+                
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var result = await mgmt.SetFieldOfViewAsync(sessionId, degrees);
+                    
+                    if (result.Success)
+                    {
+                        Console.WriteLine($"✓ FOV set to {degrees}° for session {sessionId}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"✗ Error: {result.Reason}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Failed: {ex.Message}");
+                }
+            }, fovSessionIdArg, degreesArg);
+            visionCommand.AddCommand(visionFovCommand);
+
+            var visionStatusCommand = new Command("status", "Show vision mode status for a session");
+            var sessionIdArg3 = new Argument<string>("sessionId", "Game session ID");
+            visionStatusCommand.AddArgument(sessionIdArg3);
+            visionStatusCommand.SetHandler(async (string sessionId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var status = await mgmt.GetVisionStatusAsync(sessionId);
+                    
+                    if (status != null)
+                    {
+                        Console.WriteLine($"Vision Status for session {sessionId}:");
+                        Console.WriteLine($"  Directional Vision: {(status.DirectionalVisionMode ? "ON" : "OFF")}");
+                        Console.WriteLine($"  Heading: {status.HeadingDegrees}°");
+                        Console.WriteLine($"  Field of View: {status.FieldOfViewDegrees}°");
+                        Console.WriteLine($"  Lighting Mode: {status.LightingMode}");
+                        Console.WriteLine($"  Vision Mode: {status.VisionMode}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"✗ Session {sessionId} not found");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Failed: {ex.Message}");
+                }
+            }, sessionIdArg3);
+            visionCommand.AddCommand(visionStatusCommand);
+
+            rootCommand.AddCommand(visionCommand);
+
             return await rootCommand.InvokeAsync(args);
         }
     }
