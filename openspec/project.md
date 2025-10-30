@@ -66,9 +66,13 @@ ConsoleGame is a real-time multiplayer dungeon crawler game with a client-server
 The game includes a built-in monitoring system that allows real-time observation of game state for debugging, testing, and AI development.
 
 ### Quick Start
-1. **Start the game**: `cd ConsoleGame && dotnet run`
-2. **Connect monitor**: `cd scripts && .\monitor-game.ps1 -DisplayAsciiMap`
-3. **WebSocket endpoint**: `ws://localhost:5001/monitor`
+1. Start server + client for UI validation:
+   - `./start-game-test.ps1 -TimeoutSeconds 20` (opens two windows and auto-cleans)
+   - If interrupted, run `./stop-game.ps1` or `./stop-game.ps1 -All`
+2. Connect a monitor:
+   - Full: `cd scripts; .\monitor-game.ps1 -DisplayAsciiMap`
+   - Minimal: `cd scripts; .\monitor-lite.ps1` (no Unicode borders)
+3. WebSocket endpoint: `ws://localhost:5001/monitor`
 
 ### Features
 - **Real-time streaming**: WebSocket-based push updates
@@ -91,6 +95,11 @@ The game includes a built-in monitoring system that allows real-time observation
 # Full verbose mode
 .\scripts\monitor-game.ps1 -DisplayAsciiMap -DisplayJson -SaveToFile -Verbose
 ```
+
+### Developer Notes (Console UI + Spectre)
+- The map is rendered by `ClientConsoleMapView`; the Spectre renderer draws widgets only.
+- Avoid calling `AnsiConsole.Clear()` (or otherwise clearing the console) after the map draws, or the map will disappear.
+- PowerShell command chaining: use `;` instead of `&&` in this environment.
 
 ### Configuration
 Edit `ConsoleGame/Program.cs` to modify:

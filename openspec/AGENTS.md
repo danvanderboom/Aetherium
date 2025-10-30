@@ -111,6 +111,27 @@ openspec show [change] --json --deltas-only
 openspec validate [change] --strict
 ```
 
+### Local Testing Recipes (ConsoleGame)
+
+Use these scripts to reliably start/stop the game and validate UI output during development:
+
+```powershell
+# Start server + client in separate windows and auto-exit after N seconds
+.\start-game-test.ps1 -TimeoutSeconds 20
+
+# If a run was interrupted, clean up remaining processes
+.\stop-game.ps1           # uses .game-run-pids.json if present
+.\stop-game.ps1 -All      # force-kill ConsoleGameServer/ConsoleGameClient
+
+# Minimal monitor to assert frames stream (no unicode borders dependency)
+.\scripts\monitor-lite.ps1  # optional: add -MaxFrames 5
+```
+
+Notes
+- The test harness persists PIDs in `.game-run-pids.json` so cleanup is reliable even after abrupt exits.
+- When chaining PowerShell commands, use `;` rather than `&&` (not valid in some PowerShell hosts).
+- Renderer development: do not clear the console after the map is drawn. Clearing (e.g., `AnsiConsole.Clear()`) erases the already-rendered map. The hybrid approach renders the map first via `ClientConsoleMapView`, then widgets on the right.
+
 ### Command Flags
 
 - `--json` - Machine-readable output
