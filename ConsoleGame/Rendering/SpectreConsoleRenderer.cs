@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 using ConsoleGame.Rendering.Themes;
 using ConsoleGame.Rendering.Widgets;
 using ConsoleGameModel;
@@ -94,7 +95,7 @@ namespace ConsoleGame.Rendering
             RenderMapSection(state);
 
             // Render widgets on the right side
-            RenderWidgets(state, mapWidth + 2, 2);
+            RenderWidgets(state, mapWidth + 2, 2, widgetWidth);
         }
 
         private void RenderMapSection(GameViewState state)
@@ -121,7 +122,7 @@ namespace ConsoleGame.Rendering
             // We're creating a hybrid approach here
         }
 
-        private void RenderWidgets(GameViewState state, int startX, int startY)
+        private void RenderWidgets(GameViewState state, int startX, int startY, int width)
         {
             int currentY = startY;
 
@@ -132,22 +133,22 @@ namespace ConsoleGame.Rendering
                 
                 if (renderData is CompassRenderData compassData)
                 {
-                    RenderCompassWidget(compassData, state.Theme, startX, currentY);
+                    RenderCompassWidget(compassData, state.Theme, startX, currentY, width);
                     currentY += 10; // Height of compass widget + spacing
                 }
                 else if (renderData is InventoryRenderData inventoryData)
                 {
-                    RenderInventoryWidget(inventoryData, state.Theme, startX, currentY);
+                    RenderInventoryWidget(inventoryData, state.Theme, startX, currentY, width);
                     currentY += 12; // Height of inventory widget + spacing
                 }
             }
 
             // Help panel beneath widgets - add some spacing
             currentY += 2;
-            RenderHelpPanel(state.Theme, startX, currentY);
+            RenderHelpPanel(state.Theme, startX, currentY, width);
         }
 
-        private void RenderCompassWidget(CompassRenderData data, ThemeConfig theme, int x, int y)
+        private void RenderCompassWidget(CompassRenderData data, ThemeConfig theme, int x, int y, int width)
         {
             var borderStyle = GetBoxBorder(theme.BorderStyle);
             var borderColor = GetSpectreColor(theme.BorderColor);
@@ -166,14 +167,12 @@ namespace ConsoleGame.Rendering
             var panel = new Panel(content)
                 .Header($"[{titleColor.ToMarkup()}]COMPASS[/]")
                 .Border(borderStyle)
-                .BorderColor(borderColor)
-                .Expand();
+                .BorderColor(borderColor);
 
-            Console.SetCursorPosition(x, y);
-            AnsiConsole.Write(panel);
+            WriteAtWithWidth(panel, x, y, width);
         }
 
-        private void RenderInventoryWidget(InventoryRenderData data, ThemeConfig theme, int x, int y)
+        private void RenderInventoryWidget(InventoryRenderData data, ThemeConfig theme, int x, int y, int width)
         {
             var borderStyle = GetBoxBorder(theme.BorderStyle);
             var borderColor = GetSpectreColor(theme.BorderColor);
@@ -194,11 +193,10 @@ namespace ConsoleGame.Rendering
                 .Border(borderStyle)
                 .BorderColor(borderColor);
 
-            Console.SetCursorPosition(x, y);
-            AnsiConsole.Write(panel);
+            WriteAtWithWidth(panel, x, y, width);
         }
 
-        private void RenderHelpPanel(ThemeConfig theme, int x, int y)
+        private void RenderHelpPanel(ThemeConfig theme, int x, int y, int width)
         {
             var borderStyle = GetBoxBorder(theme.BorderStyle);
             var borderColor = GetSpectreColor(theme.BorderColor);
@@ -213,12 +211,20 @@ namespace ConsoleGame.Rendering
             var panel = new Panel(content)
                 .Header($"[{titleColor.ToMarkup()}]HELP[/]")
                 .Border(borderStyle)
-                .BorderColor(borderColor)
-                .Expand();
+                .BorderColor(borderColor);
 
             // Position the panel properly
+            WriteAtWithWidth(panel, x, y, width);
+        }
+
+        private void WriteAtWithWidth(IRenderable renderable, int x, int y, int width)
+        {
+            var table = new Table().Border(TableBorder.None).HideHeaders();
+            table.AddColumn(new TableColumn("").NoWrap().Width(width));
+            table.AddRow(renderable);
+
             Console.SetCursorPosition(x, y);
-            AnsiConsole.Write(panel);
+            AnsiConsole.Write(table);
         }
 
         private BoxBorder GetBoxBorder(string style)
