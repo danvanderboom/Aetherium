@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using ConsoleGameModel;
 using ConsoleGame.Client;
+using ConsoleGame.Monitoring;
 
 namespace ConsoleGame.Views
 {
@@ -311,6 +312,90 @@ namespace ConsoleGame.Views
                 ConsoleColor.Gray => ConsoleColor.DarkGray,
                 _ => null
             };
+        }
+
+        /// <summary>
+        /// Captures the current rendered frame as a 2D array of strings for monitoring
+        /// </summary>
+        public AsciiMapData CaptureRenderedFrame()
+        {
+            if (Perception == null || WorldLocation == null)
+            {
+                return new AsciiMapData(0, 0);
+            }
+
+            var worldWidth = ContentSize.Width / symbolWidth;
+            var worldHeight = ContentSize.Height;
+
+            var asciiMap = new AsciiMapData(worldWidth, worldHeight);
+
+            var xoffset = worldWidth / 2;
+            var yoffset = worldHeight / 2;
+
+            for (int y = 0; y < worldHeight; y++)
+            {
+                for (int x = 0; x < worldWidth; x++)
+                {
+                    // Calculate relative coordinates (offsets from player at center)
+                    var relativeX = x - xoffset;
+                    var relativeY = y - yoffset;
+                    var relativeZ = 0;
+
+                    // Create location key for looking up in perception visuals (using relative coordinates)
+                    var locationKey = $"{relativeX},{relativeY},{relativeZ}";
+
+                    // Check if this location is visible
+                    if (!Perception.Visuals.TryGetValue(locationKey, out var visual))
+                    {
+                        asciiMap.Tiles[y][x] = "  "; // Empty space
+                        continue;
+                    }
+
+                    // Check if this is the player location (always at 0,0,0 in relative coordinates)
+                    if (relativeX == 0 && relativeY == 0 && relativeZ == 0)
+                    {
+                        // Player
+                        if (Perception.TileTypes.TryGetValue("Player", out var playerTileType) &&
+                            playerTileType.Settings.TryGetValue("MapCharacter", out var playerChar))
+                        {
+                            asciiMap.Tiles[y][x] = playerChar + playerChar; // 2 characters wide
+                        }
+                        else
+                        {
+                            asciiMap.Tiles[y][x] = "@@"; // Default player character
+                        }
+                    }
+                    else
+                    {
+                        // Check for items at this location first
+                        var itemAtLocation = Perception.VisibleItems?.FirstOrDefault(
+                            item => item.Location != null &&
+                            item.Location.X == relativeX &&
+                            item.Location.Y == relativeY &&
+                            item.Location.Z == relativeZ);
+
+                        if (itemAtLocation != null && !string.IsNullOrEmpty(itemAtLocation.Icon))
+                        {
+                            var icon = itemAtLocation.Icon;
+                            if (icon.Length >= 2)
+                                asciiMap.Tiles[y][x] = icon.Substring(0, 2);
+                            else
+                                asciiMap.Tiles[y][x] = icon.PadRight(2);
+                        }
+                        else if (visual.Terrain != null && visual.Terrain.Settings.TryGetValue("MapCharacter", out var terrainChar))
+                        {
+                            // Terrain - duplicate the character to fill 2 spaces
+                            asciiMap.Tiles[y][x] = terrainChar + terrainChar;
+                        }
+                        else
+                        {
+                            asciiMap.Tiles[y][x] = "  "; // Unknown/empty
+                        }
+                    }
+                }
+            }
+
+            return asciiMap;
         }
     }
 }

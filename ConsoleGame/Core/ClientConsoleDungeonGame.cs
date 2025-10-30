@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Linq;
 using ConsoleGame.Client;
 using ConsoleGame.Views;
+using ConsoleGame.Monitoring;
 using ConsoleGameModel;
 
 namespace ConsoleGame.Core
@@ -54,6 +55,13 @@ namespace ConsoleGame.Core
             mapView.Perception = perception;
             mapView.WorldLocation = perception.PlayerLocation;
             DisplayViewContents();
+
+            // Broadcast to monitoring clients if enabled
+            if (MapFrameMonitor.Instance.IsRunning)
+            {
+                var asciiMap = mapView.CaptureRenderedFrame();
+                _ = MapFrameMonitor.Instance.BroadcastFrameAsync(perception, asciiMap);
+            }
         }
 
         private void OnGameStateReceived(GameStateDto state)
