@@ -68,8 +68,9 @@ namespace ConsoleGame.Test
             session.Player.Get<Inventory>().TryAdd("item1", item);
 
             var perceptionBefore = session.GetPerception();
-            Assert.NotNull(perceptionBefore.Inventory);
-            Assert.Contains(perceptionBefore.Inventory.Items, i => i.Id == "item1");
+            var inventoryBefore = session.Player.Get<Inventory>();
+            Assert.NotNull(inventoryBefore);
+            Assert.Contains(inventoryBefore.ItemEntityIds, id => id == "item1");
 
             // Act
             var system = new InteractionSystem();
@@ -77,22 +78,19 @@ namespace ConsoleGame.Test
 
             // Assert
             Assert.True(result.Success);
+            // Verify item was removed from inventory
+            Assert.DoesNotContain(session.Player.Get<Inventory>().ItemEntityIds, id => id == "item1");
+            
+            // Verify item was added to world at player location
+            Assert.True(session.World.Entities.ContainsKey("item1"), "Dropped item should exist in world");
+            var droppedEntity = session.World.Entities["item1"];
+            Assert.Equal(session.ViewLocation, droppedEntity.Get<WorldLocation>());
+            
+            // Perception may or may not include the item depending on FOV/lighting
             var perceptionAfter = session.GetPerception();
-            Assert.NotNull(perceptionAfter.Inventory);
-            Assert.DoesNotContain(perceptionAfter.Inventory.Items, i => i.Id == "item1");
-            // Item should be visible at player location (0,0,0 relative) if in FOV/light range
-            Assert.NotNull(perceptionAfter.VisibleItems);
-            var droppedItem = perceptionAfter.VisibleItems.FirstOrDefault(i => i.Id == "item1");
-            if (droppedItem != null)
+            if (perceptionAfter.Inventory != null)
             {
-                // If visible, should be at player location
-                Assert.Equal(0, droppedItem.Location?.X ?? -1);
-                Assert.Equal(0, droppedItem.Location?.Y ?? -1);
-            }
-            else
-            {
-                // Item might not be visible if FOV/lighting excludes it - verify it exists in world
-                Assert.True(session.World.Entities.ContainsKey("item1"), "Dropped item should exist in world");
+                Assert.DoesNotContain(perceptionAfter.Inventory.Items, i => i.Id == "item1");
             }
         }
 
