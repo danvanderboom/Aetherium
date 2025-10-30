@@ -136,6 +136,307 @@ namespace ConsoleGameServer
             }
             return InteractionResult.Ok();
         }
+
+        public InteractionResult TryActivate(GameSession session, string entityId)
+        {
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+
+            if (!session.World.Entities.TryGetValue(entityId, out var target))
+                return InteractionResult.Fail("Entity not found");
+
+            // Check if entity is adjacent or at same location
+            var targetLoc = target.Get<WorldLocation>();
+            var distance = System.Math.Abs(targetLoc.X - session.ViewLocation.X) + 
+                          System.Math.Abs(targetLoc.Y - session.ViewLocation.Y);
+            if (distance > 1)
+                return InteractionResult.Fail("Too far away");
+
+            var activatable = target.AllComponents.OfType<Activatable>().FirstOrDefault();
+            if (activatable == null)
+                return InteractionResult.Fail("Not activatable");
+
+            // Toggle or activate
+            if (activatable.ToggleBehavior)
+            {
+                activatable.IsActivated = !activatable.IsActivated;
+            }
+            else
+            {
+                activatable.IsActivated = true;
+            }
+
+            // Activate target entities (doors, mechanisms, etc.)
+            foreach (var targetId in activatable.TargetEntityIds)
+            {
+                if (session.World.Entities.TryGetValue(targetId, out var targetEntity))
+                {
+                    // If target is a door, unlock/open it
+                    var door = targetEntity.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+                    if (door != null && activatable.IsActivated)
+                    {
+                        door.IsLocked = false;
+                        if (!door.IsOpen)
+                        {
+                            ToggleDoor(session, targetId, open: true);
+                        }
+                    }
+
+                    // If target has LightSource, toggle it based on activation
+                    var lightSource = targetEntity.AllComponents.OfType<LightSource>().FirstOrDefault();
+                    if (lightSource != null)
+                    {
+                        lightSource.IsEnabled = activatable.IsActivated;
+                    }
+                }
+            }
+
+            return InteractionResult.Ok();
+        }
+
+        public InteractionResult TryConsume(GameSession session, string itemId)
+        {
+            if (session.Player == null)
+                return InteractionResult.Fail("No player");
+
+            var inventory = session.Player.Get<Inventory>();
+            if (inventory == null)
+                return InteractionResult.Fail("No inventory");
+
+            if (!inventory.Items.TryGetValue(itemId, out var item))
+                return InteractionResult.Fail("Item not in inventory");
+
+            var consumable = item.AllComponents.OfType<Consumable>().FirstOrDefault();
+            if (consumable == null)
+                return InteractionResult.Fail("Not consumable");
+
+            if (consumable.Uses <= 0)
+                return InteractionResult.Fail("No uses remaining");
+
+            // Apply effect
+            var health = session.Player.Get<Health>();
+            if (health != null)
+            {
+                switch (consumable.EffectType)
+                {
+                    case ConsumableEffectType.HealthRestore:
+                        health.Level = System.Math.Min(health.MaxLevel, health.Level + consumable.EffectValue);
+                        break;
+                    // Other effect types can be added later
+                }
+            }
+
+            // Decrease uses
+            consumable.Uses--;
+            if (consumable.Uses <= 0)
+            {
+                // Remove from inventory when fully consumed
+                inventory.Remove(itemId);
+            }
+
+            return InteractionResult.Ok();
+        }
+
+        public InteractionResult TryPlace(GameSession session, string itemId, WorldLocation? location = null)
+        {
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+
+            var inventory = session.Player.Get<Inventory>();
+            if (inventory == null)
+                return InteractionResult.Fail("No inventory");
+
+            if (!inventory.Items.TryGetValue(itemId, out var item))
+                return InteractionResult.Fail("Item not in inventory");
+
+            var placeLocation = location ?? session.ViewLocation;
+
+            // Check if item can be placed (has PlaceableLight component)
+            var placeableLight = item.AllComponents.OfType<PlaceableLight>().FirstOrDefault();
+            if (placeableLight != null)
+            {
+                placeableLight.IsPlaced = true;
+                var lightSource = item.AllComponents.OfType<LightSource>().FirstOrDefault();
+                if (lightSource != null)
+                {
+                    lightSource.IsDynamic = false;
+                    lightSource.IsEnabled = true;
+                }
+            }
+            else
+            {
+                return InteractionResult.Fail("Item cannot be placed");
+            }
+
+            // Remove from inventory and add to world
+            inventory.Remove(itemId);
+            item.Set(new WorldLocation(placeLocation.X, placeLocation.Y, placeLocation.Z));
+            session.World.AddEntity(item);
+
+            return InteractionResult.Ok();
+        }
+
+        public InteractionResult TryClimb(GameSession session, string entityId)
+        {
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+
+            if (!session.World.Entities.TryGetValue(entityId, out var target))
+                return InteractionResult.Fail("Entity not found");
+
+            var climbable = target.AllComponents.OfType<Climbable>().FirstOrDefault();
+            if (climbable == null)
+                return InteractionResult.Fail("Not climbable");
+
+            if (climbable.RequiresItem && !string.IsNullOrEmpty(climbable.RequiredItemId))
+            {
+                var inventory = session.Player.Get<Inventory>();
+                if (inventory == null || !inventory.Items.ContainsKey(climbable.RequiredItemId))
+                    return InteractionResult.Fail("Required item not in inventory");
+            }
+
+            // Climbing logic - for now, just verify it's at the same location
+            var targetLoc = target.Get<WorldLocation>();
+            if (targetLoc != session.ViewLocation)
+                return InteractionResult.Fail("Not at climbable location");
+
+            // Climbing would typically change Z level, but that's handled by movement system
+            // This interaction just verifies the climb can be attempted
+            return InteractionResult.Ok();
+        }
+
+        public InteractionResult TryForceOpen(GameSession session, string itemId, string doorId)
+        {
+            if (session.Player == null)
+                return InteractionResult.Fail("No player");
+
+            var inventory = session.Player.Get<Inventory>();
+            if (inventory == null)
+                return InteractionResult.Fail("No inventory");
+
+            if (!inventory.Items.TryGetValue(itemId, out var item))
+                return InteractionResult.Fail("Item not in inventory");
+
+            if (!session.World.Entities.TryGetValue(doorId, out var door))
+                return InteractionResult.Fail("Door not found");
+
+            var forcesDoor = item.AllComponents.OfType<ForcesDoor>().FirstOrDefault();
+            if (forcesDoor == null)
+                return InteractionResult.Fail("Item cannot force doors");
+
+            var doorComp = door.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+            if (doorComp == null)
+                return InteractionResult.Fail("Target is not a door");
+
+            // Check if crowbar is strong enough (simplified: always works if unlocked or strength > 0)
+            if (forcesDoor.Strength > 0)
+            {
+                doorComp.IsLocked = false;
+                if (!doorComp.IsOpen)
+                {
+                    ToggleDoor(session, doorId, open: true);
+                }
+
+                // Reduce durability
+                forcesDoor.Durability--;
+                if (forcesDoor.Durability <= 0)
+                {
+                    // Tool breaks
+                    inventory.Remove(itemId);
+                    return InteractionResult.Ok();
+                }
+            }
+
+            return InteractionResult.Ok();
+        }
+
+        public InteractionResult TryLockpick(GameSession session, string itemId, string doorId)
+        {
+            if (session.Player == null)
+                return InteractionResult.Fail("No player");
+
+            var inventory = session.Player.Get<Inventory>();
+            if (inventory == null)
+                return InteractionResult.Fail("No inventory");
+
+            if (!inventory.Items.TryGetValue(itemId, out var item))
+                return InteractionResult.Fail("Item not in inventory");
+
+            if (!session.World.Entities.TryGetValue(doorId, out var door))
+                return InteractionResult.Fail("Door not found");
+
+            var lockpick = item.AllComponents.OfType<Lockpick>().FirstOrDefault();
+            if (lockpick == null)
+                return InteractionResult.Fail("Item is not a lockpick");
+
+            var doorComp = door.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+            if (doorComp == null || !doorComp.IsLocked)
+                return InteractionResult.Fail("Door is not locked");
+
+            // Simplified lockpicking: success based on skill level (60% + 5% per skill level)
+            var successChance = 0.6 + (lockpick.SkillLevel * 0.05);
+            var random = new System.Random();
+            var roll = random.NextDouble();
+
+            if (roll < successChance)
+            {
+                doorComp.IsLocked = false;
+            }
+            else
+            {
+                // Reduce durability on failure
+                lockpick.Durability--;
+                if (lockpick.Durability <= 0)
+                {
+                    inventory.Remove(itemId);
+                    return InteractionResult.Fail("Lockpick broke");
+                }
+                return InteractionResult.Fail("Lockpicking failed");
+            }
+
+            // Reduce durability on success too
+            lockpick.Durability--;
+            if (lockpick.Durability <= 0)
+            {
+                inventory.Remove(itemId);
+            }
+
+            return InteractionResult.Ok();
+        }
+
+        public InteractionResult TryEquip(GameSession session, string itemId)
+        {
+            if (session.Player == null)
+                return InteractionResult.Fail("No player");
+
+            var inventory = session.Player.Get<Inventory>();
+            if (inventory == null)
+                return InteractionResult.Fail("No inventory");
+
+            if (!inventory.Items.TryGetValue(itemId, out var item))
+                return InteractionResult.Fail("Item not in inventory");
+
+            // Equip backpack (increases capacity)
+            var capacityBoost = item.AllComponents.OfType<CapacityBoost>().FirstOrDefault();
+            if (capacityBoost != null)
+            {
+                // Increase inventory capacity
+                inventory.Capacity += capacityBoost.AdditionalCapacity;
+                return InteractionResult.Ok();
+            }
+
+            // Equip concealment cloak (affects perception - handled by perception system)
+            var hidden = item.AllComponents.OfType<Hidden>().FirstOrDefault();
+            if (hidden != null)
+            {
+                // Cloak is equipped - perception system will check this
+                // For now, just mark as equipped by storing on player
+                session.Player.Set(item);
+                return InteractionResult.Ok();
+            }
+
+            return InteractionResult.Fail("Item cannot be equipped");
+        }
     }
 }
 
