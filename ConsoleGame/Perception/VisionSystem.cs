@@ -51,10 +51,17 @@ namespace ConsoleGame.Systems
                     var worldLoc = new WorldLocation(bounds.X + x, bounds.Y + y, origin.Z);
 
                     // Additional check: even if FOV says visible, require minimum light level
+                    // Note: Only apply dark filtering if there are actual light sources in the world.
+                    // If no light sources exist, show all FOV-visible cells (for testing scenarios).
                     var lightLevel = lightFrame.GetLightLevel(worldLoc);
-                    if (lightLevel < 0.05) // Almost completely dark
+                    
+                    // Check if there are any light sources in the world by seeing if any location has light > 0
+                    // (simpler: if origin has no light and no other cells have light, assume no light sources and don't filter)
+                    bool hasLightSources = originLightLevel > 0.001 || lightFrame.LightLevels.Count > 0;
+                    
+                    if (hasLightSources && lightLevel < 0.05)
                     {
-                        // Only allow visibility if very close (within 2 cells)
+                        // Very dark cell in a world with light sources - only allow visibility if very close (within 2 cells)
                         var dx = worldLoc.X - origin.X;
                         var dy = worldLoc.Y - origin.Y;
                         var distance = Math.Sqrt(dx * dx + dy * dy);

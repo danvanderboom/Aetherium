@@ -62,11 +62,33 @@ namespace ConsoleGame.Core
             
             Views.Add(mapView);
 
-            var locations = World.EntitiesByLocation.Keys.ToList();
-            if (locations.Any())
+            // Select a good starting location for the player
+            // For open space maps, prefer the center for maximum visibility
+            var fovBuilder = worldBuilder as FovDiagnosticWorldBuilder;
+            if (fovBuilder != null)
             {
-                var randomLocation = locations[rand.Next(0, locations.Count)];
-                mapView.WorldLocation = randomLocation;
+                var centerLocation = new WorldLocation(15, 15, 0);
+                if (World.PassableTerrain(centerLocation))
+                {
+                    mapView.WorldLocation = centerLocation;
+                    return; // Use center for FOV test maps
+                }
+            }
+            
+            // For other maps, select a random passable location
+            var passableLocation = World.SelectRandomPassableLocation();
+            if (passableLocation != null)
+            {
+                mapView.WorldLocation = passableLocation;
+            }
+            else
+            {
+                // Last resort: use first available location
+                var locations = World.EntitiesByLocation.Keys.ToList();
+                if (locations.Any())
+                {
+                    mapView.WorldLocation = locations[0];
+                }
             }
         }
 

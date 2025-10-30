@@ -4,6 +4,7 @@ using System.Linq;
 using ConsoleGame.Core;
 using ConsoleGame.Components;
 using ConsoleGame.Entities;
+using ConsoleGame.Lighting;
 
 namespace ConsoleGame.WorldBuilders
 {
@@ -28,6 +29,10 @@ namespace ConsoleGame.WorldBuilders
 
             switch (_testMapName.ToLowerInvariant())
             {
+                case "open_space":
+                    BuildOpenSpaceTest(world);
+                    AddLightSourceAtCenter(world, 15, 15, 0); // Add light at player start position
+                    break;
                 case "simple_wall":
                     BuildSimpleWallTest(world);
                     break;
@@ -53,11 +58,54 @@ namespace ConsoleGame.WorldBuilders
                     BuildChamberTest(world);
                     break;
                 default:
-                    BuildSimpleWallTest(world);
+                    BuildOpenSpaceTest(world);
                     break;
             }
 
             return world;
+        }
+
+        // Test 0: Open space - simple open area with good visibility from center
+        private void BuildOpenSpaceTest(World world)
+        {
+            // Create a 30x30 open area with a few features for visual interest
+            for (int y = 0; y < 30; y++)
+            {
+                for (int x = 0; x < 30; x++)
+                {
+                    world.SetTerrain("Indoors", new WorldLocation(x, y, 0));
+                }
+            }
+            
+            // Add a few walls for visual interest (but not blocking the center)
+            // A small room in the corner
+            for (int y = 5; y < 12; y++)
+            {
+                for (int x = 5; x < 12; x++)
+                {
+                    world.SetTerrain("Indoors", new WorldLocation(x, y, 0));
+                }
+            }
+            // Walls around the small room
+            for (int y = 4; y < 13; y++)
+            {
+                world.SetTerrain("Wall", new WorldLocation(4, y, 0));
+                world.SetTerrain("Wall", new WorldLocation(12, y, 0));
+            }
+            for (int x = 5; x < 12; x++)
+            {
+                world.SetTerrain("Wall", new WorldLocation(x, 4, 0));
+                world.SetTerrain("Wall", new WorldLocation(x, 12, 0));
+            }
+            
+            // Another feature - some forest tiles in a corner
+            for (int y = 20; y < 25; y++)
+            {
+                for (int x = 20; x < 25; x++)
+                {
+                    world.SetTerrain("Forest", new WorldLocation(x, y, 0));
+                }
+            }
         }
 
         // Test 1: Simple wall blocking - player at (5,5), wall at (10,5), corridor extends to (15,5)
@@ -343,6 +391,17 @@ namespace ConsoleGame.WorldBuilders
                 }
             }
         };
+
+        /// <summary>
+        /// Adds a light source at the specified location for visibility testing.
+        /// </summary>
+        private void AddLightSourceAtCenter(World world, int x, int y, int z)
+        {
+            var lightEntity = new LightEntity();
+            lightEntity.Set(new LightSource(1.0, 50)); // Full intensity, long range
+            lightEntity.Set(new WorldLocation(x, y, z));
+            world.AddEntity(lightEntity);
+        }
     }
 }
 

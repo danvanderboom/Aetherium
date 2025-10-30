@@ -16,7 +16,10 @@ namespace ConsoleGame
         //static void Main() => new ConsoleDungeonGame(new TorusWorldBuilder()).Run();
         
         // FOV Diagnostic Test Maps - uncomment the one you want to test:
-        static void Main() => new ConsoleDungeonGame(new TestMazeWorldBuilder()).Run();
+        //static void Main() => new ConsoleDungeonGame(new TestMazeWorldBuilder()).Run();
+        
+        // Start in a simple open space scenario with good visibility
+        static void Main() => new ConsoleDungeonGame(new FovDiagnosticWorldBuilder("open_space")).Run();
         //static void Main() => new ConsoleDungeonGame(new FovDiagnosticWorldBuilder("simple_wall")).Run();
         //static void Main() => new ConsoleDungeonGame(new FovDiagnosticWorldBuilder("corner_occlusion")).Run();
         //static void Main() => new ConsoleDungeonGame(new FovDiagnosticWorldBuilder("partial_opacity")).Run();
