@@ -141,6 +141,9 @@ namespace ConsoleGame.Rendering
                     currentY += 12; // Height of inventory widget + spacing
                 }
             }
+
+            // Help panel beneath widgets
+            RenderHelpPanel(state.Theme, startX, currentY);
         }
 
         private void RenderCompassWidget(CompassRenderData data, ThemeConfig theme, int x, int y)
@@ -189,6 +192,30 @@ namespace ConsoleGame.Rendering
                 .Header($"[{titleColor.ToMarkup()}]INVENTORY[/]")
                 .Border(borderStyle)
                 .BorderColor(borderColor);
+
+            Console.SetCursorPosition(x, y);
+            AnsiConsole.Write(panel);
+        }
+
+        private void RenderHelpPanel(ThemeConfig theme, int x, int y)
+        {
+            var borderStyle = GetBoxBorder(theme.BorderStyle);
+            var borderColor = GetSpectreColor(theme.BorderColor);
+            var titleColor = GetSpectreColor(theme.GetColor("widget_title", ConsoleColor.White));
+
+            var content = new Rows(
+                new Markup("[bold]Controls[/]"),
+                new Markup("Move: [yellow]WASD/Arrows[/]  Rotate: [yellow]Q/E[/]  Level: [yellow]R/F[/]"),
+                new Markup("Pickup: [yellow]G[/]  Drop: [yellow]P[/]  Open: [yellow]O[/]  Close: [yellow]C[/]"),
+                new Text(""),
+                new Markup("Audio: [yellow]N[/] toggle  [yellow]Shift+M[/] next track  [yellow]M[/] compass mode")
+            );
+
+            var panel = new Panel(content)
+                .Header($"[{titleColor.ToMarkup()}]HELP[/]")
+                .Border(borderStyle)
+                .BorderColor(borderColor)
+                .Expand();
 
             Console.SetCursorPosition(x, y);
             AnsiConsole.Write(panel);

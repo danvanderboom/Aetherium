@@ -20,9 +20,16 @@ namespace ConsoleGameServer
         {
             Console.WriteLine($"Client connected: {Context.ConnectionId}");
 
+            // Select world builder (env-flag gated)
+            WorldBuilder builder;
+            var audioTest = Environment.GetEnvironmentVariable("AUDIO_TEST");
+            if (string.Equals(audioTest, "1", StringComparison.OrdinalIgnoreCase))
+                builder = new AudioTestWorldBuilder();
+            else
+                builder = new FovDiagnosticWorldBuilder("open_space");
+
             // Create a new game session for this client
-            // Using FovDiagnosticWorldBuilder as default (matches current Program.cs)
-            var session = sessionManager.CreateSession(Context.ConnectionId, new FovDiagnosticWorldBuilder("open_space"));
+            var session = sessionManager.CreateSession(Context.ConnectionId, builder);
 
             // Send initial game state (without world coordinates)
             var initialState = new GameStateDto
