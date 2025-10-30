@@ -2,7 +2,10 @@ using System;
 using System.CommandLine;
 using System.IO;
 using System.Threading.Tasks;
+using System.Text.Json;
 using AgentCLI;
+using ConsoleGameServer.MultiWorld;
+using ConsoleGameServer.Narrative;
 
 namespace AgentCLI
 {
@@ -255,6 +258,343 @@ namespace AgentCLI
             visionCommand.AddCommand(visionStatusCommand);
 
             rootCommand.AddCommand(visionCommand);
+
+            // World management commands
+            var worldCommand = new Command("world", "Manage game worlds");
+            
+            var worldCreateCommand = new Command("create", "Create a new game world");
+            var worldNameArg = new Argument<string>("name", "World name");
+            var worldDescArg = new Argument<string>("description", "World description");
+            var worldGenArg = new Option<string>("--generator", () => "rooms-and-corridors", "Generator type");
+            var worldWidthArg = new Option<int>("--width", () => 100, "World width");
+            var worldHeightArg = new Option<int>("--height", () => 100, "World height");
+            var worldNarrativeArg = new Option<string?>("--narrative", () => null, "Narrative ID");
+            worldCreateCommand.AddArgument(worldNameArg);
+            worldCreateCommand.AddArgument(worldDescArg);
+            worldCreateCommand.AddOption(worldGenArg);
+            worldCreateCommand.AddOption(worldWidthArg);
+            worldCreateCommand.AddOption(worldHeightArg);
+            worldCreateCommand.AddOption(worldNarrativeArg);
+            worldCreateCommand.SetHandler(async (string name, string desc, string gen, int width, int height, string? narrativeId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var request = new CreateWorldRequest
+                    {
+                        Name = name,
+                        Description = desc,
+                        GeneratorType = gen,
+                        GeneratorParameters = new System.Collections.Generic.Dictionary<string, object>
+                        {
+                            ["Width"] = width,
+                            ["Height"] = height
+                        },
+                        NarrativeId = narrativeId,
+                        Size = new WorldSize { Width = width, Height = height, Depth = 1 }
+                    };
+                    
+                    var worldId = await mgmt.CreateWorldAsync(request);
+                    Console.WriteLine($"✓ Created world: {worldId}");
+                    Console.WriteLine($"  Name: {name}");
+                    Console.WriteLine($"  Size: {width}x{height}");
+                    Console.WriteLine($"  Generator: {gen}");
+                    if (narrativeId != null)
+                        Console.WriteLine($"  Narrative: {narrativeId}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error creating world: {ex.Message}");
+                }
+            }, worldNameArg, worldDescArg, worldGenArg, worldWidthArg, worldHeightArg, worldNarrativeArg);
+            worldCommand.AddCommand(worldCreateCommand);
+
+            var worldListCommand = new Command("list", "List all game worlds");
+            worldListCommand.SetHandler(async () =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var worlds = await mgmt.ListWorldsAsync();
+                    
+                    if (worlds.Count == 0)
+                    {
+                        Console.WriteLine("No worlds found.");
+                        return;
+                    }
+                    
+                    Console.WriteLine($"Found {worlds.Count} world(s):\n");
+                    foreach (var world in worlds)
+                    {
+                        Console.WriteLine($"[{world.WorldId}]");
+                        Console.WriteLine($"  Name: {world.Name}");
+                        Console.WriteLine($"  State: {world.State}");
+                        Console.WriteLine($"  Players: {world.PlayerCount}/{world.MaxPlayers}");
+                        Console.WriteLine($"  Maps: {world.MapIds.Count}");
+                        if (world.NarrativeId != null)
+                            Console.WriteLine($"  Narrative: {world.NarrativeId}");
+                        Console.WriteLine($"  Created: {world.CreatedAt:yyyy-MM-dd HH:mm:ss}");
+                        Console.WriteLine();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error listing worlds: {ex.Message}");
+                }
+            });
+            worldCommand.AddCommand(worldListCommand);
+
+            var worldInfoCommand = new Command("info", "Get detailed world information");
+            var worldIdInfoArg = new Argument<string>("worldId", "World ID");
+            worldInfoCommand.AddArgument(worldIdInfoArg);
+            worldInfoCommand.SetHandler(async (string worldId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var world = await mgmt.GetWorldInfoAsync(worldId);
+                    
+                    if (world == null)
+                    {
+                        Console.WriteLine($"✗ World {worldId} not found");
+                        return;
+                    }
+                    
+                    Console.WriteLine($"World: {world.Name}");
+                    Console.WriteLine($"  ID: {world.WorldId}");
+                    Console.WriteLine($"  State: {world.State}");
+                    Console.WriteLine($"  Description: {world.Description}");
+                    Console.WriteLine($"  Players: {world.PlayerCount}/{world.MaxPlayers}");
+                    Console.WriteLine($"  Maps: {string.Join(", ", world.MapIds)}");
+                    if (world.NarrativeId != null)
+                        Console.WriteLine($"  Narrative: {world.NarrativeId}");
+                    Console.WriteLine($"  Created: {world.CreatedAt:yyyy-MM-dd HH:mm:ss}");
+                    if (world.LastActivityAt.HasValue)
+                        Console.WriteLine($"  Last Activity: {world.LastActivityAt.Value:yyyy-MM-dd HH:mm:ss}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error getting world info: {ex.Message}");
+                }
+            }, worldIdInfoArg);
+            worldCommand.AddCommand(worldInfoCommand);
+
+            var worldPauseCommand = new Command("pause", "Pause a running world");
+            var worldIdPauseArg = new Argument<string>("worldId", "World ID");
+            worldPauseCommand.AddArgument(worldIdPauseArg);
+            worldPauseCommand.SetHandler(async (string worldId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var result = await mgmt.PauseWorldAsync(worldId);
+                    
+                    if (result.Success)
+                        Console.WriteLine($"✓ World {worldId} paused");
+                    else
+                        Console.WriteLine($"✗ Error: {result.Reason}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error pausing world: {ex.Message}");
+                }
+            }, worldIdPauseArg);
+            worldCommand.AddCommand(worldPauseCommand);
+
+            var worldResumeCommand = new Command("resume", "Resume a paused world");
+            var worldIdResumeArg = new Argument<string>("worldId", "World ID");
+            worldResumeCommand.AddArgument(worldIdResumeArg);
+            worldResumeCommand.SetHandler(async (string worldId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var result = await mgmt.ResumeWorldAsync(worldId);
+                    
+                    if (result.Success)
+                        Console.WriteLine($"✓ World {worldId} resumed");
+                    else
+                        Console.WriteLine($"✗ Error: {result.Reason}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error resuming world: {ex.Message}");
+                }
+            }, worldIdResumeArg);
+            worldCommand.AddCommand(worldResumeCommand);
+
+            var worldShutdownCommand = new Command("shutdown", "Shut down and remove a world");
+            var worldIdShutdownArg = new Argument<string>("worldId", "World ID");
+            worldShutdownCommand.AddArgument(worldIdShutdownArg);
+            worldShutdownCommand.SetHandler(async (string worldId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var result = await mgmt.ShutdownWorldAsync(worldId);
+                    
+                    if (result.Success)
+                        Console.WriteLine($"✓ World {worldId} shut down");
+                    else
+                        Console.WriteLine($"✗ Error: {result.Reason}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error shutting down world: {ex.Message}");
+                }
+            }, worldIdShutdownArg);
+            worldCommand.AddCommand(worldShutdownCommand);
+
+            rootCommand.AddCommand(worldCommand);
+
+            // Narrative management commands
+            var narrativeCommand = new Command("narrative", "Manage game narratives");
+            
+            var narrativeCreateCommand = new Command("create", "Create a new narrative");
+            var narrativeIdArg = new Argument<string>("narrativeId", "Narrative ID");
+            var narrativeNameArg = new Argument<string>("name", "Narrative name");
+            var narrativeDescArg = new Argument<string>("description", "Narrative description");
+            narrativeCreateCommand.AddArgument(narrativeIdArg);
+            narrativeCreateCommand.AddArgument(narrativeNameArg);
+            narrativeCreateCommand.AddArgument(narrativeDescArg);
+            narrativeCreateCommand.SetHandler(async (string id, string name, string desc) =>
+            {
+                try
+                {
+                    var narrative = client.GetNarrative(id);
+                    var definition = new NarrativeDefinition
+                    {
+                        NarrativeId = id,
+                        Name = name,
+                        Description = desc
+                    };
+                    
+                    await narrative.SetNarrativeAsync(definition);
+                    Console.WriteLine($"✓ Created narrative: {id}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error creating narrative: {ex.Message}");
+                }
+            }, narrativeIdArg, narrativeNameArg, narrativeDescArg);
+            narrativeCommand.AddCommand(narrativeCreateCommand);
+
+            var narrativeLoadCommand = new Command("load", "Load narrative from JSON file");
+            var narrativeFileArg = new Argument<string>("file", "Path to narrative JSON file");
+            narrativeLoadCommand.AddArgument(narrativeFileArg);
+            narrativeLoadCommand.SetHandler(async (string file) =>
+            {
+                try
+                {
+                    if (!File.Exists(file))
+                    {
+                        Console.WriteLine($"✗ File not found: {file}");
+                        return;
+                    }
+                    
+                    var json = await File.ReadAllTextAsync(file);
+                    var definition = JsonSerializer.Deserialize<NarrativeDefinition>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                    
+                    if (definition == null || string.IsNullOrEmpty(definition.NarrativeId))
+                    {
+                        Console.WriteLine($"✗ Invalid narrative file: missing NarrativeId");
+                        return;
+                    }
+                    
+                    var narrative = client.GetNarrative(definition.NarrativeId);
+                    await narrative.SetNarrativeAsync(definition);
+                    
+                    Console.WriteLine($"✓ Loaded narrative: {definition.NarrativeId}");
+                    Console.WriteLine($"  Name: {definition.Name}");
+                    Console.WriteLine($"  Quests: {definition.Quests.Count}");
+                    Console.WriteLine($"  Loot Tables: {definition.LootTables.Count}");
+                    Console.WriteLine($"  NPC Goals: {definition.NPCGoals.Count}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error loading narrative: {ex.Message}");
+                }
+            }, narrativeFileArg);
+            narrativeCommand.AddCommand(narrativeLoadCommand);
+
+            var narrativeShowCommand = new Command("show", "Show narrative details");
+            var narrativeIdShowArg = new Argument<string>("narrativeId", "Narrative ID");
+            narrativeShowCommand.AddArgument(narrativeIdShowArg);
+            narrativeShowCommand.SetHandler(async (string id) =>
+            {
+                try
+                {
+                    var narrative = client.GetNarrative(id);
+                    var definition = await narrative.GetNarrativeAsync();
+                    
+                    if (definition == null)
+                    {
+                        Console.WriteLine($"✗ Narrative {id} not found");
+                        return;
+                    }
+                    
+                    Console.WriteLine($"Narrative: {definition.Name}");
+                    Console.WriteLine($"  ID: {definition.NarrativeId}");
+                    Console.WriteLine($"  Description: {definition.Description}");
+                    Console.WriteLine($"  Quests: {definition.Quests.Count}");
+                    
+                    if (definition.Quests.Count > 0)
+                    {
+                        Console.WriteLine($"\n  Quest List:");
+                        foreach (var quest in definition.Quests)
+                        {
+                            Console.WriteLine($"    - {quest.Title} ({quest.QuestId})");
+                            Console.WriteLine($"      Objectives: {quest.Objectives.Count}");
+                        }
+                    }
+                    
+                    Console.WriteLine($"\n  Loot Tables: {definition.LootTables.Count}");
+                    foreach (var kvp in definition.LootTables)
+                    {
+                        Console.WriteLine($"    - {kvp.Key}: {kvp.Value.Entries.Count} entries");
+                    }
+                    
+                    Console.WriteLine($"\n  Monster Density Rules: {definition.MonsterDensity.Count}");
+                    foreach (var kvp in definition.MonsterDensity)
+                    {
+                        Console.WriteLine($"    - {kvp.Key}: {kvp.Value.MonsterTypes.Count} types");
+                    }
+                    
+                    Console.WriteLine($"\n  NPC Goals: {definition.NPCGoals.Count}");
+                    foreach (var goal in definition.NPCGoals)
+                    {
+                        Console.WriteLine($"    - {goal.GoalId} ({goal.NPCType}): {goal.GoalType}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error showing narrative: {ex.Message}");
+                }
+            }, narrativeIdShowArg);
+            narrativeCommand.AddCommand(narrativeShowCommand);
+
+            var narrativeDeleteCommand = new Command("delete", "Delete a narrative");
+            var narrativeIdDeleteArg = new Argument<string>("narrativeId", "Narrative ID");
+            narrativeDeleteCommand.AddArgument(narrativeIdDeleteArg);
+            narrativeDeleteCommand.SetHandler(async (string id) =>
+            {
+                try
+                {
+                    var narrative = client.GetNarrative(id);
+                    await narrative.DeleteAsync();
+                    Console.WriteLine($"✓ Deleted narrative: {id}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error deleting narrative: {ex.Message}");
+                }
+            }, narrativeIdDeleteArg);
+            narrativeCommand.AddCommand(narrativeDeleteCommand);
+
+            rootCommand.AddCommand(narrativeCommand);
 
             return await rootCommand.InvokeAsync(args);
         }

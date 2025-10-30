@@ -6,6 +6,8 @@ using Orleans;
 using Orleans.Hosting;
 using ConsoleGameServer.Agents;
 using ConsoleGameServer.Management;
+using ConsoleGameServer.Narrative;
+using ConsoleGameServer.MultiWorld;
 
 namespace AgentCLI
 {
@@ -56,6 +58,22 @@ namespace AgentCLI
 
             // Use singleton key "GLOBAL" for the management grain
             return _client.GetGrain<IGameManagementGrain>("GLOBAL");
+        }
+
+        public INarrativeGrain GetNarrative(string narrativeId)
+        {
+            if (_client == null)
+                throw new InvalidOperationException("Client not connected. Call ConnectAsync first.");
+
+            return _client.GetGrain<INarrativeGrain>(narrativeId);
+        }
+
+        public IWorldGrain GetWorld(string worldId)
+        {
+            if (_client == null)
+                throw new InvalidOperationException("Client not connected. Call ConnectAsync first.");
+
+            return _client.GetGrain<IWorldGrain>(worldId);
         }
 
         public async ValueTask DisposeAsync()
