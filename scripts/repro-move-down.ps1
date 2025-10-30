@@ -1,9 +1,8 @@
-# Repro script: start server/client, send one Down Arrow, wait, then cleanup
-# This script starts the processes directly (not via start-game-test.ps1) to avoid blocking on ReadKey
+# Repro script: start server/client, prompt user to press Down, observe for artifacts
+# Simplified version - user presses Down key manually in the client window
 
 param(
-    [int]$WaitBeforeKeysMs = 4000,
-    [int]$WaitAfterKeysMs = 3000
+    [int]$ObservationSeconds = 5
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,7 +43,7 @@ Write-Host "Server started (PID: $($serverProcess.Id))" -ForegroundColor Green
 # Start the client in a new window
 Write-Host "Starting client..." -ForegroundColor Yellow  
 $clientProcess = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\ConsoleGame'; Write-Host 'Starting client...' -ForegroundColor Green; `$env:AUDIO_TEST='1'; dotnet run" -PassThru -WindowStyle Normal
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
 
 if ($clientProcess.HasExited) {
     Write-Host "Client failed to start!" -ForegroundColor Red
@@ -55,53 +54,16 @@ if ($clientProcess.HasExited) {
 Write-Host "Client started (PID: $($clientProcess.Id))" -ForegroundColor Green
 Write-Host ""
 
-# Wait for UI to stabilize
-Write-Host "Waiting for UI to stabilize ($WaitBeforeKeysMs ms)..." -ForegroundColor Yellow
-Start-Sleep -Milliseconds $WaitBeforeKeysMs
+Write-Host "=== INSTRUCTIONS ===" -ForegroundColor Cyan
+Write-Host "1. Switch to the CLIENT window" -ForegroundColor Yellow
+Write-Host "2. Press the DOWN ARROW key ONCE" -ForegroundColor Yellow
+Write-Host "3. Observe if there are any visual artifacts (overlapping text, ghosting)" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Waiting $ObservationSeconds seconds for observation..." -ForegroundColor Cyan
+Write-Host "(Press Ctrl+C to stop earlier)" -ForegroundColor DarkGray
+Write-Host ""
 
-# Find and focus the client window, then send Down arrow
-Write-Host "Sending Down arrow key..." -ForegroundColor Cyan
-
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public static class Win32 {
-  [DllImport("user32.dll")] public static extern IntPtr FindWindow(string cls, string title);
-  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-}
-"@
-
-# Try to find the client window by title
-$hWnd = [IntPtr]::Zero
-$attempts = 0
-while ($hWnd -eq [IntPtr]::Zero -and $attempts -lt 10) {
-    $candidate = Get-Process | Where-Object { $_.MainWindowTitle -like '*ConsoleGameClient*' -or $_.Id -eq $clientProcess.Id } | Select-Object -First 1
-    if ($candidate -and $candidate.MainWindowHandle -ne [IntPtr]::Zero) {
-        $hWnd = $candidate.MainWindowHandle
-    }
-    if ($hWnd -eq [IntPtr]::Zero) {
-        Start-Sleep -Milliseconds 200
-        $attempts++
-    }
-}
-
-if ($hWnd -eq [IntPtr]::Zero) {
-    Write-Host "Could not find client window handle. Aborting repro." -ForegroundColor Red
-    Stop-Process -Id $clientProcess.Id -Force -ErrorAction SilentlyContinue
-    Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
-    Pop-Location
-    exit 1
-}
-
-[Win32]::SetForegroundWindow($hWnd) | Out-Null
-Start-Sleep -Milliseconds 500
-[System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
-Write-Host "Key sent!" -ForegroundColor Green
-
-# Wait to observe the result
-Write-Host "Waiting ($WaitAfterKeysMs ms) - check the client window for artifacts..." -ForegroundColor Yellow
-Start-Sleep -Milliseconds $WaitAfterKeysMs
+Start-Sleep -Seconds $ObservationSeconds
 
 # Cleanup
 Write-Host ""
