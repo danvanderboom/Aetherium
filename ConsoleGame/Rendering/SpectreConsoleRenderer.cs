@@ -258,13 +258,21 @@ namespace ConsoleGame.Rendering
                 if (x >= 0 && currentY >= 0)
                 {
                     Console.SetCursorPosition(x, currentY);
-                    // Remove ANSI so the console cell count matches our width math
-                    var clean = StripAnsi(line);
-                    if (clean.Length > width)
-                        clean = clean.Substring(0, width);
-                    if (clean.Length < width)
-                        clean = clean + new string(' ', width - clean.Length);
-                    Console.Write(clean);
+                    // Strip ANSI to calculate visible length, but write the original line with ANSI codes
+                    var visibleText = StripAnsi(line);
+                    var visibleLength = visibleText.Length;
+                    
+                    // Write the line with ANSI codes intact, then pad with spaces
+                    if (visibleLength <= width)
+                    {
+                        Console.Write(line);
+                        Console.Write(new string(' ', width - visibleLength));
+                    }
+                    else
+                    {
+                        // Truncate if too long (rare, but possible)
+                        Console.Write(visibleText.Substring(0, width));
+                    }
                 }
                 currentY++;
             }
