@@ -9,6 +9,7 @@ namespace ConsoleGameServer
     public class GameHub : Hub
     {
         private readonly GameSessionManager sessionManager;
+        private readonly InteractionSystem interactionSystem = new InteractionSystem();
 
         public GameHub(GameSessionManager sessionManager)
         {
@@ -97,6 +98,66 @@ namespace ConsoleGameServer
             // Send updated perception
             var perception = session.GetPerception();
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+        }
+
+        public async Task<InteractionResultDto> Pickup(string targetEntityId)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return new InteractionResultDto { Success = false, Reason = "No session" };
+
+            var result = interactionSystem.TryPickup(session, targetEntityId);
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
+        }
+
+        public async Task<InteractionResultDto> Drop(string itemEntityId)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return new InteractionResultDto { Success = false, Reason = "No session" };
+
+            var result = interactionSystem.TryDrop(session, itemEntityId);
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
+        }
+
+        public async Task<InteractionResultDto> Use(string itemEntityId, string onEntityId)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return new InteractionResultDto { Success = false, Reason = "No session" };
+
+            var result = interactionSystem.TryUse(session, itemEntityId, onEntityId);
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
+        }
+
+        public async Task<InteractionResultDto> Open(string targetEntityId)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return new InteractionResultDto { Success = false, Reason = "No session" };
+
+            var result = interactionSystem.TryOpen(session, targetEntityId);
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
+        }
+
+        public async Task<InteractionResultDto> Close(string targetEntityId)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return new InteractionResultDto { Success = false, Reason = "No session" };
+
+            var result = interactionSystem.TryClose(session, targetEntityId);
+            var perception = session.GetPerception();
+            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
         }
     }
 }

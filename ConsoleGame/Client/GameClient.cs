@@ -96,6 +96,41 @@ namespace ConsoleGame.Client
             await connection.InvokeAsync("JumpToRandomLocation");
         }
 
+        public async Task<InteractionResultDto?> PickupAsync(string targetEntityId)
+        {
+            if (connection == null || !IsConnected)
+                return null;
+            return await connection.InvokeAsync<InteractionResultDto>("Pickup", targetEntityId);
+        }
+
+        public async Task<InteractionResultDto?> DropAsync(string itemEntityId)
+        {
+            if (connection == null || !IsConnected)
+                return null;
+            return await connection.InvokeAsync<InteractionResultDto>("Drop", itemEntityId);
+        }
+
+        public async Task<InteractionResultDto?> UseAsync(string itemEntityId, string onEntityId)
+        {
+            if (connection == null || !IsConnected)
+                return null;
+            return await connection.InvokeAsync<InteractionResultDto>("Use", itemEntityId, onEntityId);
+        }
+
+        public async Task<InteractionResultDto?> OpenAsync(string targetEntityId)
+        {
+            if (connection == null || !IsConnected)
+                return null;
+            return await connection.InvokeAsync<InteractionResultDto>("Open", targetEntityId);
+        }
+
+        public async Task<InteractionResultDto?> CloseAsync(string targetEntityId)
+        {
+            if (connection == null || !IsConnected)
+                return null;
+            return await connection.InvokeAsync<InteractionResultDto>("Close", targetEntityId);
+        }
+
         public async Task DisconnectAsync()
         {
             if (connection != null)

@@ -55,6 +55,19 @@ The client will connect to the server and you can start playing.
 - **J**: Jump to random location
 - **M** + digit: Toggle grid coloring (0, 1, or 2)
 
+### Interaction Commands
+- **E or I**: Unified interact menu - shows all available actions (pickup, drop, use, open, close) based on current affordances
+- **, (comma)**: Quick pickup (picks up first visible item)
+- **. (period)**: Quick drop (drops last item in inventory)
+- **O**: Quick open (opens first available door)
+- **Ctrl+C**: Quick close (closes first available door)
+
+The unified interact command (E/I) displays a numbered menu of all available actions at your location, making it easy for both human players and AI agents to see their options. Actions are grouped by type and include descriptions (e.g., "Pick up Key", "Use item on door (requires red key)").
+
+**Inventory Display**: Your inventory appears below the map showing `[count/capacity]: item list`. Items with keys show their key ID (e.g., "Key(red)").
+
+Client API (`ConsoleGame/Client/GameClient.cs`) exposes `PickupAsync`, `DropAsync`, `UseAsync`, `OpenAsync`, `CloseAsync`. Each returns `InteractionResultDto { Success, Reason }` and triggers a perception update.
+
 ## Key Features
 
 - Real-time communication via SignalR
@@ -62,6 +75,13 @@ The client will connect to the server and you can start playing.
 - Client only receives what the player can perceive (FOV-based)
 - Lighting and vision systems computed server-side
 - Automatic reconnection if connection drops
+
+## DTO Additions
+
+- `InventoryDto { Capacity, Items: ItemDto[] }`
+- `ItemDto { Id, Label, Icon, KeyId? }`
+- `AffordanceDto { Action, ActorId, TargetId?, RequiresKeyId? }`
+- `PerceptionDto` now includes `Inventory`, `VisibleItems`, and `Affordances`.
 
 ## Project Structure
 

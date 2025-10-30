@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Linq;
 using ConsoleGame.Components;
 using ConsoleGame.Core;
+using ConsoleGame.Entities;
 using ConsoleGame.Lighting;
 using ConsoleGame.Systems;
 using ConsoleGameModel;
@@ -72,6 +73,91 @@ namespace ConsoleGameServer
             perception.TileTypes = world.TileTypes.ToDictionary(
                 kvp => kvp.Key,
                 kvp => kvp.Value.ToDto());
+
+            // Derive visible items and simple affordances
+            var visibleItems = new List<ItemDto>();
+            var affordances = new List<AffordanceDto>();
+
+            // Detect items in bounds
+            foreach (var loc in visionFrame.Visuals.Keys)
+            {
+                if (world.EntitiesByLocation.TryGetValue(loc, out var atLoc))
+                {
+                    foreach (var entity in atLoc.Values)
+                    {
+                        // Items are carriable non-character, non-terrain entities
+                        if (!(entity is Character) && !(entity is Entities.Terrain)
+                            && entity.AllComponents.OfType<Carriable>().Any())
+                        {
+                            var itemDto = entity.ToDto();
+                            // Include relative location
+                            itemDto.Location = new WorldLocationDto(
+                                loc.X - playerLocation.X,
+                                loc.Y - playerLocation.Y,
+                                loc.Z - playerLocation.Z);
+                            visibleItems.Add(itemDto);
+                        }
+                    }
+                }
+            }
+
+            perception.VisibleItems = visibleItems;
+
+            // If we can find the player entity at playerLocation, include inventory and affordances
+            if (world.EntitiesByLocation.TryGetValue(playerLocation, out var here))
+            {
+                var player = here.Values.OfType<Character>().FirstOrDefault();
+                if (player != null)
+                {
+                    var inv = player.Get<Inventory>();
+                    if (inv != null)
+                        perception.Inventory = inv.ToDto();
+
+                    // Pickup affordances for items at current tile
+                    foreach (var e in here.Values)
+                    {
+                        if (!(e is Character) && !(e is Entities.Terrain) && e.AllComponents.OfType<Carriable>().Any())
+                        {
+                            affordances.Add(new AffordanceDto { Action = "pickup", ActorId = player.EntityId, TargetId = e.EntityId });
+                        }
+                    }
+
+                    // Drop affordances for each inventory item
+                    if (inv != null)
+                    {
+                        foreach (var id in inv.ItemEntityIds)
+                            affordances.Add(new AffordanceDto { Action = "drop", ActorId = player.EntityId, TargetId = id });
+                    }
+
+                    // Door affordances for same/adjacent tiles
+                    var deltas = new[] { (0,0), (1,0), (-1,0), (0,1), (0,-1) };
+                    foreach (var (dx, dy) in deltas)
+                    {
+                        var loc = playerLocation.FromDelta(dx, dy, 0);
+                        if (world.EntitiesByLocation.TryGetValue(loc, out var ents))
+                        {
+                            foreach (var e in ents.Values)
+                            {
+                                var door = e.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+                                if (door != null)
+                                {
+                                    if (door.IsLocked)
+                                    {
+                                        var aff = new AffordanceDto { Action = "use", ActorId = player.EntityId, TargetId = e.EntityId, RequiresKeyId = door.KeyShape };
+                                        affordances.Add(aff);
+                                    }
+                                    else
+                                    {
+                                        affordances.Add(new AffordanceDto { Action = door.IsOpen ? "close" : "open", ActorId = player.EntityId, TargetId = e.EntityId });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            perception.Affordances = affordances;
 
             return perception;
         }

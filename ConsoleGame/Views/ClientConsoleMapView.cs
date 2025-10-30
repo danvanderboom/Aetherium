@@ -134,15 +134,30 @@ namespace ConsoleGame.Views
                             }, color, visual.LightLevel);
                         }
                     }
-                    else if (visual.Terrain != null)
-                    {
-                        // Draw terrain
-                        DrawTileType(visual.Terrain, color, visual.LightLevel);
-                    }
                     else
                     {
-                        Console.BackgroundColor = BackgroundColor;
-                        Console.Write(new string(' ', symbolWidth));
+                        // Check for items at this location first
+                        var itemAtLocation = Perception.VisibleItems?.FirstOrDefault(
+                            item => item.Location != null &&
+                            item.Location.X == relativeX &&
+                            item.Location.Y == relativeY &&
+                            item.Location.Z == relativeZ);
+
+                        if (itemAtLocation != null)
+                        {
+                            // Draw item
+                            DrawItem(itemAtLocation, color, visual.LightLevel);
+                        }
+                        else if (visual.Terrain != null)
+                        {
+                            // Draw terrain
+                            DrawTileType(visual.Terrain, color, visual.LightLevel);
+                        }
+                        else
+                        {
+                            Console.BackgroundColor = BackgroundColor;
+                            Console.Write(new string(' ', symbolWidth));
+                        }
                     }
                 }
             }
@@ -168,6 +183,56 @@ namespace ConsoleGame.Views
             Console.Write(
                 CenterText($"Player Position: (0, 0, 0) [relative coordinates only]",
                 Size.Width));
+
+            // Inventory summary (simple one-line list)
+            Console.SetCursorPosition(
+                ScreenPosition.X,
+                ScreenPosition.Y + size.Height + 4);
+
+            if (Perception.Inventory != null && Perception.Inventory.Items.Any())
+            {
+                var items = string.Join(
+                    ", ",
+                    Perception.Inventory.Items.Select(i => string.IsNullOrEmpty(i.KeyId) ? i.Label : $"{i.Label}({i.KeyId})"));
+                Console.Write(CenterText($"Inventory [{Perception.Inventory.Items.Count}/{Perception.Inventory.Capacity}]: {items}", Size.Width));
+            }
+            else
+            {
+                Console.Write(CenterText($"Inventory [0/{Perception.Inventory?.Capacity ?? 10}]: (empty)", Size.Width));
+            }
+        }
+
+        private void DrawItem(ItemDto item, ConsoleColor? gridColor = null, double lightLevel = 1.0)
+        {
+            // Map key ID to color for keys
+            ConsoleColor fgColor = ConsoleColor.White;
+            if (!string.IsNullOrEmpty(item.KeyId))
+            {
+                fgColor = item.KeyId.ToLowerInvariant() switch
+                {
+                    "red" => ConsoleColor.Red,
+                    "blue" => ConsoleColor.Blue,
+                    "green" => ConsoleColor.Green,
+                    "yellow" => ConsoleColor.Yellow,
+                    _ => ConsoleColor.White
+                };
+            }
+
+            var bgColor = gridColor ?? ConsoleColor.Black;
+            var icon = item.Icon;
+            if (string.IsNullOrEmpty(icon))
+                icon = "?";
+            if (icon.Length > symbolWidth)
+                icon = icon.Substring(0, symbolWidth);
+
+            // Apply lighting dimming
+            bgColor = DimColor(bgColor, lightLevel);
+            fgColor = DimColor(fgColor, lightLevel);
+
+            Console.BackgroundColor = bgColor;
+            Console.ForegroundColor = fgColor;
+
+            Console.Write(icon.PadRight(symbolWidth));
         }
 
         public void DrawTileType(TileTypeDto tileType, ConsoleColor? gridColor = null, double lightLevel = 1.0)

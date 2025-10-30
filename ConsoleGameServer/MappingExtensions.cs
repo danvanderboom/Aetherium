@@ -87,6 +87,38 @@ namespace ConsoleGameServer
                     kvp => kvp.Value.Count)
             };
         }
+
+        public static ItemDto ToDto(this ConsoleGame.Core.Entity entity)
+        {
+            var itemDto = new ItemDto
+            {
+                Id = entity.EntityId,
+            };
+
+            var carriable = entity.AllComponents.OfType<Carriable>().FirstOrDefault();
+            if (carriable != null)
+            {
+                itemDto.Label = carriable.Label;
+                itemDto.Icon = carriable.Icon;
+            }
+
+            var key = entity.AllComponents.OfType<ConsoleGame.Components.Key>().FirstOrDefault();
+            if (key != null)
+                itemDto.KeyId = key.KeyId;
+
+            return itemDto;
+        }
+
+        public static InventoryDto ToDto(this Inventory inventory)
+        {
+            var dto = new InventoryDto { Capacity = inventory.Capacity };
+            foreach (var id in inventory.ItemEntityIds)
+            {
+                if (inventory.Items.TryGetValue(id, out var e))
+                    dto.Items.Add(e.ToDto());
+            }
+            return dto;
+        }
     }
 }
 

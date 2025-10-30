@@ -42,7 +42,14 @@ namespace ConsoleGame
     {
         EntityAdded,
         EntityMoved,
-        EntityRemoved
+        EntityRemoved,
+        ItemPickedUp,
+        ItemDropped,
+        ItemUsed,
+        DoorOpened,
+        DoorClosed,
+        DoorLocked,
+        DoorUnlocked
     }
 
 

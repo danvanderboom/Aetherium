@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using ConsoleGame.Client;
 using ConsoleGame.Views;
 using ConsoleGameModel;
@@ -166,6 +167,28 @@ namespace ConsoleGame.Core
                     case ConsoleKey.J:
                         await gameClient.JumpToRandomLocationAsync();
                         break;
+                    case ConsoleKey.OemComma: // ',' pickup
+                        await HandlePickup();
+                        break;
+                    case ConsoleKey.OemPeriod: // '.' drop
+                        await HandleDrop();
+                        break;
+                    case ConsoleKey.U:
+                        await gameClient.ChangeLevelAsync(Console.CapsLock ? +10 : +1);
+                        break;
+                    case ConsoleKey.E:
+                    case ConsoleKey.I: // Unified interact command
+                        await HandleInteract();
+                        break;
+                    case ConsoleKey.O:
+                        await HandleOpen();
+                        break;
+                    case ConsoleKey.C:
+                        if (keyInfo.Modifiers == ConsoleModifiers.Control)
+                        {
+                            await HandleClose();
+                        }
+                        break;
                     case ConsoleKey.M:
                         // Toggle grid coloring
                         if (mapView.GridColoring == null)
@@ -235,6 +258,272 @@ namespace ConsoleGame.Core
             }
 
             Console.Clear();
+        }
+
+        private async Task HandlePickup()
+        {
+            if (currentPerception?.VisibleItems == null || !currentPerception.VisibleItems.Any())
+            {
+                Console.WriteLine("No items visible to pick up. Press any key to continue...");
+                Console.ReadKey(true);
+                return;
+            }
+
+            // For simplicity, pick up the first visible item at player location
+            // In a full UI, you'd show a menu to select which item
+            var targetId = currentPerception.VisibleItems.First().Id;
+            var result = await gameClient.PickupAsync(targetId);
+            if (result != null)
+            {
+                var msg = result.Success ? "Picked up item!" : $"Failed: {result.Reason}";
+                Console.WriteLine(msg);
+                await Task.Delay(500);
+                Clear(ConsoleColor.Black);
+                DisplayViews();
+            }
+        }
+
+        private async Task HandleDrop()
+        {
+            if (currentPerception?.Inventory == null || !currentPerception.Inventory.Items.Any())
+            {
+                Console.WriteLine("Inventory is empty. Press any key to continue...");
+                Console.ReadKey(true);
+                return;
+            }
+
+            // Drop the last item in inventory
+            var itemId = currentPerception.Inventory.Items.Last().Id;
+            var result = await gameClient.DropAsync(itemId);
+            if (result != null)
+            {
+                var msg = result.Success ? "Dropped item!" : $"Failed: {result.Reason}";
+                Console.WriteLine(msg);
+                await Task.Delay(500);
+                Clear(ConsoleColor.Black);
+                DisplayViews();
+            }
+        }
+
+        private async Task HandleUse()
+        {
+            if (currentPerception?.Inventory == null || !currentPerception.Inventory.Items.Any())
+            {
+                Console.WriteLine("No items to use. Press any key to continue...");
+                Console.ReadKey(true);
+                return;
+            }
+
+            // Use first item in inventory on first affordance that requires a key
+            var item = currentPerception.Inventory.Items.First();
+            var affordance = currentPerception.Affordances?.FirstOrDefault(a => a.Action == "use" && a.RequiresKeyId != null);
+            if (affordance == null)
+            {
+                Console.WriteLine("No targets requiring keys found. Press any key to continue...");
+                Console.ReadKey(true);
+                return;
+            }
+
+            var result = await gameClient.UseAsync(item.Id, affordance.TargetId ?? "");
+            if (result != null)
+            {
+                var msg = result.Success ? "Used item!" : $"Failed: {result.Reason}";
+                Console.WriteLine(msg);
+                await Task.Delay(500);
+                Clear(ConsoleColor.Black);
+                DisplayViews();
+            }
+        }
+
+        private async Task HandleOpen()
+        {
+            var affordance = currentPerception?.Affordances?.FirstOrDefault(a => a.Action == "open");
+            if (affordance == null)
+            {
+                Console.WriteLine("Nothing to open. Press any key to continue...");
+                Console.ReadKey(true);
+                return;
+            }
+
+            var result = await gameClient.OpenAsync(affordance.TargetId ?? "");
+            if (result != null)
+            {
+                var msg = result.Success ? "Opened!" : $"Failed: {result.Reason}";
+                Console.WriteLine(msg);
+                await Task.Delay(500);
+                Clear(ConsoleColor.Black);
+                DisplayViews();
+            }
+        }
+
+        private async Task HandleClose()
+        {
+            var affordance = currentPerception?.Affordances?.FirstOrDefault(a => a.Action == "close");
+            if (affordance == null)
+            {
+                Console.WriteLine("Nothing to close. Press any key to continue...");
+                Console.ReadKey(true);
+                return;
+            }
+
+            var result = await gameClient.CloseAsync(affordance.TargetId ?? "");
+            if (result != null)
+            {
+                var msg = result.Success ? "Closed!" : $"Failed: {result.Reason}";
+                Console.WriteLine(msg);
+                await Task.Delay(500);
+                Clear(ConsoleColor.Black);
+                DisplayViews();
+            }
+        }
+
+        private async Task HandleInteract()
+        {
+            // Show available actions from affordances
+            if (currentPerception?.Affordances == null || !currentPerception.Affordances.Any())
+            {
+                Console.WriteLine("No actions available here. Press any key to continue...");
+                Console.ReadKey(true);
+                return;
+            }
+
+            // Group affordances by action type for display
+            var grouped = currentPerception.Affordances
+                .GroupBy(a => a.Action)
+                .ToList();
+
+            Console.Clear();
+            Console.WriteLine("=== Available Actions ===");
+            Console.WriteLine();
+
+            int index = 1;
+            var actionMap = new Dictionary<int, AffordanceDto>();
+
+            foreach (var group in grouped)
+            {
+                foreach (var aff in group)
+                {
+                    var description = BuildAffordanceDescription(aff);
+                    Console.WriteLine($"{index}. {aff.Action.ToUpperInvariant()}: {description}");
+                    actionMap[index] = aff;
+                    index++;
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"{index}. Cancel");
+            Console.WriteLine();
+            Console.Write($"Select action (1-{index}): ");
+
+            try
+            {
+                var input = Console.ReadLine();
+                if (int.TryParse(input, out var choice))
+                {
+                    if (choice == index)
+                    {
+                        // Cancel
+                        Clear(ConsoleColor.Black);
+                        DisplayViews();
+                        return;
+                    }
+
+                    if (actionMap.TryGetValue(choice, out var selectedAffordance))
+                    {
+                        await ExecuteAffordance(selectedAffordance);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid choice. Press any key to continue...");
+                        Console.ReadKey(true);
+                        Clear(ConsoleColor.Black);
+                        DisplayViews();
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Invalid input. Press any key to continue...");
+                    Console.ReadKey(true);
+                    Clear(ConsoleColor.Black);
+                    DisplayViews();
+                }
+            }
+            catch
+            {
+                // Fallback if input fails
+                Clear(ConsoleColor.Black);
+                DisplayViews();
+            }
+        }
+
+        private string BuildAffordanceDescription(AffordanceDto aff)
+        {
+            var item = currentPerception?.Inventory?.Items.FirstOrDefault(i => i.Id == aff.TargetId);
+            var visibleItem = currentPerception?.VisibleItems?.FirstOrDefault(i => i.Id == aff.TargetId);
+            var itemLabel = item?.Label ?? visibleItem?.Label ?? $"Entity {aff.TargetId?.Substring(0, Math.Min(8, aff.TargetId?.Length ?? 0))}";
+
+            switch (aff.Action.ToLowerInvariant())
+            {
+                case "pickup":
+                    return $"Pick up {itemLabel}";
+                case "drop":
+                    return $"Drop {itemLabel}";
+                case "use":
+                    var requiresKey = !string.IsNullOrEmpty(aff.RequiresKeyId) ? $" (requires {aff.RequiresKeyId} key)" : "";
+                    return $"Use item on {itemLabel}{requiresKey}";
+                case "open":
+                    return $"Open {itemLabel}";
+                case "close":
+                    return $"Close {itemLabel}";
+                default:
+                    return $"{aff.Action} {itemLabel}";
+            }
+        }
+
+        private async Task ExecuteAffordance(AffordanceDto aff)
+        {
+            InteractionResultDto? result = null;
+            string msg = "";
+
+            switch (aff.Action.ToLowerInvariant())
+            {
+                case "pickup":
+                    result = await gameClient.PickupAsync(aff.TargetId ?? "");
+                    msg = result?.Success == true ? "Picked up!" : $"Failed: {result?.Reason ?? "Unknown error"}";
+                    break;
+                case "drop":
+                    result = await gameClient.DropAsync(aff.TargetId ?? "");
+                    msg = result?.Success == true ? "Dropped!" : $"Failed: {result?.Reason ?? "Unknown error"}";
+                    break;
+                case "use":
+                    // For use, we need an item from inventory and a target
+                    if (currentPerception?.Inventory?.Items != null && currentPerception.Inventory.Items.Any())
+                    {
+                        var item = currentPerception.Inventory.Items.FirstOrDefault(i => 
+                            !string.IsNullOrEmpty(i.KeyId) && i.KeyId == aff.RequiresKeyId) 
+                            ?? currentPerception.Inventory.Items.First();
+                        result = await gameClient.UseAsync(item.Id, aff.TargetId ?? "");
+                        msg = result?.Success == true ? "Used!" : $"Failed: {result?.Reason ?? "Unknown error"}";
+                    }
+                    else
+                    {
+                        msg = "No items in inventory to use";
+                    }
+                    break;
+                case "open":
+                    result = await gameClient.OpenAsync(aff.TargetId ?? "");
+                    msg = result?.Success == true ? "Opened!" : $"Failed: {result?.Reason ?? "Unknown error"}";
+                    break;
+                case "close":
+                    result = await gameClient.CloseAsync(aff.TargetId ?? "");
+                    msg = result?.Success == true ? "Closed!" : $"Failed: {result?.Reason ?? "Unknown error"}";
+                    break;
+            }
+
+            Console.WriteLine(msg);
+            await Task.Delay(1000);
+            Clear(ConsoleColor.Black);
+            DisplayViews();
         }
     }
 }

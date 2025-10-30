@@ -34,6 +34,11 @@ namespace ConsoleGameServer
             if (startLocation != null)
             {
                 ViewLocation = startLocation;
+                // Create a player character at the view location with inventory
+                Player = new Character();
+                Player.Set(new WorldLocation(startLocation.X, startLocation.Y, startLocation.Z));
+                Player.Set(new Inventory());
+                World.AddEntity(Player);
             }
             else
             {
@@ -42,6 +47,10 @@ namespace ConsoleGameServer
                 if (locations.Count > 0)
                 {
                     ViewLocation = new WorldLocation(15, 15, 0);
+                    Player = new Character();
+                    Player.Set(new WorldLocation(15, 15, 0));
+                    Player.Set(new Inventory());
+                    World.AddEntity(Player);
                 }
             }
         }
@@ -82,6 +91,13 @@ namespace ConsoleGameServer
                 WorldDirection.West => ViewLocation.FromDelta(-distance, 0, 0),
                 _ => ViewLocation
             };
+
+            if (Player != null)
+            {
+                // Keep player entity co-located with the view
+                var destination = new WorldLocation(ViewLocation.X, ViewLocation.Y, ViewLocation.Z);
+                World.MoveEntity(Player.EntityId, destination);
+            }
         }
 
         public void RotateView(bool clockwise)
@@ -115,6 +131,11 @@ namespace ConsoleGameServer
             if (ViewLocation != null)
             {
                 ViewLocation = ViewLocation.FromDelta(0, 0, deltaZ);
+                if (Player != null)
+                {
+                    var destination = new WorldLocation(ViewLocation.X, ViewLocation.Y, ViewLocation.Z);
+                    World.MoveEntity(Player.EntityId, destination);
+                }
             }
         }
 
