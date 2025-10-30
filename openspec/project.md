@@ -1,31 +1,158 @@
 # Project Context
 
 ## Purpose
-[Describe your project's purpose and goals]
+ConsoleGame is a real-time multiplayer dungeon crawler game with a client-server architecture. The game features a console-based UI with ASCII graphics, real-time lighting, field-of-view calculations, and interactive gameplay elements. The project includes a monitoring system for debugging and automated testing.
 
 ## Tech Stack
-- [List your primary technologies]
-- [e.g., TypeScript, React, Node.js]
+- **Backend**: .NET 9.0, ASP.NET Core, SignalR
+- **Client**: .NET 9.0, Console Application
+- **Testing**: xUnit, NUnit
+- **Architecture**: Client-Server with WebSocket communication
+- **Monitoring**: Built-in WebSocket server, PowerShell clients
 
 ## Project Conventions
 
 ### Code Style
-[Describe your code style preferences, formatting rules, and naming conventions]
+- C# with nullable reference types enabled
+- PascalCase for public members, camelCase for private
+- Use meaningful variable names and avoid abbreviations
+- Prefer composition over inheritance
+- Use `var` for local variables when type is obvious
 
 ### Architecture Patterns
-[Document your architectural decisions and patterns]
+- **ECS (Entity-Component-System)**: Game entities are composed of components
+- **Client-Server**: Server maintains authoritative game state, client renders
+- **SignalR**: Real-time communication between client and server
+- **Singleton**: Used sparingly for services like monitoring
+- **Observer**: Event-driven updates for perception changes
 
 ### Testing Strategy
-[Explain your testing approach and requirements]
+- Unit tests for core game logic (geometry, FOV, lighting)
+- Integration tests for client-server communication
+- Manual testing for monitoring system (PowerShell scripts)
+- All tests must pass before commits
+- Use xUnit for new tests, maintain existing NUnit tests
 
 ### Git Workflow
-[Describe your branching strategy and commit conventions]
+- Main branch: `master`
+- Feature branches for larger changes
+- Commit messages: descriptive, include scope
+- All tests must pass before push
+- Use conventional commit format when possible
 
 ## Domain Context
-[Add domain-specific knowledge that AI assistants need to understand]
+
+### Game Mechanics
+- **Player Movement**: Arrow keys for movement, Z/X for rotation
+- **Field of View**: Ray-casting based visibility calculations
+- **Lighting System**: Dynamic light propagation with dimming
+- **Inventory**: Item pickup/drop with capacity limits
+- **Interactions**: Doors, switches, keys, and other interactive objects
+
+### Coordinate System
+- **World Coordinates**: Absolute positions in 3D space (X, Y, Z)
+- **Relative Coordinates**: Player-relative positions for client rendering
+- **Screen Coordinates**: Console display positions
+
+### Key Components
+- **Entities**: Game objects (Player, Monster, Door, Item, etc.)
+- **Components**: Data containers (Health, Tile, LightSource, etc.)
+- **Systems**: Logic processors (VisionSystem, LightingSystem, etc.)
+- **Views**: Rendering components (ConsoleMapView, ClientConsoleMapView)
+
+## Monitoring System
+
+### Overview
+The game includes a built-in monitoring system that allows real-time observation of game state for debugging, testing, and AI development.
+
+### Quick Start
+1. **Start the game**: `cd ConsoleGame && dotnet run`
+2. **Connect monitor**: `cd scripts && .\monitor-game.ps1 -DisplayAsciiMap`
+3. **WebSocket endpoint**: `ws://localhost:5001/monitor`
+
+### Features
+- **Real-time streaming**: WebSocket-based push updates
+- **Dual data format**: Raw perception JSON + rendered ASCII maps
+- **PowerShell client**: Easy connection and display
+- **File logging**: Optional human-readable logs
+- **Zero dependencies**: Uses built-in .NET libraries
+
+### Usage Examples
+```powershell
+# Basic monitoring (stats only)
+.\scripts\monitor-game.ps1
+
+# With ASCII map display
+.\scripts\monitor-game.ps1 -DisplayAsciiMap
+
+# Save frames for analysis
+.\scripts\monitor-game.ps1 -SaveToFile -OutputPath "./test-run"
+
+# Full verbose mode
+.\scripts\monitor-game.ps1 -DisplayAsciiMap -DisplayJson -SaveToFile -Verbose
+```
+
+### Configuration
+Edit `ConsoleGame/Program.cs` to modify:
+- Port (default: 5001)
+- File logging enabled/disabled
+- Output directory for logs
+
+## OpenSpec Usage
+
+### What is OpenSpec?
+OpenSpec is a spec-driven development system used in this project to manage requirements, track changes, and ensure consistent development practices.
+
+### Quick Commands
+```bash
+# List active changes and specs
+openspec list
+openspec list --specs
+
+# View details
+openspec show [change-id]
+openspec show [spec-id] --type spec
+
+# Validate changes
+openspec validate [change-id] --strict
+
+# Archive completed changes
+openspec archive [change-id] --yes
+```
+
+### When to Use OpenSpec
+- **Create proposals** for new features, breaking changes, or architecture changes
+- **Skip proposals** for bug fixes, typos, or dependency updates
+- **Always validate** before implementation: `openspec validate [change-id] --strict`
+
+### Key Files
+- `openspec/specs/` - Current requirements (what IS built)
+- `openspec/changes/` - Proposed changes (what SHOULD change)
+- `openspec/project.md` - This file (project context)
+
+### Workflow
+1. **Explore**: `openspec list` to see current state
+2. **Create**: New change proposal with `proposal.md`, `tasks.md`, and spec deltas
+3. **Validate**: `openspec validate [change-id] --strict`
+4. **Implement**: Follow tasks.md checklist
+5. **Archive**: `openspec archive [change-id] --yes` after completion
 
 ## Important Constraints
-[List any technical, business, or regulatory constraints]
+- **Console UI**: Must work in standard Windows console
+- **Real-time**: Game must maintain 60+ FPS for smooth gameplay
+- **Memory**: Efficient rendering to avoid console flicker
+- **Compatibility**: .NET 9.0+ required
+- **Platform**: Primarily Windows (uses Console.Beep, Console.CapsLock)
 
 ## External Dependencies
-[Document key external services, APIs, or systems]
+- **SignalR**: Real-time client-server communication
+- **Newtonsoft.Json**: JSON serialization for DTOs
+- **System.Net.WebSockets**: Built-in WebSocket support for monitoring
+- **System.Net.HttpListener**: Built-in HTTP server for monitoring
+
+## Development Notes
+- **Monitoring**: Always test with PowerShell client after changes
+- **Performance**: Monitor frame rates during development
+- **Testing**: Run `dotnet test` before commits
+- **Documentation**: Update README files when adding features
+- **Specs**: Use OpenSpec for significant changes
