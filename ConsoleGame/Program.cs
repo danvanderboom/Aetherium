@@ -18,6 +18,19 @@ namespace ConsoleGame
                 return;
             }
 
+            // UI self-test harness
+            if (args.Length > 0 && args[0] == "--ui-selftest")
+            {
+                var serverUrl = "http://localhost:5000/gamehub";
+                if (args.Length > 1 && args[1].StartsWith("http"))
+                    serverUrl = args[1];
+
+                var selfTest = new ConsoleGame.SelfTest.ConsoleUiSelfTest(serverUrl);
+                var exitCode = await selfTest.RunMoveDownScenarioAsync();
+                Environment.Exit(exitCode);
+                return;
+            }
+
             // Initialize monitoring service
             var monitoringConfig = new MonitoringConfig
             {
