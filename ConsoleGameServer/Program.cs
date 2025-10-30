@@ -8,6 +8,8 @@ using Microsoft.Extensions.Hosting;
 using Orleans;
 using Orleans.Hosting;
 using ConsoleGameServer.Agents;
+using ConsoleGameServer.Management;
+using Microsoft.AspNetCore.SignalR;
 
 namespace ConsoleGameServer
 {
@@ -31,6 +33,7 @@ namespace ConsoleGameServer
 
             // Add Orleans co-hosting (can be disabled for tests via env var)
             var disableOrleans = Environment.GetEnvironmentVariable("DISABLE_ORLEANS") == "1";
+            
             if (!disableOrleans)
             {
                 builder.Host.UseOrleans(siloBuilder =>
@@ -38,6 +41,24 @@ namespace ConsoleGameServer
                     siloBuilder.UseLocalhostClustering();
                     // Ensure grains can resolve the same PromptRegistry singleton
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<PromptRegistry>());
+                    
+                    // Register GameSessionManager for GameManagementGrain
+                    // With co-hosting, Orleans can access host services via IHost
+                    siloBuilder.Services.AddSingleton<GameSessionManager>(sp =>
+                    {
+                        // Get the host from Orleans service provider (co-hosting provides this)
+                        var host = sp.GetRequiredService<IHost>();
+                        return host.Services.GetRequiredService<GameSessionManager>();
+                    });
+                    
+                    // Register IHubContext<GameHub> for GameManagementGrain
+                    // With co-hosting, Orleans can access host services via IHost
+                    siloBuilder.Services.AddSingleton<IHubContext<GameHub>>(sp =>
+                    {
+                        // Get the host from Orleans service provider (co-hosting provides this)
+                        var host = sp.GetRequiredService<IHost>();
+                        return host.Services.GetRequiredService<IHubContext<GameHub>>();
+                    });
                 });
             }
 
