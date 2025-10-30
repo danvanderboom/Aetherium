@@ -142,7 +142,8 @@ namespace ConsoleGame.Rendering
                 }
             }
 
-            // Help panel beneath widgets
+            // Help panel beneath widgets - add some spacing
+            currentY += 2;
             RenderHelpPanel(state.Theme, startX, currentY);
         }
 
@@ -204,10 +205,8 @@ namespace ConsoleGame.Rendering
             var titleColor = GetSpectreColor(theme.GetColor("widget_title", ConsoleColor.White));
 
             var content = new Rows(
-                new Markup("[bold]Controls[/]"),
                 new Markup("Move: [yellow]WASD/Arrows[/]  Rotate: [yellow]Q/E[/]  Level: [yellow]R/F[/]"),
                 new Markup("Pickup: [yellow]G[/]  Drop: [yellow]P[/]  Open: [yellow]O[/]  Close: [yellow]C[/]"),
-                new Text(""),
                 new Markup("Audio: [yellow]N[/] toggle  [yellow]Shift+M[/] next track  [yellow]M[/] compass mode")
             );
 
@@ -217,6 +216,7 @@ namespace ConsoleGame.Rendering
                 .BorderColor(borderColor)
                 .Expand();
 
+            // Position the panel properly
             Console.SetCursorPosition(x, y);
             AnsiConsole.Write(panel);
         }
