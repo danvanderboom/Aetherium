@@ -312,6 +312,188 @@ namespace ConsoleGame.Test
                        perception.TileTypes.Any(),
                        "Should include tile type definitions");
         }
+
+        [Fact]
+        public void GameSession_ToggleDirectionalVision()
+        {
+            // Arrange
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+            Assert.False(session.DirectionalVisionMode); // Default is off
+
+            // Act
+            session.DirectionalVisionMode = true;
+
+            // Assert
+            Assert.True(session.DirectionalVisionMode);
+        }
+
+        [Fact]
+        public void GameSession_RotateByDegrees()
+        {
+            // Arrange
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+            session.HeadingDegrees = 0; // Start facing North
+
+            // Act
+            session.RotateView(15); // Rotate 15 degrees clockwise
+
+            // Assert
+            Assert.Equal(15, session.HeadingDegrees);
+        }
+
+        [Fact]
+        public void GameSession_RotateByDegreesWrapsAround()
+        {
+            // Arrange
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+            session.HeadingDegrees = 350;
+
+            // Act
+            session.RotateView(20); // Rotate 20 degrees clockwise (should wrap to 10)
+
+            // Assert
+            Assert.Equal(10, session.HeadingDegrees);
+        }
+
+        [Fact]
+        public void GameSession_RotateByNegativeDegreesCounterClockwise()
+        {
+            // Arrange
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+            session.HeadingDegrees = 0;
+
+            // Act
+            session.RotateView(-15); // Rotate 15 degrees counter-clockwise
+
+            // Assert
+            Assert.Equal(345, session.HeadingDegrees); // 0 - 15 + 360 = 345
+        }
+
+        [Fact]
+        public void PerceptionDto_IncludesDirectionalVisionFields()
+        {
+            // Arrange
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+            session.DirectionalVisionMode = true;
+            session.HeadingDegrees = 45;
+
+            // Act
+            var perception = session.GetPerception();
+
+            // Assert
+            Assert.Equal(45, perception.HeadingDegrees);
+            Assert.True(perception.IsDirectionalVision);
+            Assert.InRange(perception.FieldOfViewDegrees, 1, 360);
+        }
+
+        [Fact]
+        public void PerceptionService_DirectionalVisionFiltersVisibility()
+        {
+            // Arrange
+            var worldBuilder = new FovDiagnosticWorldBuilder("open_space");
+            var world = worldBuilder.Build();
+            var service = new PerceptionService();
+            var playerLocation = new ConsoleGame.Components.WorldLocation(15, 15, 0);
+            var viewportSize = new Size(42, 22);
+
+            // Act - Compute perception with directional vision facing North (0°) with 90° FOV
+            var perception = service.ComputePerception(
+                world, 
+                playerLocation, 
+                ConsoleGame.WorldDirection.North, 
+                viewportSize,
+                LightingMode.Torch,
+                VisionMode.Normal,
+                null,
+                DateTime.UtcNow,
+                directionalVision: true,
+                headingDegrees: 0,
+                fovDegrees: 90);
+
+            // Assert
+            Assert.True(perception.IsDirectionalVision);
+            Assert.Equal(0, perception.HeadingDegrees);
+            Assert.Equal(90, perception.FieldOfViewDegrees);
+
+            // Verify that some cells are visible (north) and some are filtered out
+            // The exact counts depend on the world, but we should have fewer visuals than omnidirectional
+            Assert.NotEmpty(perception.Visuals);
+        }
+
+        [Fact]
+        public void PerceptionService_DirectionalVisionVsOmnidirectional()
+        {
+            // Arrange
+            var worldBuilder = new FovDiagnosticWorldBuilder("open_space");
+            var world = worldBuilder.Build();
+            var service = new PerceptionService();
+            var playerLocation = new ConsoleGame.Components.WorldLocation(15, 15, 0);
+            var viewportSize = new Size(42, 22);
+
+            // Act - Get both omnidirectional and directional perceptions
+            var omniPerception = service.ComputePerception(
+                world, playerLocation, ConsoleGame.WorldDirection.North, viewportSize,
+                LightingMode.Torch, VisionMode.Normal, null, DateTime.UtcNow,
+                directionalVision: false, headingDegrees: null, fovDegrees: null);
+
+            var directionalPerception = service.ComputePerception(
+                world, playerLocation, ConsoleGame.WorldDirection.North, viewportSize,
+                LightingMode.Torch, VisionMode.Normal, null, DateTime.UtcNow,
+                directionalVision: true, headingDegrees: 0, fovDegrees: 90);
+
+            // Assert - Directional vision should see fewer cells than omnidirectional
+            Assert.True(directionalPerception.Visuals.Count < omniPerception.Visuals.Count,
+                $"Directional vision ({directionalPerception.Visuals.Count} cells) should see fewer cells than omnidirectional ({omniPerception.Visuals.Count} cells)");
+        }
+
+        [Fact]
+        public void GameSession_HeadingPropertyUsesDegreesConversion()
+        {
+            // Arrange
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+
+            // Act - Set using enum property
+            session.Heading = ConsoleGame.WorldDirection.East;
+
+            // Assert - HeadingDegrees should be updated
+            Assert.Equal(90, session.HeadingDegrees);
+        }
+
+        [Fact]
+        public void GameSession_DegreesPropertyUpdatesHeading()
+        {
+            // Arrange
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+
+            // Act - Set degrees directly
+            session.HeadingDegrees = 90;
+
+            // Assert - Heading enum should return East
+            Assert.Equal(ConsoleGame.WorldDirection.East, session.Heading);
+        }
+
+        [Fact]
+        public void GameSession_DegreesToHeadingRounding()
+        {
+            // Arrange
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+
+            // Act & Assert - Test rounding to nearest cardinal direction
+            session.HeadingDegrees = 30;
+            Assert.Equal(ConsoleGame.WorldDirection.North, session.Heading); // 30° rounds to North (0-44)
+
+            session.HeadingDegrees = 60;
+            Assert.Equal(ConsoleGame.WorldDirection.East, session.Heading); // 60° rounds to East (45-134)
+
+            session.HeadingDegrees = 150;
+            Assert.Equal(ConsoleGame.WorldDirection.South, session.Heading); // 150° rounds to South (135-224)
+
+            session.HeadingDegrees = 240;
+            Assert.Equal(ConsoleGame.WorldDirection.West, session.Heading); // 240° rounds to West (225-314)
+
+            session.HeadingDegrees = 330;
+            Assert.Equal(ConsoleGame.WorldDirection.North, session.Heading); // 330° rounds to North (315-359)
+        }
     }
 }
 

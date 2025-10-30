@@ -1,11 +1,11 @@
 using System;
-using System.Collections.Generic;
 using ConsoleGame.Components;
+using ConsoleGame.Core;
 
 namespace ConsoleGame.WorldGen
 {
     /// <summary>
-    /// Context information for map generation, including random seed, dimensions, and feature registry.
+    /// Context information for map generation, including random seed, dimensions, and generation parameters.
     /// </summary>
     public sealed class GeneratorContext
     {
@@ -44,6 +44,16 @@ namespace ConsoleGame.WorldGen
         /// </summary>
         public MapGeneratorRegistry? FeatureRegistry { get; init; }
 
+        /// <summary>
+        /// Optional narrative ID for narrative-aware generation.
+        /// </summary>
+        public string? NarrativeId { get; set; }
+
+        /// <summary>
+        /// Generator-specific parameters.
+        /// </summary>
+        public System.Collections.Generic.Dictionary<string, string>? GeneratorParams { get; set; }
+
         public GeneratorContext(int width, int height, int? seed = null)
         {
             Width = width;
@@ -53,4 +63,3 @@ namespace ConsoleGame.WorldGen
         }
     }
 }
-
