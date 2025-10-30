@@ -1,0 +1,60 @@
+{
+  "PrefabId": "building-small-house-01",
+  "Name": "Small House",
+  "Category": "building",
+  "Width": 7,
+  "Height": 5,
+  "Metadata": {
+    "Tags": "residential,small,entrance-south",
+    "BiomeCompatibility": "plains,forest,city",
+    "Description": "A simple rectangular house with a door on the south side"
+  },
+  "Tiles": [
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Door", "EntityType": "Door", "EntityConfig": { "IsOpen": false, "IsLocked": false } },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" }
+    ]
+  ]
+}
+

@@ -1,0 +1,50 @@
+{
+  "PrefabId": "terrain-forest-cluster-01",
+  "Name": "Forest Cluster",
+  "Category": "terrain",
+  "Width": 5,
+  "Height": 5,
+  "Metadata": {
+    "Tags": "natural,forest,organic",
+    "BiomeCompatibility": "plains,forest",
+    "Description": "A small cluster of trees forming a forest patch"
+  },
+  "Tiles": [
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" }
+    ],
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Grass" }
+    ],
+    [
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Forest" }
+    ],
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Grass" }
+    ],
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Forest" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" }
+    ]
+  ]
+}
+

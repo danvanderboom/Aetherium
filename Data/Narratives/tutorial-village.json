@@ -1,0 +1,196 @@
+{
+  "NarrativeId": "tutorial-village",
+  "Name": "Village Tutorial",
+  "Description": "A simple introductory narrative for new players",
+  "Quests": [
+    {
+      "QuestId": "quest-welcome",
+      "Name": "Welcome to the Village",
+      "Description": "Meet the village elder and learn the basics",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-find-elder",
+          "Type": "TalkToNPC",
+          "Description": "Find and speak with the village elder",
+          "TargetNPC": "npc-elder",
+          "Required": true
+        },
+        {
+          "ObjectiveId": "obj-explore-shop",
+          "Type": "VisitLocation",
+          "Description": "Visit the village shop",
+          "TargetLocation": "village-shop",
+          "Required": true
+        }
+      ],
+      "Rewards": {
+        "Experience": 50,
+        "Gold": 10,
+        "Items": ["item-basic-sword"]
+      },
+      "PrerequisiteQuests": []
+    },
+    {
+      "QuestId": "quest-collect-herbs",
+      "Name": "Gather Medicinal Herbs",
+      "Description": "Collect herbs from the forest for the village healer",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-collect-herbs",
+          "Type": "CollectItems",
+          "Description": "Collect 5 medicinal herbs",
+          "TargetItem": "item-herb",
+          "RequiredCount": 5,
+          "Required": true
+        },
+        {
+          "ObjectiveId": "obj-return-herbs",
+          "Type": "TalkToNPC",
+          "Description": "Return the herbs to the healer",
+          "TargetNPC": "npc-healer",
+          "Required": true
+        }
+      ],
+      "Rewards": {
+        "Experience": 100,
+        "Gold": 25,
+        "Items": ["item-health-potion", "item-health-potion"]
+      },
+      "PrerequisiteQuests": ["quest-welcome"]
+    },
+    {
+      "QuestId": "quest-clear-wolves",
+      "Name": "Wolf Problem",
+      "Description": "Clear the wolf pack threatening the village outskirts",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-defeat-wolves",
+          "Type": "DefeatEnemies",
+          "Description": "Defeat 3 wolves near the village",
+          "TargetEnemyType": "enemy-wolf",
+          "RequiredCount": 3,
+          "Required": true
+        },
+        {
+          "ObjectiveId": "obj-report-victory",
+          "Type": "TalkToNPC",
+          "Description": "Report to the village guard captain",
+          "TargetNPC": "npc-guard-captain",
+          "Required": true
+        }
+      ],
+      "Rewards": {
+        "Experience": 200,
+        "Gold": 50,
+        "Items": ["item-leather-armor"]
+      },
+      "PrerequisiteQuests": ["quest-welcome"]
+    }
+  ],
+  "LootTables": [
+    {
+      "LootTableId": "loot-common-chest",
+      "Name": "Common Chest Loot",
+      "Entries": [
+        {
+          "ItemId": "item-gold-coins",
+          "Weight": 100,
+          "MinQuantity": 5,
+          "MaxQuantity": 20
+        },
+        {
+          "ItemId": "item-health-potion",
+          "Weight": 50,
+          "MinQuantity": 1,
+          "MaxQuantity": 3
+        },
+        {
+          "ItemId": "item-key-bronze",
+          "Weight": 20,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        },
+        {
+          "ItemId": "item-basic-sword",
+          "Weight": 10,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        }
+      ]
+    },
+    {
+      "LootTableId": "loot-wolf",
+      "Name": "Wolf Drops",
+      "Entries": [
+        {
+          "ItemId": "item-wolf-pelt",
+          "Weight": 80,
+          "MinQuantity": 1,
+          "MaxQuantity": 2
+        },
+        {
+          "ItemId": "item-wolf-tooth",
+          "Weight": 40,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        },
+        {
+          "ItemId": "item-raw-meat",
+          "Weight": 60,
+          "MinQuantity": 1,
+          "MaxQuantity": 3
+        }
+      ]
+    }
+  ],
+  "MonsterDensityRules": [
+    {
+      "AreaId": "village-center",
+      "MonsterTypes": [],
+      "DensityPercentage": 0.0,
+      "MinLevel": 0,
+      "MaxLevel": 0
+    },
+    {
+      "AreaId": "village-outskirts",
+      "MonsterTypes": ["enemy-wolf", "enemy-goblin"],
+      "DensityPercentage": 5.0,
+      "MinLevel": 1,
+      "MaxLevel": 3
+    },
+    {
+      "AreaId": "forest",
+      "MonsterTypes": ["enemy-wolf", "enemy-bear", "enemy-goblin"],
+      "DensityPercentage": 15.0,
+      "MinLevel": 2,
+      "MaxLevel": 5
+    }
+  ],
+  "NPCGoals": [
+    {
+      "NPCGoalId": "goal-elder-teach",
+      "NPCId": "npc-elder",
+      "GoalType": "Teach",
+      "Description": "Teach new adventurers the basics",
+      "RelatedQuestIds": ["quest-welcome"],
+      "RequiredAssets": ["dialogue-elder-welcome", "dialogue-elder-advice"]
+    },
+    {
+      "NPCGoalId": "goal-healer-collect",
+      "NPCId": "npc-healer",
+      "GoalType": "Collect",
+      "Description": "Gather medicinal supplies",
+      "RelatedQuestIds": ["quest-collect-herbs"],
+      "RequiredAssets": ["dialogue-healer-request", "dialogue-healer-thanks", "item-herb"]
+    },
+    {
+      "NPCGoalId": "goal-guard-protect",
+      "NPCId": "npc-guard-captain",
+      "GoalType": "Protect",
+      "Description": "Protect the village from threats",
+      "RelatedQuestIds": ["quest-clear-wolves"],
+      "RequiredAssets": ["dialogue-guard-wolves", "dialogue-guard-thanks", "enemy-wolf"]
+    }
+  ]
+}
+

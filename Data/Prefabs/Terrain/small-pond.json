@@ -1,0 +1,63 @@
+{
+  "PrefabId": "terrain-small-pond-01",
+  "Name": "Small Pond",
+  "Category": "terrain",
+  "Width": 6,
+  "Height": 6,
+  "Metadata": {
+    "Tags": "natural,water,organic",
+    "BiomeCompatibility": "plains,forest",
+    "Description": "A small natural pond surrounded by grass"
+  },
+  "Tiles": [
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" }
+    ],
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" }
+    ],
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Grass" }
+    ],
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Grass" }
+    ],
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Water" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" }
+    ],
+    [
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" },
+      { "TerrainType": "Grass" }
+    ]
+  ]
+}
+

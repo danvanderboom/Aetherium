@@ -1,0 +1,92 @@
+{
+  "PrefabId": "building-shop-01",
+  "Name": "Small Shop",
+  "Category": "building",
+  "Width": 9,
+  "Height": 7,
+  "Metadata": {
+    "Tags": "commercial,shop,entrance-south,npc-spawn",
+    "BiomeCompatibility": "city,town",
+    "Description": "A shop with a counter and storage area"
+  },
+  "Tiles": [
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor", "EntityType": "NPC", "EntityConfig": { "Role": "Shopkeeper" } },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Floor" },
+      { "TerrainType": "Wall" }
+    ],
+    [
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Door", "EntityType": "Door", "EntityConfig": { "IsOpen": false, "IsLocked": false } },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" },
+      { "TerrainType": "Wall" }
+    ]
+  ]
+}
+

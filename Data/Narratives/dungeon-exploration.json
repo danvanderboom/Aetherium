@@ -1,0 +1,217 @@
+{
+  "NarrativeId": "dungeon-exploration",
+  "Name": "Ancient Dungeon Exploration",
+  "Description": "Explore an ancient dungeon filled with traps and treasure",
+  "Quests": [
+    {
+      "QuestId": "quest-enter-dungeon",
+      "Name": "The Sealed Entrance",
+      "Description": "Find a way to enter the ancient dungeon",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-find-key",
+          "Type": "CollectItems",
+          "Description": "Find the ancient key",
+          "TargetItem": "item-dungeon-key",
+          "RequiredCount": 1,
+          "Required": true
+        },
+        {
+          "ObjectiveId": "obj-unlock-entrance",
+          "Type": "UseItem",
+          "Description": "Unlock the dungeon entrance",
+          "TargetItem": "item-dungeon-key",
+          "TargetLocation": "dungeon-entrance",
+          "Required": true
+        }
+      ],
+      "Rewards": {
+        "Experience": 150,
+        "Gold": 0,
+        "Items": ["item-torch", "item-torch", "item-torch"]
+      },
+      "PrerequisiteQuests": []
+    },
+    {
+      "QuestId": "quest-reach-treasure",
+      "Name": "The Treasure Room",
+      "Description": "Navigate the dungeon and reach the treasure room",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-explore-level1",
+          "Type": "VisitLocation",
+          "Description": "Explore the first level",
+          "TargetLocation": "dungeon-level1",
+          "Required": true
+        },
+        {
+          "ObjectiveId": "obj-explore-level2",
+          "Type": "VisitLocation",
+          "Description": "Explore the second level",
+          "TargetLocation": "dungeon-level2",
+          "Required": true
+        },
+        {
+          "ObjectiveId": "obj-find-treasure-room",
+          "Type": "VisitLocation",
+          "Description": "Locate the treasure room",
+          "TargetLocation": "dungeon-treasure-room",
+          "Required": true
+        }
+      ],
+      "Rewards": {
+        "Experience": 300,
+        "Gold": 100,
+        "Items": ["item-rare-gem", "item-ancient-scroll"]
+      },
+      "PrerequisiteQuests": ["quest-enter-dungeon"]
+    },
+    {
+      "QuestId": "quest-defeat-guardian",
+      "Name": "The Guardian's Challenge",
+      "Description": "Defeat the dungeon guardian to claim the ultimate treasure",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-defeat-guardian",
+          "Type": "DefeatEnemies",
+          "Description": "Defeat the dungeon guardian",
+          "TargetEnemyType": "enemy-guardian-golem",
+          "RequiredCount": 1,
+          "Required": true
+        },
+        {
+          "ObjectiveId": "obj-claim-artifact",
+          "Type": "CollectItems",
+          "Description": "Claim the ancient artifact",
+          "TargetItem": "item-ancient-artifact",
+          "RequiredCount": 1,
+          "Required": true
+        }
+      ],
+      "Rewards": {
+        "Experience": 500,
+        "Gold": 250,
+        "Items": ["item-legendary-weapon"]
+      },
+      "PrerequisiteQuests": ["quest-reach-treasure"]
+    }
+  ],
+  "LootTables": [
+    {
+      "LootTableId": "loot-dungeon-chest-common",
+      "Name": "Common Dungeon Chest",
+      "Entries": [
+        {
+          "ItemId": "item-gold-coins",
+          "Weight": 100,
+          "MinQuantity": 20,
+          "MaxQuantity": 50
+        },
+        {
+          "ItemId": "item-health-potion",
+          "Weight": 60,
+          "MinQuantity": 1,
+          "MaxQuantity": 2
+        },
+        {
+          "ItemId": "item-torch",
+          "Weight": 50,
+          "MinQuantity": 1,
+          "MaxQuantity": 3
+        },
+        {
+          "ItemId": "item-key-silver",
+          "Weight": 30,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        }
+      ]
+    },
+    {
+      "LootTableId": "loot-dungeon-chest-rare",
+      "Name": "Rare Dungeon Chest",
+      "Entries": [
+        {
+          "ItemId": "item-gold-coins",
+          "Weight": 100,
+          "MinQuantity": 50,
+          "MaxQuantity": 150
+        },
+        {
+          "ItemId": "item-rare-gem",
+          "Weight": 40,
+          "MinQuantity": 1,
+          "MaxQuantity": 3
+        },
+        {
+          "ItemId": "item-enchanted-armor",
+          "Weight": 20,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        },
+        {
+          "ItemId": "item-ancient-scroll",
+          "Weight": 30,
+          "MinQuantity": 1,
+          "MaxQuantity": 2
+        }
+      ]
+    },
+    {
+      "LootTableId": "loot-guardian-golem",
+      "Name": "Guardian Golem Drops",
+      "Entries": [
+        {
+          "ItemId": "item-golem-core",
+          "Weight": 100,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        },
+        {
+          "ItemId": "item-ancient-artifact",
+          "Weight": 100,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        },
+        {
+          "ItemId": "item-legendary-weapon",
+          "Weight": 50,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        }
+      ]
+    }
+  ],
+  "MonsterDensityRules": [
+    {
+      "AreaId": "dungeon-entrance",
+      "MonsterTypes": ["enemy-skeleton", "enemy-zombie"],
+      "DensityPercentage": 10.0,
+      "MinLevel": 3,
+      "MaxLevel": 5
+    },
+    {
+      "AreaId": "dungeon-level1",
+      "MonsterTypes": ["enemy-skeleton", "enemy-zombie", "enemy-spider"],
+      "DensityPercentage": 20.0,
+      "MinLevel": 4,
+      "MaxLevel": 7
+    },
+    {
+      "AreaId": "dungeon-level2",
+      "MonsterTypes": ["enemy-skeleton-warrior", "enemy-wraith", "enemy-spider"],
+      "DensityPercentage": 25.0,
+      "MinLevel": 6,
+      "MaxLevel": 9
+    },
+    {
+      "AreaId": "dungeon-treasure-room",
+      "MonsterTypes": ["enemy-guardian-golem"],
+      "DensityPercentage": 100.0,
+      "MinLevel": 10,
+      "MaxLevel": 10
+    }
+  ],
+  "NPCGoals": []
+}
+
