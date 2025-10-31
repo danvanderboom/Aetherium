@@ -111,7 +111,16 @@ namespace Aetherium.WorldGen.Features.Story
             var tile = Get<Tile>();
             if (tile != null)
             {
-                tile.Character = 'C'; // Camp symbol
+                tile.Type = new TileType
+                {
+                    Name = "AbandonedCamp",
+                    Settings = new Dictionary<string, string>
+                    {
+                        { "MapCharacter", "C" },
+                        { "BackgroundColor", ConsoleColor.Black.ToString() },
+                        { "ForegroundColor", ConsoleColor.DarkYellow.ToString() }
+                    }
+                };
             }
 
             // Camps are passable and can be examined

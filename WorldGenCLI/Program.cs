@@ -5,18 +5,26 @@ using System.CommandLine.Invocation;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Aetherium.Core;
 using Aetherium.WorldGen;
 using Aetherium.WorldGen.Passes;
 using Aetherium.WorldGen.Training;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using WorldGenCLI.Api;
+using WorldGenCLI.Services;
 
 namespace WorldGenCLI
 {
     internal static class Program
     {
-        private static int Main(string[] args)
+        private static async Task<int> Main(string[] args)
         {
             var root = new RootCommand("World generation tooling for deterministic map repro and metrics export");
+
+            var serveOpt = new Option<bool>("--serve", "Start HTTP API server");
+            var portOpt = new Option<int>("--port", () => 5000, "Port for HTTP API server");
 
             var generatorOpt = new Option<string>("--generator", () => "AdvancedDungeon", "Layout generator identifier");
             var templateOpt = new Option<string>("--template", () => "dungeon", "Template: dungeon|outdoor");
@@ -29,6 +37,8 @@ namespace WorldGenCLI
             var outputOpt = new Option<string?>("--output", "Optional metrics export path (JSON)");
             var benchmarkOpt = new Option<string?>("--benchmark", "Generate a specific benchmark scenario by ID");
 
+            root.AddOption(serveOpt);
+            root.AddOption(portOpt);
             root.AddOption(generatorOpt);
             root.AddOption(templateOpt);
             root.AddOption(widthOpt);
@@ -40,8 +50,17 @@ namespace WorldGenCLI
             root.AddOption(outputOpt);
             root.AddOption(benchmarkOpt);
 
-            root.SetHandler((InvocationContext ctx) =>
+            root.SetHandler(async (InvocationContext ctx) =>
             {
+                var serve = ctx.ParseResult.GetValueForOption(serveOpt);
+                var port = ctx.ParseResult.GetValueForOption(portOpt);
+
+                if (serve)
+                {
+                    await StartApiServer(port);
+                    return;
+                }
+
                 var generator = ctx.ParseResult.GetValueForOption(generatorOpt)!;
                 var template = ctx.ParseResult.GetValueForOption(templateOpt)!;
                 var width = ctx.ParseResult.GetValueForOption(widthOpt);
@@ -76,7 +95,7 @@ namespace WorldGenCLI
                     Console.WriteLine($"Loading benchmark: {benchmark.Name}");
                     request = BenchmarkGenerator.GenerateRequest(benchmark.Recipe);
                     templateEnum = request.Template;
-                    seedValue = request.Seed;
+                    seedValue = request.Seed ?? 0;
                 }
                 else
                 {
@@ -177,7 +196,48 @@ namespace WorldGenCLI
                 }
             });
 
-            return root.Invoke(args);
+            return await root.InvokeAsync(args);
+        }
+
+        private static async Task StartApiServer(int port)
+        {
+            var builder = WebApplication.CreateBuilder();
+
+            // Add services
+            builder.Services.AddSingleton<MapGeneratorRegistry>(sp =>
+            {
+                var registry = new MapGeneratorRegistry();
+                registry.DiscoverTypes(typeof(IMapGenerator).Assembly);
+                return registry;
+            });
+
+            builder.Services.AddSingleton<TemplateLibrary>();
+
+            // Configure CORS for local development
+            builder.Services.AddCors(options =>
+            {
+                options.AddDefaultPolicy(policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
+            });
+
+            var app = builder.Build();
+
+            // Configure middleware
+            app.UseCors();
+
+            // Map API endpoints
+            app.MapEndpoints();
+
+            Console.WriteLine($"WorldGen API server listening on http://localhost:{port}");
+            Console.WriteLine("Press Ctrl+C to stop.");
+
+            app.Urls.Add($"http://localhost:{port}");
+
+            await app.RunAsync();
         }
 
         private static Dictionary<string, string> ParseParameters(IEnumerable<string> values)
@@ -198,10 +258,13 @@ namespace WorldGenCLI
 
         private static IWorldGenerationPass[] BuildPasses(WorldGenerationTemplate template)
         {
+            var hybridPass = new Aetherium.WorldGen.Hybrid.HybridLayoutPass();
+
             return template switch
             {
                 WorldGenerationTemplate.Outdoor => new IWorldGenerationPass[]
                 {
+                    hybridPass,
                     new OutdoorLayoutPass(),
                     new OutdoorThemingPass(),
                     new OutdoorPopulationPass(),
@@ -211,6 +274,7 @@ namespace WorldGenCLI
                 },
                 _ => new IWorldGenerationPass[]
                 {
+                    hybridPass,
                     new DungeonLayoutPass(),
                     new DungeonThemingPass(),
                     new DungeonPopulationPass(),

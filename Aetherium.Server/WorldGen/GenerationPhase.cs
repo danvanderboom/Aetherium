@@ -5,6 +5,7 @@ namespace Aetherium.WorldGen
     /// </summary>
     public enum GenerationPhase
     {
+        PreLayout = -1, // Pre-processing (e.g., hybrid anchors) before layout generation
         Layout = 0,
         Theming = 1,
         Population = 2,

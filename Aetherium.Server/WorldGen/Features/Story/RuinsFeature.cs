@@ -113,7 +113,16 @@ namespace Aetherium.WorldGen.Features.Story
             var tile = Get<Tile>();
             if (tile != null)
             {
-                tile.Character = 'R'; // Ruins symbol
+                tile.Type = new TileType
+                {
+                    Name = "Ruin",
+                    Settings = new Dictionary<string, string>
+                    {
+                        { "MapCharacter", "R" },
+                        { "BackgroundColor", ConsoleColor.Black.ToString() },
+                        { "ForegroundColor", ConsoleColor.DarkGray.ToString() }
+                    }
+                };
             }
 
             // Ruins are not passable but can be examined

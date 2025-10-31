@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Aetherium.Components;
 using Aetherium.Core;
 
@@ -18,7 +19,16 @@ namespace Aetherium.Entities
             var tile = Get<Tile>();
             if (tile != null)
             {
-                tile.Character = '?'; // Will be customized by lore generator
+                tile.Type = new TileType
+                {
+                    Name = "LoreFragment",
+                    Settings = new Dictionary<string, string>
+                    {
+                        { "MapCharacter", "?" },
+                        { "BackgroundColor", ConsoleColor.Black.ToString() },
+                        { "ForegroundColor", ConsoleColor.Yellow.ToString() }
+                    }
+                };
             }
         }
 
@@ -42,13 +52,24 @@ namespace Aetherium.Entities
             if (tile != null)
             {
                 // Different symbols for different lore types
-                tile.Character = topic switch
+                var mapChar = topic switch
                 {
-                    "history" => 'H',
-                    "legend" => 'L',
-                    "journal" => 'J',
-                    "prophecy" => 'P',
-                    _ => '?'
+                    "history" => "H",
+                    "legend" => "L",
+                    "journal" => "J",
+                    "prophecy" => "P",
+                    _ => "?"
+                };
+                
+                tile.Type = new TileType
+                {
+                    Name = $"LoreFragment-{topic}",
+                    Settings = new Dictionary<string, string>
+                    {
+                        { "MapCharacter", mapChar },
+                        { "BackgroundColor", ConsoleColor.Black.ToString() },
+                        { "ForegroundColor", ConsoleColor.Yellow.ToString() }
+                    }
                 };
             }
         }

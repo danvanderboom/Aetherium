@@ -1,0 +1,162 @@
+@using WorldGenCLI.Models
+
+<div class="constraint-form">
+    @if (Parameters != null && Parameters.Any())
+    {
+        @foreach (var param in Parameters.OrderBy(p => p.Group ?? "").ThenBy(p => p.Name))
+        {
+            <div class="mb-3">
+                <label class="form-label">@(param.Name)@(param.Required ? " *" : "")</label>
+                @if (!string.IsNullOrEmpty(param.Description))
+                {
+                    <small class="form-text text-muted d-block mb-1">@param.Description</small>
+                }
+
+                @switch (param.Type)
+                {
+                    case ParameterType.Integer:
+                    case ParameterType.IntegerRange:
+                        <input type="number" 
+                               class="form-control form-control-sm" 
+                               value="@(GetIntValue(param.Name))"
+                               @onchange="@((ChangeEventArgs e) => SetIntValue(param.Name, e.Value?.ToString()))"
+                               min="@param.MinValue"
+                               max="@param.MaxValue"
+                               step="@(param.Step ?? 1)" />
+                        break;
+
+                    case ParameterType.Float:
+                    case ParameterType.FloatRange:
+                        <input type="number" 
+                               class="form-control form-control-sm" 
+                               value="@(GetFloatValue(param.Name))"
+                               @onchange="@((ChangeEventArgs e) => SetFloatValue(param.Name, e.Value?.ToString()))"
+                               min="@param.MinValue"
+                               max="@param.MaxValue"
+                               step="@(param.Step ?? 0.1)" />
+                        break;
+
+                    case ParameterType.Boolean:
+                        <div class="form-check">
+                            <input type="checkbox" 
+                                   class="form-check-input" 
+                                   checked="@(GetBoolValue(param.Name))"
+                                   @onchange="@((ChangeEventArgs e) => SetBoolValue(param.Name, (bool)(e.Value ?? false)))" />
+                        </div>
+                        break;
+
+                    case ParameterType.String:
+                        <input type="text" 
+                               class="form-control form-control-sm" 
+                               value="@(GetStringValue(param.Name))"
+                               @onchange="@((ChangeEventArgs e) => SetStringValue(param.Name, e.Value?.ToString()))"
+                               maxlength="@param.MaxLength" />
+                        break;
+
+                    case ParameterType.Choice:
+                        @if (param.Choices != null && param.Choices.Any())
+                        {
+                            <select class="form-select form-select-sm" 
+                                    value="@(GetStringValue(param.Name))"
+                                    @onchange="@((ChangeEventArgs e) => SetStringValue(param.Name, e.Value?.ToString()))">
+                                @foreach (var choice in param.Choices)
+                                {
+                                    <option value="@choice.Value">@choice.Label</option>
+                                }
+                            </select>
+                        }
+                        break;
+
+                    default:
+                        <input type="text" 
+                               class="form-control form-control-sm" 
+                               value="@(GetStringValue(param.Name))"
+                               @onchange="@((ChangeEventArgs e) => SetStringValue(param.Name, e.Value?.ToString()))" />
+                        break;
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<ParameterDefinition>? Parameters { get; set; }
+
+    [Parameter]
+    public Dictionary<string, string>? ParameterValues { get; set; }
+
+    [Parameter]
+    public EventCallback<Dictionary<string, string>> ParameterValuesChanged { get; set; }
+
+    private string GetIntValue(string name)
+    {
+        if (ParameterValues?.TryGetValue(name, out var value) == true && int.TryParse(value, out var intVal))
+            return intVal.ToString();
+        return "0";
+    }
+
+    private void SetIntValue(string name, string? value)
+    {
+        ParameterValues ??= new Dictionary<string, string>();
+        if (int.TryParse(value, out var intVal))
+        {
+            ParameterValues[name] = intVal.ToString();
+        }
+        else
+        {
+            ParameterValues[name] = "0";
+        }
+        ParameterValuesChanged.InvokeAsync(ParameterValues);
+    }
+
+    private string GetFloatValue(string name)
+    {
+        if (ParameterValues?.TryGetValue(name, out var value) == true && float.TryParse(value, out var floatVal))
+            return floatVal.ToString();
+        return "0.0";
+    }
+
+    private void SetFloatValue(string name, string? value)
+    {
+        ParameterValues ??= new Dictionary<string, string>();
+        if (float.TryParse(value, out var floatVal))
+        {
+            ParameterValues[name] = floatVal.ToString();
+        }
+        else
+        {
+            ParameterValues[name] = "0.0";
+        }
+        ParameterValuesChanged.InvokeAsync(ParameterValues);
+    }
+
+    private bool GetBoolValue(string name)
+    {
+        if (ParameterValues?.TryGetValue(name, out var value) == true && bool.TryParse(value, out var boolVal))
+            return boolVal;
+        return false;
+    }
+
+    private void SetBoolValue(string name, bool value)
+    {
+        ParameterValues ??= new Dictionary<string, string>();
+        ParameterValues[name] = value.ToString();
+        ParameterValuesChanged.InvokeAsync(ParameterValues);
+    }
+
+    private string GetStringValue(string name)
+    {
+        if (ParameterValues?.TryGetValue(name, out var value) == true)
+            return value;
+        return string.Empty;
+    }
+
+    private void SetStringValue(string name, string? value)
+    {
+        ParameterValues ??= new Dictionary<string, string>();
+        ParameterValues[name] = value ?? string.Empty;
+        ParameterValuesChanged.InvokeAsync(ParameterValues);
+    }
+}
+

@@ -1,0 +1,61 @@
+@using WorldGenCLI.Models
+
+<div class="ab-test-grid">
+    <h6>Results (@Results?.Candidates.Count candidates)</h6>
+    <div class="row">
+        @if (Results != null)
+        {
+            @foreach (var candidate in Results.Candidates)
+            {
+                <div class="col-md-4 mb-3">
+                    <div class="card @(candidate.Success ? "" : "border-danger")" style="cursor: pointer;" @onclick="@(() => OnSelect(candidate))">
+                        <div class="card-header">
+                            <small>Seed: @candidate.Seed</small>
+                            @if (!candidate.Success)
+                            {
+                                <span class="badge bg-danger">Failed</span>
+                            }
+                        </div>
+                        <div class="card-body">
+                            @if (candidate.Map != null)
+                            {
+                                <div class="mb-2" style="font-family: monospace; font-size: 6px; line-height: 1; white-space: pre; max-height: 100px; overflow: hidden;">
+                                    @for (int y = 0; y < Math.Min(candidate.Map.Height, 20); y++)
+                                    {
+                                        <div>
+                                            @for (int x = 0; x < Math.Min(candidate.Map.Width, 30); x++)
+                                            {
+                                                var index = y * candidate.Map.Width + x;
+                                                var tileId = index < candidate.Map.Tiles.Length ? candidate.Map.Tiles[index] : (byte)0;
+                                                var symbol = candidate.Map.Palette.TryGetValue(tileId, out var tileInfo) ? tileInfo.Symbol : "?";
+                                                <span>@symbol</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            @if (candidate.Metrics != null)
+                            {
+                                <small>
+                                    <div>BF: @candidate.Metrics.BranchingFactor.ToString("F2")</div>
+                                    <div>LR: @candidate.Metrics.LoopRatio.ToString("F2")</div>
+                                    <div>Rooms: @candidate.Metrics.Rooms</div>
+                                    <div>DE: @candidate.Metrics.DeadEndCount</div>
+                                </small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public AbTestResponse? Results { get; set; }
+
+    [Parameter]
+    public EventCallback<CandidateResult> OnSelect { get; set; }
+}
+

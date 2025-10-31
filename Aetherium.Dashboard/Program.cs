@@ -1,4 +1,4 @@
-using Aetherium.Dashboard.Hubs;
+using Aetherium.Dashboard.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.Components.Web;
@@ -23,6 +23,13 @@ builder.Services.AddSingleton<AgentTelemetryService>(sp =>
 {
     var orleansClient = sp.GetRequiredService<IClusterClient>();
     return new AgentTelemetryService(orleansClient);
+});
+
+// Add PCG API client
+builder.Services.AddHttpClient<PcgApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://localhost:5000/api/");
+    client.Timeout = TimeSpan.FromMinutes(5); // Long timeout for generation
 });
 
 // Add CORS for SignalR
@@ -50,9 +57,6 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.UseCors();
-
-// Map SignalR hub
-app.MapHub<AgentDashboardHub>("/agentDashboardHub");
 
 app.MapRazorPages();
 app.MapBlazorHub();

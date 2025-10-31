@@ -1,0 +1,356 @@
+@page "/pcg"
+@using Aetherium.Dashboard.Services
+@using WorldGenCLI.Models
+@inject PcgApiClient ApiClient
+@rendermode InteractiveServer
+
+<PageTitle>PCG Content Editor</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>Generator</h5>
+                </div>
+                <div class="card-body">
+                    <select class="form-select mb-2" @bind="SelectedGeneratorId" @bind:event="onchange">
+                        <option value="">Select generator...</option>
+                        @foreach (var gen in Generators)
+                        {
+                            <option value="@gen.Id">@gen.Name (@gen.Version)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>Templates</h5>
+                </div>
+                <div class="card-body">
+                    <select class="form-select mb-2" @bind="SelectedTemplateName">
+                        <option value="">None</option>
+                        @foreach (var templateName in TemplateNames)
+                        {
+                            <option value="@templateName">@templateName</option>
+                        }
+                    </select>
+                    <button class="btn btn-sm btn-primary me-1" @onclick="LoadTemplate">Load</button>
+                    <button class="btn btn-sm btn-success me-1" @onclick="SaveTemplate">Save</button>
+                    <button class="btn btn-sm btn-danger" @onclick="DeleteTemplate">Delete</button>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>Generation Parameters</h5>
+                </div>
+                <div class="card-body">
+                    <label class="form-label">Template</label>
+                    <select class="form-select mb-2" @bind="GenerationRequest.Template">
+                        <option value="dungeon">Dungeon</option>
+                        <option value="outdoor">Outdoor</option>
+                    </select>
+
+                    <label class="form-label">Width</label>
+                    <input type="number" class="form-control mb-2" @bind="GenerationRequest.Width" min="20" max="200" />
+
+                    <label class="form-label">Height</label>
+                    <input type="number" class="form-control mb-2" @bind="GenerationRequest.Height" min="20" max="200" />
+
+                    <label class="form-label">Levels</label>
+                    <input type="number" class="form-control mb-2" @bind="GenerationRequest.Levels" min="1" max="10" />
+
+                    <label class="form-label">Seed (optional)</label>
+                    <input type="number" class="form-control mb-2" @bind="GenerationRequest.Seed" />
+
+                    <ConstraintForm Parameters="@ConstraintDescriptor?.Parameters" @bind-ParameterValues="@ParameterValues" />
+
+                    <button class="btn btn-primary w-100 mt-2" @onclick="GenerateWorld" disabled="@IsGenerating">
+                        @if (IsGenerating)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Generate
+                    </button>
+                </div>
+            </div>
+
+            @if (LastResponse != null && LastResponse.Metrics != null)
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Branching Factor:</strong> @LastResponse.Metrics.BranchingFactor.ToString("F2")</p>
+                        <p><strong>Loop Ratio:</strong> @LastResponse.Metrics.LoopRatio.ToString("F2")</p>
+                        <p><strong>Dead Ends:</strong> @LastResponse.Metrics.DeadEndCount</p>
+                        <p><strong>Rooms:</strong> @LastResponse.Metrics.Rooms</p>
+                        <p><strong>Corridors:</strong> @LastResponse.Metrics.Corridors</p>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="col-md-9">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Preview</h5>
+                </div>
+                <div class="card-body">
+                    @if (LastResponse?.Map != null)
+                    {
+                        <PreviewCanvas Map="@LastResponse.Map" OnAnchorPlaced="OnAnchorPlaced" />
+                    }
+                    else
+                    {
+                        <p class="text-muted">Generate a world to see preview</p>
+                    }
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5>A/B Testing</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-2">
+                        <div class="col-md-3">
+                            <label class="form-label">Count</label>
+                            <input type="number" class="form-control" @bind="AbTestCount" min="2" max="20" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Sort By</label>
+                            <select class="form-select" @bind="SortMetric">
+                                <option value="">None</option>
+                                <option value="branchingFactor">Branching Factor</option>
+                                <option value="loopRatio">Loop Ratio</option>
+                                <option value="rooms">Rooms</option>
+                                <option value="deadEndCount">Dead Ends</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <button class="btn btn-primary mt-4" @onclick="RunAbTest" disabled="@IsGenerating">
+                                Run A/B Test
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (AbTestResults != null && AbTestResults.Candidates.Any())
+                    {
+                        <AbTestGrid Results="@AbTestResults" OnSelect="@OnSelectCandidate" />
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<GeneratorInfo> Generators = new();
+    private string SelectedGeneratorId = string.Empty;
+    private ConstraintDescriptor? ConstraintDescriptor;
+    private Dictionary<string, string> ParameterValues = new();
+    private List<string> TemplateNames = new();
+    private string SelectedTemplateName = string.Empty;
+    private GenerateRequest GenerationRequest = new() { Width = 60, Height = 60, Levels = 1 };
+    private GenerateResponse? LastResponse;
+    private bool IsGenerating = false;
+    private int AbTestCount = 5;
+    private string SortMetric = string.Empty;
+    private AbTestResponse? AbTestResults;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGenerators();
+        await LoadTemplateNames();
+    }
+
+    private async Task LoadGenerators()
+    {
+        try
+        {
+            Generators = await ApiClient.GetGeneratorsAsync();
+            if (Generators.Any())
+            {
+                SelectedGeneratorId = Generators.First().Id;
+                await LoadConstraintSchema();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading generators: {ex.Message}");
+        }
+    }
+
+    private async Task OnGeneratorChanged()
+    {
+        GenerationRequest.LayoutGenerator = SelectedGeneratorId;
+        await LoadConstraintSchema();
+    }
+
+    private async Task LoadConstraintSchema()
+    {
+        if (string.IsNullOrEmpty(SelectedGeneratorId))
+            return;
+
+        try
+        {
+            ConstraintDescriptor = await ApiClient.GetConstraintsSchemaAsync(SelectedGeneratorId);
+            ParameterValues.Clear();
+            foreach (var param in ConstraintDescriptor.Parameters)
+            {
+                if (param.DefaultValue != null)
+                {
+                    ParameterValues[param.Name] = param.DefaultValue.ToString() ?? string.Empty;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading constraint schema: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTemplateNames()
+    {
+        try
+        {
+            TemplateNames = await ApiClient.GetTemplateNamesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading template names: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTemplate()
+    {
+        if (string.IsNullOrEmpty(SelectedTemplateName))
+            return;
+
+        try
+        {
+            var template = await ApiClient.GetTemplateAsync(SelectedTemplateName);
+            GenerationRequest.LayoutGenerator = template.GeneratorId;
+            GenerationRequest.Template = template.Template;
+            GenerationRequest.Parameters = template.Parameters;
+            GenerationRequest.HybridAnchors = template.HybridAnchors;
+            SelectedGeneratorId = template.GeneratorId;
+            await LoadConstraintSchema();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading template: {ex.Message}");
+        }
+    }
+
+    private async Task SaveTemplate()
+    {
+        // TODO: Prompt for template name
+        var templateName = SelectedTemplateName;
+        if (string.IsNullOrEmpty(templateName))
+            templateName = $"template_{DateTime.Now:yyyyMMddHHmmss}";
+
+        var template = new TemplateDto
+        {
+            Name = templateName,
+            GeneratorId = GenerationRequest.LayoutGenerator,
+            Template = GenerationRequest.Template,
+            Parameters = GenerationRequest.Parameters,
+            HybridAnchors = GenerationRequest.HybridAnchors
+        };
+
+        await ApiClient.SaveTemplateAsync(template);
+        await LoadTemplateNames();
+    }
+
+    private async Task DeleteTemplate()
+    {
+        if (string.IsNullOrEmpty(SelectedTemplateName))
+            return;
+
+        await ApiClient.DeleteTemplateAsync(SelectedTemplateName);
+        await LoadTemplateNames();
+        SelectedTemplateName = string.Empty;
+    }
+
+    private async Task GenerateWorld()
+    {
+        if (string.IsNullOrEmpty(SelectedGeneratorId))
+            return;
+
+        IsGenerating = true;
+        try
+        {
+            GenerationRequest.LayoutGenerator = SelectedGeneratorId;
+            GenerationRequest.Parameters = ParameterValues;
+            LastResponse = await ApiClient.GenerateWorldAsync(GenerationRequest);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error generating world: {ex.Message}");
+        }
+        finally
+        {
+            IsGenerating = false;
+        }
+    }
+
+    private async Task RunAbTest()
+    {
+        if (string.IsNullOrEmpty(SelectedGeneratorId))
+            return;
+
+        IsGenerating = true;
+        try
+        {
+            GenerationRequest.LayoutGenerator = SelectedGeneratorId;
+            GenerationRequest.Parameters = ParameterValues;
+
+            var request = new AbTestRequest
+            {
+                GeneratorId = SelectedGeneratorId,
+                BaseRequest = GenerationRequest,
+                Count = AbTestCount,
+                TopByMetric = SortMetric
+            };
+
+            AbTestResults = await ApiClient.GenerateAbTestAsync(request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error running A/B test: {ex.Message}");
+        }
+        finally
+        {
+            IsGenerating = false;
+        }
+    }
+
+    private async Task OnSelectCandidate(CandidateResult candidate)
+    {
+        GenerationRequest.Seed = candidate.Seed;
+        LastResponse = new GenerateResponse
+        {
+            Success = candidate.Success,
+            Map = candidate.Map,
+            Metrics = candidate.Metrics,
+            Errors = candidate.Errors,
+            ValidationErrors = candidate.ValidationErrors,
+            Seed = candidate.Seed
+        };
+        StateHasChanged();
+    }
+
+    private void OnAnchorPlaced(HybridAnchor anchor)
+    {
+        if (GenerationRequest.HybridAnchors == null)
+            GenerationRequest.HybridAnchors = new HybridLayout();
+
+        GenerationRequest.HybridAnchors.Anchors.Add(anchor);
+    }
+}
+

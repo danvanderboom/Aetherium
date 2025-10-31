@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Aetherium.WorldGen.Hybrid;
 using Aetherium.WorldGen.Training;
 
 namespace Aetherium.WorldGen
@@ -25,6 +26,11 @@ namespace Aetherium.WorldGen
         public TimeSpan PhaseTimeout { get; set; } = TimeSpan.FromSeconds(2);
         public bool EnableMetrics { get; set; } = true;
         public bool EnableLogging { get; set; } = true;
+
+        /// <summary>
+        /// Optional hybrid anchors for mixed authored/procedural content.
+        /// </summary>
+        public HybridLayout? HybridAnchors { get; set; }
 
         /// <summary>
         /// Optional curriculum stage for training scenarios.

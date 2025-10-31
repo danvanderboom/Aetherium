@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="Microsoft.Orleans.Sdk" Version="9.2.1" />
     <PackageReference Include="Microsoft.Orleans.Client" Version="9.2.1" />
@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Aetherium.Model\Aetherium.Model.csproj" />
     <ProjectReference Include="..\Aetherium.Server\Aetherium.Server.csproj" />
+    <ProjectReference Include="..\WorldGenCLI\WorldGenCLI.csproj" />
   </ItemGroup>
 
 </Project>

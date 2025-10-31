@@ -1,0 +1,111 @@
+@using WorldGenCLI.Models
+
+<div class="preview-canvas">
+    <div class="mb-2">
+        <label class="form-check-label me-3">
+            <input type="checkbox" class="form-check-input" @bind="ShowRooms" /> Rooms
+        </label>
+        <label class="form-check-label me-3">
+            <input type="checkbox" class="form-check-input" @bind="ShowCorridors" /> Corridors
+        </label>
+        <label class="form-check-label me-3">
+            <input type="checkbox" class="form-check-input" @bind="ShowAnchors" /> Anchors
+        </label>
+        <label class="form-check-label">
+            <input type="checkbox" class="form-check-input" @bind="ShowRegions" /> Regions
+        </label>
+    </div>
+    
+    @if (Map != null)
+    {
+        <div class="map-container" style="font-family: monospace; font-size: 8px; line-height: 1; white-space: pre;">
+            @for (int y = 0; y < Map.Height; y++)
+            {
+                <div style="display: flex;">
+                    @for (int x = 0; x < Map.Width; x++)
+                    {
+                        var index = y * Map.Width + x;
+                        var tileId = index < Map.Tiles.Length ? Map.Tiles[index] : (byte)0;
+                        var symbol = Map.Palette.TryGetValue(tileId, out var tileInfo) ? tileInfo.Symbol : "?";
+                        var isRoom = ShowRooms && Map.Rooms.Any(r => IsInRoom(r, x, y));
+                        var isCorridor = ShowCorridors && Map.Corridors.Any(c => IsInCorridor(c, x, y));
+                        var isAnchor = ShowAnchors && Map.Anchors.Any(a => IsInAnchor(a, x, y));
+                        var isRegion = ShowRegions && Map.Regions.Any(r => IsInRegion(r, x, y));
+                        
+                        var color = isAnchor ? "blue" : isRoom ? "green" : isCorridor ? "yellow" : isRegion ? "orange" : "";
+                        
+                        <span style="color: @color">@symbol</span>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public MapRenderDto? Map { get; set; }
+
+    [Parameter]
+    public EventCallback<HybridAnchor> OnAnchorPlaced { get; set; }
+
+    private bool ShowRooms = true;
+    private bool ShowCorridors = true;
+    private bool ShowAnchors = true;
+    private bool ShowRegions = false;
+
+    private bool IsInRoom(RoomOverlay room, int x, int y)
+    {
+        return x >= room.X && x < room.X + room.Width &&
+               y >= room.Y && y < room.Y + room.Height;
+    }
+
+    private bool IsInCorridor(CorridorOverlay corridor, int x, int y)
+    {
+        return corridor.Points.Any(p => p.X == x && p.Y == y);
+    }
+
+    private bool IsInAnchor(AnchorOverlay anchor, int x, int y)
+    {
+        var a = anchor.Anchor;
+        return a.Type switch
+        {
+            AnchorType.Point => a.X == x && a.Y == y,
+            AnchorType.Rectangle => a.Width.HasValue && a.Height.HasValue &&
+                x >= a.X && x < a.X + a.Width.Value &&
+                y >= a.Y && y < a.Y + a.Height.Value,
+            AnchorType.Polygon => a.Vertices != null && IsPointInPolygon(new Point { X = x, Y = y }, a.Vertices),
+            _ => false
+        };
+    }
+
+    private bool IsInRegion(RegionOverlay region, int x, int y)
+    {
+        return region.Points.Any(p => p.X == x && p.Y == y);
+    }
+
+    private bool IsPointInPolygon(Point point, List<Point> vertices)
+    {
+        // Ray casting algorithm (simplified)
+        if (vertices.Count < 3)
+            return false;
+
+        var inside = false;
+        for (int i = 0, j = vertices.Count - 1; i < vertices.Count; j = i++)
+        {
+            var xi = vertices[i].X;
+            var yi = vertices[i].Y;
+            var xj = vertices[j].X;
+            var yj = vertices[j].Y;
+
+            var intersect = ((yi > point.Y) != (yj > point.Y)) &&
+                           (point.X < (xj - xi) * (point.Y - yi) / (yj - yi) + xi);
+
+            if (intersect)
+                inside = !inside;
+        }
+
+        return inside;
+    }
+}
+

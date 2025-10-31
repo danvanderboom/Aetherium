@@ -89,46 +89,75 @@ namespace Aetherium.WorldGen.Passes
         {
             var locations = new List<WorldLocation>();
 
-            // Prefer locations near path endpoints or objectives
-            if (context.ObjectiveLocation != null)
+            try
             {
-                var nearby = world.EntitiesByLocation.Keys
-                    .Where(loc => world.PassableTerrain(loc) && 
-                           Math.Abs(loc.X - context.ObjectiveLocation.X) < 10 &&
-                           Math.Abs(loc.Y - context.ObjectiveLocation.Y) < 10)
-                    .ToList();
-                locations.AddRange(nearby);
-            }
+                var allLocations = world.EntitiesByLocation?.Keys?.ToList() ?? new List<WorldLocation>();
 
-            // Prefer start location vicinity
-            if (context.StartLocation != null)
-            {
-                var nearby = world.EntitiesByLocation.Keys
-                    .Where(loc => world.PassableTerrain(loc) &&
-                           Math.Abs(loc.X - context.StartLocation.X) < 10 &&
-                           Math.Abs(loc.Y - context.StartLocation.Y) < 10)
-                    .ToList();
-                locations.AddRange(nearby);
-            }
+                // Snapshot potentially nullable context values to avoid racey reads in predicates
+                var objective = context.ObjectiveLocation;
+                var start = context.StartLocation;
 
-            // Prefer locations along primary path
-            if (context.PrimaryPath.Count > 0)
+                // Prefer locations near objective
+                if (objective != null && allLocations.Count > 0)
+                {
+                    foreach (var loc in allLocations)
+                    {
+                        if (loc == null)
+                            continue;
+                        if (!world.PassableTerrain(loc))
+                            continue;
+                        if (Math.Abs(loc.X - objective.X) < 10 && Math.Abs(loc.Y - objective.Y) < 10)
+                        {
+                            locations.Add(loc);
+                        }
+                    }
+                }
+
+                // Prefer start location vicinity
+                if (start != null && allLocations.Count > 0)
+                {
+                    foreach (var loc in allLocations)
+                    {
+                        if (loc == null)
+                            continue;
+                        if (!world.PassableTerrain(loc))
+                            continue;
+                        if (Math.Abs(loc.X - start.X) < 10 && Math.Abs(loc.Y - start.Y) < 10)
+                        {
+                            locations.Add(loc);
+                        }
+                    }
+                }
+
+                // Prefer locations along primary path
+                if (context.PrimaryPath.Count > 0)
+                {
+                    var pathLocations = new List<WorldLocation>();
+                    foreach (var loc in context.PrimaryPath)
+                    {
+                        if (loc != null && world.PassableTerrain(loc))
+                        {
+                            pathLocations.Add(loc);
+                        }
+                    }
+
+                    // Sample points along path (beginning, middle, end)
+                    if (pathLocations.Count >= 3)
+                    {
+                        locations.Add(pathLocations[0]);
+                        locations.Add(pathLocations[pathLocations.Count / 2]);
+                        locations.Add(pathLocations[pathLocations.Count - 1]);
+                    }
+                    else if (pathLocations.Count > 0)
+                    {
+                        locations.Add(pathLocations[0]);
+                    }
+                }
+            }
+            catch
             {
-                var pathLocations = context.PrimaryPath
-                    .Where(loc => world.PassableTerrain(loc))
-                    .ToList();
-                
-                // Sample points along path (beginning, middle, end)
-                if (pathLocations.Count >= 3)
-                {
-                    locations.Add(pathLocations[0]);
-                    locations.Add(pathLocations[pathLocations.Count / 2]);
-                    locations.Add(pathLocations[pathLocations.Count - 1]);
-                }
-                else if (pathLocations.Count > 0)
-                {
-                    locations.Add(pathLocations[0]);
-                }
+                // Be conservative: if anything goes wrong while selecting candidates,
+                // return what we have so far and let fallback logic handle placement.
             }
 
             return locations.Distinct().ToList();
