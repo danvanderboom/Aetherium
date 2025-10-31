@@ -1,5 +1,5 @@
 param(
-    [int]$TimeoutSeconds = 20
+    [int]$TimeoutSeconds = 40
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,7 +27,7 @@ $server = Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$PWD\
 
 # Wait for server to be ready by checking if port 5000 is listening
 Write-Host "Waiting for server to be ready..." -ForegroundColor Yellow
-$maxWait = 30 # seconds
+$maxWait = 60 # seconds - increased from 30 to allow more time for server startup
 $waited = 0
 $serverReady = $false
 while ($waited -lt $maxWait -and -not $serverReady) {

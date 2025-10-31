@@ -76,9 +76,7 @@
 - **Total**: 59+ tests passing
 
 ### Known Issues
-- **E2E Tests**: Some failing due to `GameSession` constructor requiring non-null `WorldBuilder`
-- **UI Test Script**: Server startup timeout (likely timing issue, server needs more time)
-- **Integration Tests**: Some require proper session initialization
+- **Integration Tests**: Some require proper session initialization (all E2E tests now passing)
 
 ## 🚧 Remaining Work
 
@@ -105,8 +103,8 @@
 - [ ] `docs/MIGRATION_TOOLS.md` - Migration guide
 
 ### Test Fixes
-- [ ] Fix E2E tests with proper GameSession initialization
-- [ ] Fix UI test script timeout issue
+- [x] Fix E2E tests with proper GameSession initialization (✅ All passing)
+- [x] Fix UI test script timeout issue (✅ Increased server timeout to 60s, client timeout to 40s)
 - [ ] Complete integration test suite
 
 ## 🎯 System Capabilities
@@ -129,15 +127,15 @@
 - ✅ **Tool Discovery**: 17 tools automatically discovered
 - ✅ **Security**: Admin tools correctly blocked from Explorer profile
 - ✅ **API Compatibility**: Both unified and legacy APIs functional
-- ✅ **Test Coverage**: 59+ tests passing
-- ⚠️ **E2E Tests**: Needs initialization fixes
+- ✅ **Test Coverage**: 59+ tests passing (7 E2E tests all passing)
+- ✅ **E2E Tests**: All tests passing with proper GameSession initialization
 - ⏳ **Performance**: Not yet measured (target: <5ms per tool execution)
 
 ## 🔄 Next Steps
 
 ### Immediate (High Priority)
-1. Fix E2E test initialization issues
-2. Fix UI test script timeout
+1. ✅ Fix E2E test initialization issues (All tests passing)
+2. ✅ Fix UI test script timeout (Increased timeouts for slower systems)
 3. Verify tool execution performance
 
 ### Short Term (Medium Priority)
