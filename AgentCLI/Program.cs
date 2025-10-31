@@ -6,6 +6,7 @@ using System.Text.Json;
 using AgentCLI;
 using ConsoleGameServer.MultiWorld;
 using ConsoleGameServer.Narrative;
+using ConsoleGameServer.Agents;
 
 namespace AgentCLI
 {
@@ -446,6 +447,116 @@ namespace AgentCLI
             worldCommand.AddCommand(worldShutdownCommand);
 
             rootCommand.AddCommand(worldCommand);
+
+            // Agent runner commands (attach/step/run/stop/status)
+            var agentCmd = new Command("agent", "Agent runner orchestration");
+
+            var attachCmd = new Command("attach", "Attach an agent runner to a session");
+            var attachSessionArg = new Argument<string>("sessionId", "Session ID to attach to");
+            var attachAgentOpt = new Option<string>("--agent", () => "agent-1", "Agent identifier");
+            var attachRunnerOpt = new Option<string>("--runner", () => "runner-1", "Runner grain id");
+            attachCmd.AddArgument(attachSessionArg);
+            attachCmd.AddOption(attachAgentOpt);
+            attachCmd.AddOption(attachRunnerOpt);
+            attachCmd.SetHandler(async (string sessionId, string agent, string runner) =>
+            {
+                try
+                {
+                    var r = client.GetAgentRunner(runner);
+                    var ok = await r.AttachAsync(sessionId, agent);
+                    Console.WriteLine(ok ? $"✓ Attached {runner} to {sessionId} as {agent}" : $"✗ Failed to attach {runner} to {sessionId}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Attach failed: {ex.Message}");
+                }
+            }, attachSessionArg, attachAgentOpt, attachRunnerOpt);
+            agentCmd.AddCommand(attachCmd);
+
+            var stepCmd = new Command("step", "Execute one agent step");
+            var stepRunnerArg = new Argument<string>("runnerId", "Runner grain id");
+            stepCmd.AddArgument(stepRunnerArg);
+            stepCmd.SetHandler(async (string runnerId) =>
+            {
+                try
+                {
+                    var r = client.GetAgentRunner(runnerId);
+                    await r.StepAsync();
+                    var s = await r.GetStatusAsync();
+                    Console.WriteLine($"✓ Step done. Steps={s.Steps} LastAction={s.LastAction} Result={s.LastResult}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Step failed: {ex.Message}");
+                }
+            }, stepRunnerArg);
+            agentCmd.AddCommand(stepCmd);
+
+            var runCmd = new Command("run", "Run agent loop");
+            var runRunnerArg = new Argument<string>("runnerId", "Runner grain id");
+            var runMaxOpt = new Option<int?>("--max-steps", () => 10, "Max steps");
+            var runDelayOpt = new Option<int>("--delay", () => 200, "Delay ms between steps");
+            runCmd.AddArgument(runRunnerArg);
+            runCmd.AddOption(runMaxOpt);
+            runCmd.AddOption(runDelayOpt);
+            runCmd.SetHandler(async (string runnerId, int? maxSteps, int delay) =>
+            {
+                try
+                {
+                    var r = client.GetAgentRunner(runnerId);
+                    await r.RunAsync(maxSteps, delay);
+                    Console.WriteLine($"✓ Running {runnerId} (maxSteps={maxSteps}, delay={delay}ms)");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Run failed: {ex.Message}");
+                }
+            }, runRunnerArg, runMaxOpt, runDelayOpt);
+            agentCmd.AddCommand(runCmd);
+
+            var stopCmd = new Command("stop", "Stop agent loop");
+            var stopRunnerArg = new Argument<string>("runnerId", "Runner grain id");
+            stopCmd.AddArgument(stopRunnerArg);
+            stopCmd.SetHandler(async (string runnerId) =>
+            {
+                try
+                {
+                    var r = client.GetAgentRunner(runnerId);
+                    await r.StopAsync();
+                    Console.WriteLine($"✓ Stopped {runnerId}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Stop failed: {ex.Message}");
+                }
+            }, stopRunnerArg);
+            agentCmd.AddCommand(stopCmd);
+
+            var statusCmd = new Command("status", "Show runner status");
+            var statusRunnerArg = new Argument<string>("runnerId", "Runner grain id");
+            statusCmd.AddArgument(statusRunnerArg);
+            statusCmd.SetHandler(async (string runnerId) =>
+            {
+                try
+                {
+                    var r = client.GetAgentRunner(runnerId);
+                    var s = await r.GetStatusAsync();
+                    Console.WriteLine($"Runner {runnerId}");
+                    Console.WriteLine($"  Session: {s.SessionId}");
+                    Console.WriteLine($"  Agent:   {s.AgentId}");
+                    Console.WriteLine($"  Running: {s.IsRunning}");
+                    Console.WriteLine($"  Steps:   {s.Steps}");
+                    Console.WriteLine($"  Last:    {s.LastAction} -> {s.LastResult}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Status failed: {ex.Message}");
+                }
+            }, statusRunnerArg);
+            agentCmd.AddCommand(statusCmd);
+
+            rootCommand.AddCommand(agentCmd);
+
 
             // Narrative management commands
             var narrativeCommand = new Command("narrative", "Manage game narratives");

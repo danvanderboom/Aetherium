@@ -76,6 +76,14 @@ namespace AgentCLI
             return _client.GetGrain<IWorldGrain>(worldId);
         }
 
+        public IAgentRunnerGrain GetAgentRunner(string runnerId)
+        {
+            if (_client == null)
+                throw new InvalidOperationException("Client not connected. Call ConnectAsync first.");
+
+            return _client.GetGrain<IAgentRunnerGrain>(runnerId);
+        }
+
         public async ValueTask DisposeAsync()
         {
             if (_host != null)

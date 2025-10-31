@@ -9,6 +9,7 @@ using ConsoleGameModel;
 using ConsoleGameServer.MultiWorld;
 using Microsoft.AspNetCore.SignalR;
 using Orleans;
+using ConsoleGameServer;
 
 namespace ConsoleGameServer.Management
 {
@@ -23,6 +24,7 @@ namespace ConsoleGameServer.Management
         private readonly IHubContext<GameHub> _hubContext;
         private readonly GameSessionManager _sessionManager;
         private readonly IGrainFactory _grainFactory;
+        private readonly InteractionSystem _interactionSystem = new InteractionSystem();
 
         private class SessionMetadata
         {
@@ -350,6 +352,212 @@ namespace ConsoleGameServer.Management
             {
                 Console.WriteLine($"[GameManagementGrain] Error setting time scale: {ex.Message}");
                 return Task.FromResult(OperationResult.Error($"Failed to set time scale: {ex.Message}"));
+            }
+        }
+
+        // ============================================================
+        // Gameplay control + perception (for agents)
+        // ============================================================
+
+        public Task<string?> GetPerceptionAsync(string sessionId)
+        {
+            if (string.IsNullOrEmpty(sessionId))
+                return Task.FromResult<string?>(null);
+
+            if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                return Task.FromResult<string?>(null);
+
+            var session = _sessionManager.GetSession(metadata.ConnectionId);
+            if (session == null)
+                return Task.FromResult<string?>(null);
+
+            try
+            {
+                var perception = session.GetPerception();
+                var json = System.Text.Json.JsonSerializer.Serialize(perception);
+                return Task.FromResult<string?>(json);
+            }
+            catch
+            {
+                return Task.FromResult<string?>(null);
+            }
+        }
+
+        public async Task<OperationResult> MoveAsync(string sessionId, string direction)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(sessionId))
+                    return OperationResult.Error("Session ID cannot be null");
+
+                if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                    return OperationResult.Error("Session not found");
+
+                var session = _sessionManager.GetSession(metadata.ConnectionId);
+                if (session == null)
+                    return OperationResult.Error("Session not found in manager");
+
+                // Normalize direction
+                var d = (direction ?? string.Empty).Trim().ToUpperInvariant();
+
+                // Support relative directions
+                if (d is "F" or "FORWARD" or "B" or "BACKWARD" or "L" or "LEFT" or "R" or "RIGHT")
+                {
+                    var rel = d switch
+                    {
+                        "F" or "FORWARD" => RelativeDirection.Forward,
+                        "B" or "BACKWARD" => RelativeDirection.Backward,
+                        "L" or "LEFT" => RelativeDirection.Left,
+                        "R" or "RIGHT" => RelativeDirection.Right,
+                        _ => RelativeDirection.Forward
+                    };
+
+                    session.MoveView(rel, 1);
+                }
+                else if (d is "N" or "NORTH" or "E" or "EAST" or "S" or "SOUTH" or "W" or "WEST")
+                {
+                    // Absolute move without changing long-term heading: rotate temporarily, move forward, rotate back
+                    int targetDegrees = d switch
+                    {
+                        "E" or "EAST" => 90,
+                        "S" or "SOUTH" => 180,
+                        "W" or "WEST" => 270,
+                        _ => 0
+                    };
+
+                    var original = session.HeadingDegrees;
+                    int delta = targetDegrees - original;
+                    session.RotateView(delta);
+                    session.MoveView(RelativeDirection.Forward, 1);
+                    session.RotateView(-delta);
+                }
+                else
+                {
+                    return OperationResult.Error("Invalid direction");
+                }
+
+                // Send updated perception to client for visibility
+                var perception = session.GetPerception();
+                await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
+
+                return OperationResult.Ok();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error moving: {ex.Message}");
+                return OperationResult.Error($"Failed to move: {ex.Message}");
+            }
+        }
+
+        public async Task<OperationResult> PickupAsync(string sessionId, string targetEntityId)
+        {
+            try
+            {
+                if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                    return OperationResult.Error("Session not found");
+
+                var session = _sessionManager.GetSession(metadata.ConnectionId);
+                if (session == null)
+                    return OperationResult.Error("Session not found in manager");
+
+                var result = _interactionSystem.TryPickup(session, targetEntityId);
+
+                var perception = session.GetPerception();
+                await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
+
+                return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);
+            }
+            catch (Exception ex)
+            {
+                return OperationResult.Error($"Pickup failed: {ex.Message}");
+            }
+        }
+
+        public async Task<OperationResult> DropAsync(string sessionId, string itemEntityId)
+        {
+            try
+            {
+                if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                    return OperationResult.Error("Session not found");
+
+                var session = _sessionManager.GetSession(metadata.ConnectionId);
+                if (session == null)
+                    return OperationResult.Error("Session not found in manager");
+
+                var result = _interactionSystem.TryDrop(session, itemEntityId);
+                var perception = session.GetPerception();
+                await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
+                return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);
+            }
+            catch (Exception ex)
+            {
+                return OperationResult.Error($"Drop failed: {ex.Message}");
+            }
+        }
+
+        public async Task<OperationResult> UseAsync(string sessionId, string itemEntityId, string onEntityId)
+        {
+            try
+            {
+                if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                    return OperationResult.Error("Session not found");
+
+                var session = _sessionManager.GetSession(metadata.ConnectionId);
+                if (session == null)
+                    return OperationResult.Error("Session not found in manager");
+
+                var result = _interactionSystem.TryUse(session, itemEntityId, onEntityId);
+                var perception = session.GetPerception();
+                await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
+                return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);
+            }
+            catch (Exception ex)
+            {
+                return OperationResult.Error($"Use failed: {ex.Message}");
+            }
+        }
+
+        public async Task<OperationResult> OpenAsync(string sessionId, string targetEntityId)
+        {
+            try
+            {
+                if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                    return OperationResult.Error("Session not found");
+
+                var session = _sessionManager.GetSession(metadata.ConnectionId);
+                if (session == null)
+                    return OperationResult.Error("Session not found in manager");
+
+                var result = _interactionSystem.TryOpen(session, targetEntityId);
+                var perception = session.GetPerception();
+                await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
+                return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);
+            }
+            catch (Exception ex)
+            {
+                return OperationResult.Error($"Open failed: {ex.Message}");
+            }
+        }
+
+        public async Task<OperationResult> CloseAsync(string sessionId, string targetEntityId)
+        {
+            try
+            {
+                if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                    return OperationResult.Error("Session not found");
+
+                var session = _sessionManager.GetSession(metadata.ConnectionId);
+                if (session == null)
+                    return OperationResult.Error("Session not found in manager");
+
+                var result = _interactionSystem.TryClose(session, targetEntityId);
+                var perception = session.GetPerception();
+                await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
+                return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);
+            }
+            catch (Exception ex)
+            {
+                return OperationResult.Error($"Close failed: {ex.Message}");
             }
         }
 

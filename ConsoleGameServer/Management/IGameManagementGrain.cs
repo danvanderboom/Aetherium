@@ -38,6 +38,15 @@ namespace ConsoleGameServer.Management
         Task<OperationResult> PauseWorldAsync(string worldId);
         Task<OperationResult> ResumeWorldAsync(string worldId);
         Task<OperationResult> ShutdownWorldAsync(string worldId);
+
+        // Gameplay control + perception (for agents)
+        Task<string?> GetPerceptionAsync(string sessionId); // JSON-serialized PerceptionDto
+        Task<OperationResult> MoveAsync(string sessionId, string direction);
+        Task<OperationResult> PickupAsync(string sessionId, string targetEntityId);
+        Task<OperationResult> DropAsync(string sessionId, string itemEntityId);
+        Task<OperationResult> UseAsync(string sessionId, string itemEntityId, string onEntityId);
+        Task<OperationResult> OpenAsync(string sessionId, string targetEntityId);
+        Task<OperationResult> CloseAsync(string sessionId, string targetEntityId);
     }
 }
 
