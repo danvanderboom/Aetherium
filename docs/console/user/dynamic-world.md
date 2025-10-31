@@ -284,6 +284,224 @@ World state is saved:
 - **Compaction**: Deltas periodically merged into snapshots
 - **Automatic**: World saves periodically (every 5 minutes by default)
 
+## Examples
+
+### Example: Weather-Based Exploration
+
+**Scenario**: You need to travel to a distant location during winter.
+
+**Challenge**: Snow reduces visibility and makes travel slower.
+
+**Solution**:
+1. Check weather before departing (`appsettings.json` config shows weather patterns)
+2. Wait for clear weather periods (snow transitions to clear periodically)
+3. Plan rest stops during storms
+4. Use indoor locations as weather shelters
+
+**Result**: Safer travel by timing your journey with weather patterns.
+
+### Example: Seasonal Creature Spawning
+
+**Scenario**: You want to farm wolves for resources.
+
+**Understanding**:
+- Wolves spawn more frequently at night
+- Spawn rates vary by season
+- Weather affects spawn probability
+
+**Strategy**:
+1. Wait until nighttime (after 6 PM game time)
+2. Choose winter for higher spawn rates
+3. Avoid rainy weather (wolves avoid rain)
+4. Check spawn locations regularly
+
+**Result**: Optimized resource gathering by understanding spawn mechanics.
+
+### Example: Path Emergence Strategy
+
+**Scenario**: You frequently travel between two locations.
+
+**Behavior**:
+- Each traversal adds to the heatmap
+- High-traffic paths become visible over time
+- NPCs may follow established paths
+
+**Tactic**:
+1. Establish clear routes by consistent travel
+2. Use paths for faster navigation (future feature)
+3. Patrol off-path areas for hidden content
+4. Let NPCs use your paths for predictable encounters
+
+**Result**: Efficient navigation and strategic advantages.
+
+### Example: Event Timing
+
+**Scenario**: Merchant caravans are valuable for trading.
+
+**Information**:
+- Caravans spawn at scheduled times
+- Events are location-based
+- Some events are recurring
+
+**Approach**:
+1. Note merchant spawn times and locations
+2. Plan routes to intersect with caravans
+3. Save valuable items for merchant encounters
+4. Watch for recurring events on intervals
+
+**Result**: Maximized trading opportunities through planning.
+
+### Example: Structure Discovery
+
+**Scenario**: You want to find new buildings and structures.
+
+**Mechanics**:
+- NPCs build structures over time
+- Buildings appear in suitable locations
+- Structures take days to complete
+
+**Method**:
+1. Return to previously explored areas regularly
+2. Check high-traffic locations (structures prefer populated areas)
+3. Patrol during different seasons (building rates vary)
+4. Explore during daytime (better visibility for discovery)
+
+**Result**: Regular discovery of new content and structures.
+
+## Troubleshooting
+
+### Weather Not Changing
+
+**Symptom**: Weather stays the same for long periods.
+
+**Possible Causes**:
+- Weather system disabled in configuration
+- Low transition probability settings
+- Region-specific issues
+
+**Solutions**:
+1. Check `EnableWeather` setting in `appsettings.json`
+2. Verify `TickHz` is set correctly (world must tick for weather to update)
+3. Wait longer - weather transitions are probabilistic
+4. Check region is being ticked (verify server logs)
+
+### Time Not Advancing
+
+**Symptom**: Game time stays static.
+
+**Possible Causes**:
+- Server ticks disabled
+- World tick service not running
+- Configuration issues
+
+**Solutions**:
+1. Verify `TickHz > 0` in `appsettings.json`
+2. Check server logs for tick service errors
+3. Ensure `WorldTickService` is running
+4. Restart server if needed
+
+### Creatures Not Spawning
+
+**Symptom**: No creatures appear despite correct conditions.
+
+**Possible Causes**:
+- Spawn system disabled
+- Low spawn probability
+- Weather/season mismatches
+- Region not ticking
+
+**Solutions**:
+1. Check `EnableProceduralEvents` setting
+2. Verify spawn probability settings
+3. Wait longer - spawns are probabilistic
+4. Check weather/season compatibility
+5. Ensure region is active and ticking
+
+### Paths Not Appearing
+
+**Symptom**: Heatmap trails don't show up.
+
+**Possible Causes**:
+- Path emergence disabled
+- Insufficient traversal count
+- Visualization threshold too high
+
+**Solutions**:
+1. Verify `EnableAgentChanges` is enabled
+2. Travel paths multiple times (paths need several traversals)
+3. Check traversal heatmap thresholds
+4. Use perception system to view heatmaps
+
+### Structures Not Building
+
+**Symptom**: No new buildings appear.
+
+**Possible Causes**:
+- Builder system disabled
+- Low build probability
+- No suitable locations
+- World access unavailable
+
+**Solutions**:
+1. Check `EnableAgentChanges` setting
+2. Wait longer - building takes in-game days
+3. Explore different areas (structures prefer certain locations)
+4. Check server logs for builder modifier errors
+
+### Events Not Triggering
+
+**Symptom**: Scheduled events don't occur.
+
+**Possible Causes**:
+- Event system disabled
+- Event handlers not registered
+- Timing mismatches
+- Location issues
+
+**Solutions**:
+1. Verify `EnableProceduralEvents` is enabled
+2. Check event scheduler logs
+3. Verify event timing (use game time, not real time)
+4. Check event location coordinates
+
+### Seasonal Effects Not Working
+
+**Symptom**: Season changes don't affect gameplay.
+
+**Possible Causes**:
+- Season system disabled
+- Day calculation incorrect
+- Modifiers not registered
+
+**Solutions**:
+1. Check `EnableSeasons` setting
+2. Verify day calculation (120 days = 1 year cycle)
+3. Check season manager is initialized
+4. Verify weather modifiers are using season data
+
+### Performance Issues
+
+**Symptom**: Game lags or freezes during ticks.
+
+**Possible Causes**:
+- Too many active modifiers
+- High tick frequency
+- Large region sizes
+- Resource constraints
+
+**Solutions**:
+1. Reduce `TickHz` (lower tick rate)
+2. Disable unused systems (weather, seasons, etc.)
+3. Reduce region size (if configurable)
+4. Check server resource usage
+5. Optimize modifier priority/execution
+
+## Advanced Configuration
+
+### Custom Modifiers
+
+For advanced users who want to create custom temporal modifiers, see [Temporal Modifiers Guide](temporal-modifiers.md).
+
 ## Future Enhancements
 
 Planned features for the dynamic world:

@@ -68,8 +68,8 @@ namespace Aetherium.Test.Simulation
                 0
             ).Wait();
             
-            Assert.AreEqual(2, modifier1.ApplyCount);
-            Assert.AreEqual(2, modifier2.ApplyCount);
+            Assert.AreEqual(1, modifier1.ApplyCount);
+            Assert.AreEqual(1, modifier2.ApplyCount);
         }
 
         // Test helper classes

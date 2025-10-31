@@ -42,8 +42,18 @@ Time, weather, seasons, and evolving world features.
 - Weather types, transitions, and gameplay impact
 - Seasonal cycle and spawn behavior
 - Paths, structures, and procedural events
+- Troubleshooting guide and examples
 
 *Perfect for: Understanding world evolution and planning around time/weather*
+
+### ⚙️ [Temporal Modifiers](temporal-modifiers.md)
+Advanced guide for the temporal modifier system.
+- How modifiers work and execute
+- Creating custom modifiers
+- Modifier priority and best practices
+- Examples and testing strategies
+
+*Perfect for: Developers and advanced users creating custom time-based effects*
 
 ## Quick Start
 

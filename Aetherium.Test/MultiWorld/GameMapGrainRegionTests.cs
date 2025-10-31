@@ -8,6 +8,8 @@ using Orleans;
 using Aetherium.Server.MultiWorld;
 using Microsoft.Extensions.Options;
 using Aetherium.Server.Simulation;
+using Aetherium.Server.Persistence;
+using Aetherium.Server.Events;
 
 namespace Aetherium.Test.MultiWorld
 {
@@ -42,6 +44,34 @@ namespace Aetherium.Test.MultiWorld
                         options.RegionSize = 64;
                         options.TickHz = 1.0;
                         options.DayLengthMinutes = 24;
+                        options.EnableWeather = true;
+                        options.EnableSeasons = true;
+                    });
+
+                    services.AddSingleton<WorldClock>(sp =>
+                    {
+                        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SimulationOptions>>();
+                        return new WorldClock(opts);
+                    });
+
+                    services.AddSingleton<SeasonManager>(sp =>
+                    {
+                        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SimulationOptions>>();
+                        return new SeasonManager(opts);
+                    });
+
+                    services.AddSingleton<WeatherSystem>(sp =>
+                    {
+                        var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SimulationOptions>>();
+                        return new WeatherSystem(opts);
+                    });
+
+                    services.AddSingleton<IWorldSnapshotStore, MemoryWorldSnapshotStore>();
+                    services.AddSingleton<TemporalModifierRegistry>(_ => new TemporalModifierRegistry());
+                    services.AddSingleton<IEventScheduler>(sp =>
+                    {
+                        var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SimulationOptions>>();
+                        return new EventScheduler(options);
                     });
                 });
             }

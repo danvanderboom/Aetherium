@@ -70,20 +70,10 @@ namespace Aetherium.Server
                     var builderAI = sp.GetService<BuilderAI>();
                     if (builderAI != null)
                     {
-                        var builderModifier = new BuilderModifier(builderAI, async (region) =>
-                        {
-                            // Get snapshot to retrieve MapId
-                            var snapshot = await region.GetSnapshotAsync();
-                            if (string.IsNullOrEmpty(snapshot.MapId))
-                                return null;
-
-                            var grainFactory = sp.GetService<Orleans.IGrainFactory>();
-                            if (grainFactory == null)
-                                return null;
-
-                            var mapGrain = grainFactory.GetGrain<Aetherium.Server.MultiWorld.IGameMapGrain>(snapshot.MapId);
-                            return await mapGrain.PerformWorldOperationAsync(async world => await Task.FromResult(world));
-                        });
+                        // BuilderModifier currently requires World access which is not easily available
+                        // without the Func-based methods. For now, pass null and let it skip building
+                        // until BuildStructureAsync is fully implemented.
+                        var builderModifier = new BuilderModifier(builderAI, null);
                         registry.Register(builderModifier);
                     }
                     return registry;

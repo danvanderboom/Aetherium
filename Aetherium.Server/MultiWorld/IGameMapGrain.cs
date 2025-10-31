@@ -58,15 +58,14 @@ namespace Aetherium.Server.MultiWorld
         Task<bool> LoadMapAsync();
 
         /// <summary>
-        /// Performs an operation on the World for this map.
-        /// This allows modifiers to access World without exposing it directly.
+        /// Spawns an entity in the world at the specified location.
         /// </summary>
-        Task<T> PerformWorldOperationAsync<T>(Func<Aetherium.Core.World, Task<T>> operation);
-        
+        Task<SpawnEntityResult> SpawnEntityAsync(SpawnEntityRequest request);
+
         /// <summary>
-        /// Performs an operation on the World for this map (void version).
+        /// Builds a structure in the world at the specified location.
         /// </summary>
-        Task PerformWorldOperationAsync(Func<Aetherium.Core.World, Task> operation);
+        Task<BuildStructureResult> BuildStructureAsync(BuildStructureRequest request);
     }
 
     /// <summary>

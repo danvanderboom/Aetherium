@@ -79,7 +79,6 @@ namespace Aetherium.Test.MultiWorld
 		}
 
 		[Test]
-		[Ignore("Orleans serialization issue with IGameMapGrain - pre-existing")]
 		public async Task Tick_SetsWeatherAndSeasonInSnapshot()
 		{
 			var mapId = "map:test-weather";

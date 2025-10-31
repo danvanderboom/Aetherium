@@ -1,6 +1,8 @@
 using Orleans;
 using Orleans.Runtime;
 using Aetherium.Core;
+using Aetherium.Components;
+using Aetherium.Entities;
 using Aetherium.WorldGen;
 using Passes = Aetherium.WorldGen.Passes;
 using System;
@@ -328,20 +330,93 @@ namespace Aetherium.Server.MultiWorld
             return true;
         }
 
-        public async Task<T> PerformWorldOperationAsync<T>(Func<World, Task<T>> operation)
+        public async Task<SpawnEntityResult> SpawnEntityAsync(SpawnEntityRequest request)
         {
             if (_world == null)
-                throw new InvalidOperationException("World not initialized for this map");
+                return new SpawnEntityResult { Success = false, ErrorMessage = "World not initialized for this map" };
 
-            return await operation(_world);
+            try
+            {
+                var location = new WorldLocation(request.X, request.Y, request.Z);
+
+                // Check if location is valid
+                if (!_world.PassableTerrain(location))
+                {
+                    return new SpawnEntityResult { Success = false, ErrorMessage = "Location is not passable" };
+                }
+
+                // Check if location is already occupied
+                if (_world.EntitiesByLocation.TryGetValue(location, out var entitiesAtLoc))
+                {
+                    foreach (var existingEntity in entitiesAtLoc.Values)
+                    {
+                        if (existingEntity is Character)
+                        {
+                            return new SpawnEntityResult { Success = false, ErrorMessage = "Location is already occupied" };
+                        }
+                    }
+                }
+
+                // Ensure required tile type exists
+                if (!_world.TileTypes.ContainsKey("Monster"))
+                {
+                    _world.TileTypes["Monster"] = new TileType
+                    {
+                        Name = "Monster",
+                        Settings = new Dictionary<string, string>
+                        {
+                            { "MapCharacter", "M" },
+                            { "BackgroundColor", System.ConsoleColor.Black.ToString() },
+                            { "ForegroundColor", System.ConsoleColor.DarkRed.ToString() }
+                        }
+                    };
+                }
+
+                // Create the entity based on creature type
+                Character? entity = request.CreatureType.ToLowerInvariant() switch
+                {
+                    "monster" => new Aetherium.Monster(_world),
+                    "wolf" => new Aetherium.Monster(_world),
+                    "bear" => new Aetherium.Monster(_world),
+                    "bandit" => new Aetherium.Monster(_world),
+                    "snake" => new Snake(),
+                    "zombie" => new Zombie(_world),
+                    _ => new Aetherium.Monster(_world)
+                };
+
+                if (entity == null)
+                {
+                    return new SpawnEntityResult { Success = false, ErrorMessage = "Could not create entity" };
+                }
+
+                // Set location and add to world
+                entity.Set(location);
+                _world.AddEntity(entity);
+
+                return new SpawnEntityResult { Success = true, EntityId = entity.EntityId };
+            }
+            catch (Exception ex)
+            {
+                return new SpawnEntityResult { Success = false, ErrorMessage = ex.Message };
+            }
         }
 
-        public async Task PerformWorldOperationAsync(Func<World, Task> operation)
+        public async Task<BuildStructureResult> BuildStructureAsync(BuildStructureRequest request)
         {
             if (_world == null)
-                throw new InvalidOperationException("World not initialized for this map");
+                return new BuildStructureResult { Success = false, ErrorMessage = "World not initialized for this map" };
 
-            await operation(_world);
+            try
+            {
+                // This is a placeholder - full implementation would require access to PrefabLibrary
+                // For now, return success but log that it's not fully implemented
+                Console.WriteLine($"[GameMapGrain] BuildStructureAsync called for {request.PrefabId} at ({request.X}, {request.Y}, {request.Z}), but requires PrefabLibrary integration");
+                return new BuildStructureResult { Success = false, ErrorMessage = "BuildStructureAsync not fully implemented - requires PrefabLibrary" };
+            }
+            catch (Exception ex)
+            {
+                return new BuildStructureResult { Success = false, ErrorMessage = ex.Message };
+            }
         }
     }
 

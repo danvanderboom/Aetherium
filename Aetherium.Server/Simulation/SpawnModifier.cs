@@ -6,6 +6,7 @@ using Aetherium.Core;
 using Aetherium.Entities;
 using Aetherium.Components;
 using Microsoft.Extensions.DependencyInjection;
+using WorldLocation = Aetherium.Components.WorldLocation;
 
 namespace Aetherium.Server.Simulation
 {
@@ -80,47 +81,7 @@ namespace Aetherium.Server.Simulation
 
             var mapGrain = grainFactory.GetGrain<IGameMapGrain>(snapshot.MapId);
 
-            // Perform spawn operation with World access
-            await mapGrain.PerformWorldOperationAsync(async world =>
-            {
-                // Find a suitable spawn location within the region
-                var spawnLocation = FindSpawnLocation(world, snapshot);
-                if (spawnLocation == null)
-                    return; // No suitable location found
-
-                // Ensure required tile type exists
-                EnsureMonsterTileType(world);
-
-                // Create the entity based on creature type
-                Character? entity = CreateEntity(creatureType, world);
-                if (entity == null)
-                    return; // Could not create entity
-
-                // Set location and add to world
-                entity.Set(spawnLocation);
-                world.AddEntity(entity);
-
-                // Record spawn in region delta
-                var delta = new RegionDelta
-                {
-                    RegionId = snapshot.RegionId,
-                    Timestamp = DateTime.UtcNow,
-                    Type = DeltaType.EntityAdded,
-                    Data = new System.Collections.Generic.Dictionary<string, object>
-                    {
-                        ["creatureType"] = creatureType,
-                        ["location"] = spawnLocation.ToString(),
-                        ["entityId"] = entity.EntityId,
-                        ["spawnRate"] = spawnRate
-                    }
-                };
-
-                await region.ApplyDeltaAsync(delta);
-            });
-        }
-
-        private WorldLocation? FindSpawnLocation(World world, RegionStateSnapshot snapshot)
-        {
+            // Find a suitable spawn location within the region
             // Calculate region bounds
             var regionX = snapshot.RegionX;
             var regionY = snapshot.RegionY;
@@ -130,8 +91,9 @@ namespace Aetherium.Server.Simulation
             // Search for a passable location within the region bounds
             var attempts = 0;
             var maxAttempts = 50;
+            WorldLocation? spawnLocation = null;
 
-            while (attempts < maxAttempts)
+            while (attempts < maxAttempts && spawnLocation == null)
             {
                 attempts++;
 
@@ -140,67 +102,42 @@ namespace Aetherium.Server.Simulation
                 var y = regionY * regionSize + _random.Next(0, regionSize);
                 var location = new WorldLocation(x, y, z);
 
-                // Check if location is valid
-                if (world.PassableTerrain(location))
+                // Request spawn at this location
+                var request = new SpawnEntityRequest
                 {
-                    // Check if location is not already occupied by another character
-                    if (world.EntitiesByLocation.TryGetValue(location, out var entitiesAtLoc))
-                    {
-                        bool hasCharacter = false;
-                        foreach (var entity in entitiesAtLoc.Values)
-                        {
-                            if (entity is Character)
-                            {
-                                hasCharacter = true;
-                                break;
-                            }
-                        }
+                    CreatureType = creatureType,
+                    X = x,
+                    Y = y,
+                    Z = z,
+                    SpawnRate = spawnRate
+                };
 
-                        if (!hasCharacter)
-                        {
-                            return location;
-                        }
-                    }
-                    else
+                var result = await mapGrain.SpawnEntityAsync(request);
+                if (result.Success && !string.IsNullOrEmpty(result.EntityId))
+                {
+                    spawnLocation = location;
+
+                    // Record spawn in region delta
+                    var delta = new RegionDelta
                     {
-                        return location;
-                    }
+                        RegionId = snapshot.RegionId,
+                        Timestamp = DateTime.UtcNow,
+                        Type = DeltaType.EntityAdded,
+                        Data = new System.Collections.Generic.Dictionary<string, object>
+                        {
+                            ["creatureType"] = creatureType,
+                            ["location"] = location.ToString(),
+                            ["entityId"] = result.EntityId,
+                            ["spawnRate"] = spawnRate
+                        }
+                    };
+
+                    await region.ApplyDeltaAsync(delta);
+                    break;
                 }
             }
-
-            return null; // No suitable location found
         }
 
-        private Character? CreateEntity(string creatureType, World world)
-        {
-            return creatureType.ToLowerInvariant() switch
-            {
-                "monster" => new Aetherium.Monster(world),
-                "wolf" => new Aetherium.Monster(world), // Use Monster as default for Wolf
-                "bear" => new Aetherium.Monster(world), // Use Monster as default for Bear
-                "bandit" => new Aetherium.Monster(world), // Use Monster as default for Bandit
-                "snake" => new Snake(),
-                "zombie" => new Zombie(world),
-                _ => new Aetherium.Monster(world) // Default to Monster
-            };
-        }
-
-        private static void EnsureMonsterTileType(World world)
-        {
-            if (!world.TileTypes.ContainsKey("Monster"))
-            {
-                world.TileTypes["Monster"] = new TileType
-                {
-                    Name = "Monster",
-                    Settings = new System.Collections.Generic.Dictionary<string, string>
-                    {
-                        { "MapCharacter", "M" },
-                        { "BackgroundColor", System.ConsoleColor.Black.ToString() },
-                        { "ForegroundColor", System.ConsoleColor.DarkRed.ToString() }
-                    }
-                };
-            }
-        }
     }
 }
 
