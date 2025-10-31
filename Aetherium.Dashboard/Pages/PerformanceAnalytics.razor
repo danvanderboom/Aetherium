@@ -1,0 +1,95 @@
+@page "/performance-analytics"
+@inject AgentTelemetryService TelemetryService
+
+<PageTitle>Performance Analytics</PageTitle>
+
+<h1>Performance Analytics</h1>
+
+<div class="mb-3">
+    <label for="agentIdInput" class="form-label">Agent ID</label>
+    <input type="text" class="form-control" id="agentIdInput" @bind="agentId" />
+    <button class="btn btn-primary mt-2" @onclick="LoadAnalytics">Load Analytics</button>
+</div>
+
+@if (analysis != null)
+{
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h3>Overall Performance</h3>
+            <table class="table">
+                <tr>
+                    <td><strong>Success Rate:</strong></td>
+                    <td>@($"{analysis.SuccessRate:P1}")</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Steps:</strong></td>
+                    <td>@analysis.TotalSteps</td>
+                </tr>
+                <tr>
+                    <td><strong>Successful Actions:</strong></td>
+                    <td>@analysis.TotalSuccessfulActions</td>
+                </tr>
+                <tr>
+                    <td><strong>Failed Actions:</strong></td>
+                    <td>@analysis.TotalFailedActions</td>
+                </tr>
+                <tr>
+                    <td><strong>Average Decision Latency:</strong></td>
+                    <td>@($"{analysis.AverageDecisionLatencyMs:F0}ms")</td>
+                </tr>
+                <tr>
+                    <td><strong>Average Perception Complexity:</strong></td>
+                    <td>@($"{analysis.AveragePerceptionComplexity:F0}")</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    @if (analysis.ActionTypeStats != null && analysis.ActionTypeStats.Count > 0)
+    {
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <h3>Action Type Statistics</h3>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Action Type</th>
+                            <th>Total Count</th>
+                            <th>Success Count</th>
+                            <th>Failure Count</th>
+                            <th>Success Rate</th>
+                            <th>Avg Latency</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var stats in analysis.ActionTypeStats.Values)
+                        {
+                            <tr>
+                                <td>@stats.ActionType</td>
+                                <td>@stats.TotalCount</td>
+                                <td>@stats.SuccessCount</td>
+                                <td>@stats.FailureCount</td>
+                                <td>@($"{stats.SuccessRate:P1}")</td>
+                                <td>@($"{stats.AverageLatencyMs:F0}ms")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string agentId = string.Empty;
+    private PerformanceAnalysis? analysis;
+
+    private async Task LoadAnalytics()
+    {
+        if (!string.IsNullOrEmpty(agentId))
+        {
+            analysis = await TelemetryService.GetTelemetryAsync(agentId);
+        }
+    }
+}
+

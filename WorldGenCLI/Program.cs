@@ -8,6 +8,7 @@ using System.Text.Json;
 using Aetherium.Core;
 using Aetherium.WorldGen;
 using Aetherium.WorldGen.Passes;
+using Aetherium.WorldGen.Training;
 
 namespace WorldGenCLI
 {
@@ -26,6 +27,7 @@ namespace WorldGenCLI
             var versionOpt = new Option<string>("--generator-version", () => "1.0.0", "Generator version tag");
             var paramOpt = new Option<string[]>("--param", () => Array.Empty<string>(), "Additional generator parameters key=value");
             var outputOpt = new Option<string?>("--output", "Optional metrics export path (JSON)");
+            var benchmarkOpt = new Option<string?>("--benchmark", "Generate a specific benchmark scenario by ID");
 
             root.AddOption(generatorOpt);
             root.AddOption(templateOpt);
@@ -36,6 +38,7 @@ namespace WorldGenCLI
             root.AddOption(versionOpt);
             root.AddOption(paramOpt);
             root.AddOption(outputOpt);
+            root.AddOption(benchmarkOpt);
 
             root.SetHandler((InvocationContext ctx) =>
             {
@@ -48,27 +51,49 @@ namespace WorldGenCLI
                 var version = ctx.ParseResult.GetValueForOption(versionOpt)!;
                 var parameters = ctx.ParseResult.GetValueForOption(paramOpt) ?? Array.Empty<string>();
                 var output = ctx.ParseResult.GetValueForOption(outputOpt);
+                var benchmarkId = ctx.ParseResult.GetValueForOption(benchmarkOpt);
 
                 var registry = new MapGeneratorRegistry();
                 registry.DiscoverTypes(typeof(IMapGenerator).Assembly);
 
-                var templateEnum = template.Equals("outdoor", StringComparison.OrdinalIgnoreCase)
-                    ? WorldGenerationTemplate.Outdoor
-                    : WorldGenerationTemplate.Dungeon;
+                WorldGenerationRequest request;
 
-                var seedValue = seedOption ?? Environment.TickCount;
-
-                var request = new WorldGenerationRequest
+                // If benchmark specified, load benchmark and use its recipe
+                if (!string.IsNullOrWhiteSpace(benchmarkId))
                 {
-                    LayoutGenerator = generator,
-                    Template = templateEnum,
-                    Width = width,
-                    Height = height,
-                    Levels = levels,
-                    Seed = seedValue,
-                    GeneratorVersion = version,
-                    Parameters = ParseParameters(parameters)
-                };
+                    BenchmarkLibrary.LoadBenchmarks();
+                    var benchmark = BenchmarkLibrary.GetBenchmark(benchmarkId);
+                    
+                    if (benchmark == null)
+                    {
+                        Console.Error.WriteLine($"Benchmark not found: {benchmarkId}");
+                        ctx.ExitCode = 1;
+                        return;
+                    }
+
+                    Console.WriteLine($"Loading benchmark: {benchmark.Name}");
+                    request = BenchmarkGenerator.GenerateRequest(benchmark.Recipe);
+                }
+                else
+                {
+                    var templateEnum = template.Equals("outdoor", StringComparison.OrdinalIgnoreCase)
+                        ? WorldGenerationTemplate.Outdoor
+                        : WorldGenerationTemplate.Dungeon;
+
+                    var seedValue = seedOption ?? Environment.TickCount;
+
+                    request = new WorldGenerationRequest
+                    {
+                        LayoutGenerator = generator,
+                        Template = templateEnum,
+                        Width = width,
+                        Height = height,
+                        Levels = levels,
+                        Seed = seedValue,
+                        GeneratorVersion = version,
+                        Parameters = ParseParameters(parameters)
+                    };
+                }
 
                 var context = new GeneratorContext(width, height, seedValue)
                 {

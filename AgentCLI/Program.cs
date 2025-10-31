@@ -834,6 +834,67 @@ namespace AgentCLI
 
             rootCommand.AddCommand(agentCmd);
 
+            // Training commands
+            var trainCmd = new Command("train", "Agent training and curriculum management");
+            
+            var trainStartCmd = new Command("start", "Start a training curriculum for an agent");
+            var trainAgentArg = new Argument<string>("agentId", "Agent ID");
+            var trainCurriculumArg = new Argument<string>("curriculumId", "Curriculum ID");
+            trainStartCmd.AddArgument(trainAgentArg);
+            trainStartCmd.AddArgument(trainCurriculumArg);
+            trainStartCmd.SetHandler(async (string agentId, string curriculumId) =>
+            {
+                try
+                {
+                    // TODO: Connect to CurriculumProgressionGrain
+                    Console.WriteLine($"Starting curriculum '{curriculumId}' for agent '{agentId}'");
+                    Console.WriteLine("Note: Full implementation requires CurriculumProgressionGrain integration");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error starting training: {ex.Message}");
+                }
+            }, trainAgentArg, trainCurriculumArg);
+            trainCmd.AddCommand(trainStartCmd);
+
+            var trainStatusCmd = new Command("status", "Show training status for an agent");
+            var trainStatusAgentArg = new Argument<string>("agentId", "Agent ID");
+            trainStatusCmd.AddArgument(trainStatusAgentArg);
+            trainStatusCmd.SetHandler(async (string agentId) =>
+            {
+                try
+                {
+                    // TODO: Get curriculum progress
+                    Console.WriteLine($"Training status for agent '{agentId}':");
+                    Console.WriteLine("Note: Full implementation requires CurriculumProgressionGrain integration");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error getting training status: {ex.Message}");
+                }
+            }, trainStatusAgentArg);
+            trainCmd.AddCommand(trainStatusCmd);
+
+            var trainBenchmarkCmd = new Command("benchmark", "Run a benchmark scenario");
+            var benchmarkIdArg = new Argument<string>("benchmarkId", "Benchmark ID");
+            var benchmarkAgentArg = new Argument<string>("agentId", "Agent ID");
+            trainBenchmarkCmd.AddArgument(benchmarkIdArg);
+            trainBenchmarkCmd.AddArgument(benchmarkAgentArg);
+            trainBenchmarkCmd.SetHandler(async (string benchmarkId, string agentId) =>
+            {
+                try
+                {
+                    Console.WriteLine($"Running benchmark '{benchmarkId}' with agent '{agentId}'");
+                    Console.WriteLine("Note: Full implementation requires benchmark execution integration");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error running benchmark: {ex.Message}");
+                }
+            }, benchmarkIdArg, benchmarkAgentArg);
+            trainCmd.AddCommand(trainBenchmarkCmd);
+
+            rootCommand.AddCommand(trainCmd);
 
             // Narrative management commands
             var narrativeCommand = new Command("narrative", "Manage game narratives");

@@ -1,0 +1,37 @@
+{
+  "benchmarkId": "navigation-basic",
+  "name": "Basic Navigation",
+  "description": "Simple pathfinding test with minimal obstacles",
+  "categories": ["navigation", "pathfinding", "basic"],
+  "difficulty": 2,
+  "version": "1.0.0",
+  "recipe": {
+    "generator": "AdvancedDungeon",
+    "template": "dungeon",
+    "seed": 12345,
+    "generatorVersion": "1.0.0",
+    "width": 40,
+    "height": 40,
+    "levels": 1,
+    "parameters": {
+      "trapDensity": "0.0",
+      "enemyCount": "0",
+      "keyLockChainDepth": "0",
+      "minRooms": "3",
+      "maxRooms": "5",
+      "minBranchingFactor": "0.2",
+      "maxBranchingFactor": "0.4"
+    }
+  },
+  "successCriteria": {
+    "type": "ReachGoal",
+    "goalLocation": {
+      "x": 35,
+      "y": 35,
+      "z": 0
+    },
+    "maxSteps": 150,
+    "maxTimeSeconds": 300.0
+  }
+}
+

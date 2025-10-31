@@ -1,0 +1,131 @@
+{
+  "curriculumId": "advanced-combat",
+  "name": "Advanced Combat Training",
+  "description": "Focus on combat scenarios with enemies and resource management",
+  "categories": ["combat", "advanced"],
+  "version": "1.0.0",
+  "autoProgression": true,
+  "stages": [
+    {
+      "stageId": "combat-intro",
+      "name": "Combat Introduction",
+      "description": "Basic combat encounters with minimal enemies",
+      "difficulty": 40,
+      "prerequisites": {
+        "requiredStageIds": [],
+        "minSuccessRate": null,
+        "minCompletedRuns": null,
+        "minSkillLevel": null
+      },
+      "parameters": {
+        "width": 50,
+        "height": 50,
+        "levels": 1,
+        "trapDensity": 0.1,
+        "enemyCount": 2,
+        "puzzleComplexity": 0.1,
+        "keyLockChainDepth": 1,
+        "secretRoomDensity": 0.05,
+        "minRooms": 4,
+        "maxRooms": 7,
+        "minBranchingFactor": 0.3,
+        "maxBranchingFactor": 0.5,
+        "resourceAvailability": 0.7,
+        "combatDifficulty": 0.4,
+        "additionalParameters": {
+          "enemyStrength": "weak",
+          "enemyCountMin": "1",
+          "enemyCountMax": "3"
+        }
+      },
+      "completionCriteria": {
+        "minSuccessRate": 0.65,
+        "minSuccessfulCompletions": 3,
+        "minAttempts": 5,
+        "maxAverageSteps": null,
+        "minEfficiency": 0.55
+      }
+    },
+    {
+      "stageId": "combat-intermediate",
+      "name": "Intermediate Combat",
+      "description": "More challenging combat with multiple enemy types",
+      "difficulty": 60,
+      "prerequisites": {
+        "requiredStageIds": ["combat-intro"],
+        "minSuccessRate": 0.65,
+        "minCompletedRuns": 3,
+        "minSkillLevel": null
+      },
+      "parameters": {
+        "width": 60,
+        "height": 60,
+        "levels": 1,
+        "trapDensity": 0.15,
+        "enemyCount": 4,
+        "puzzleComplexity": 0.2,
+        "keyLockChainDepth": 2,
+        "secretRoomDensity": 0.1,
+        "minRooms": 6,
+        "maxRooms": 10,
+        "minBranchingFactor": 0.4,
+        "maxBranchingFactor": 0.6,
+        "resourceAvailability": 0.4,
+        "combatDifficulty": 0.6,
+        "additionalParameters": {
+          "enemyStrength": "medium",
+          "enemyCountMin": "3",
+          "enemyCountMax": "6"
+        }
+      },
+      "completionCriteria": {
+        "minSuccessRate": 0.55,
+        "minSuccessfulCompletions": 4,
+        "minAttempts": 6,
+        "maxAverageSteps": null,
+        "minEfficiency": 0.45
+      }
+    },
+    {
+      "stageId": "combat-advanced",
+      "name": "Advanced Combat",
+      "description": "High-difficulty combat scenarios with resource scarcity",
+      "difficulty": 80,
+      "prerequisites": {
+        "requiredStageIds": ["combat-intermediate"],
+        "minSuccessRate": 0.55,
+        "minCompletedRuns": 4,
+        "minSkillLevel": null
+      },
+      "parameters": {
+        "width": 70,
+        "height": 70,
+        "levels": 2,
+        "trapDensity": 0.25,
+        "enemyCount": 8,
+        "puzzleComplexity": 0.4,
+        "keyLockChainDepth": 3,
+        "secretRoomDensity": 0.15,
+        "minRooms": 8,
+        "maxRooms": 12,
+        "minBranchingFactor": 0.5,
+        "maxBranchingFactor": 0.7,
+        "resourceAvailability": 0.2,
+        "combatDifficulty": 0.8,
+        "additionalParameters": {
+          "enemyStrength": "strong",
+          "enemyCountMin": "6",
+          "enemyCountMax": "10"
+        }
+      },
+      "completionCriteria": {
+        "minSuccessRate": 0.45,
+        "minSuccessfulCompletions": 5,
+        "minAttempts": 8,
+        "maxAverageSteps": null,
+        "minEfficiency": 0.35
+      }
+    }
+  ]
+}
+

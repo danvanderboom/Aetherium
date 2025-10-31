@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Aetherium.Server.Agents.Telemetry;
 using Orleans;
 
 namespace Aetherium.Server.Agents
@@ -14,6 +15,7 @@ namespace Aetherium.Server.Agents
         Task StepAsync();
         Task RunAsync(int? maxSteps = null, int stepDelayMs = 200);
         Task StopAsync();
+        Task<PerformanceAnalysis?> GetTelemetryAsync();
     }
 
     [GenerateSerializer]

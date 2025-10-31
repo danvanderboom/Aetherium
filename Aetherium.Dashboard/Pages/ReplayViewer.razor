@@ -1,0 +1,55 @@
+@page "/replay-viewer"
+@inject AgentTelemetryService TelemetryService
+
+<PageTitle>Replay Viewer</PageTitle>
+
+<h1>Replay Viewer</h1>
+
+<div class="mb-3">
+    <label for="agentIdInput" class="form-label">Agent ID</label>
+    <input type="text" class="form-control" id="agentIdInput" @bind="agentId" />
+    <button class="btn btn-primary mt-2" @onclick="LoadReplays">Load Replays</button>
+</div>
+
+@if (replayIds != null && replayIds.Count > 0)
+{
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h3>Failed Runs</h3>
+            <ul class="list-group">
+                @foreach (var replayId in replayIds)
+                {
+                    <li class="list-group-item">
+                        <strong>Replay ID:</strong> @replayId
+                        <button class="btn btn-sm btn-secondary float-end" @onclick="() => ViewReplay(replayId)">View</button>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+else if (!string.IsNullOrEmpty(agentId))
+{
+    <div class="alert alert-info mt-3">
+        No failed runs found for agent: @agentId
+    </div>
+}
+
+@code {
+    private string agentId = string.Empty;
+    private List<string> replayIds = new List<string>();
+
+    private async Task LoadReplays()
+    {
+        if (!string.IsNullOrEmpty(agentId))
+        {
+            replayIds = await TelemetryService.GetFailedRunIdsAsync(agentId, 10);
+        }
+    }
+
+    private void ViewReplay(string replayId)
+    {
+        // TODO: Implement replay viewer UI
+    }
+}
+

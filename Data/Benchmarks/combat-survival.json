@@ -1,0 +1,34 @@
+{
+  "benchmarkId": "combat-survival",
+  "name": "Combat Survival",
+  "description": "Survive encounters with multiple enemies",
+  "categories": ["combat", "survival"],
+  "difficulty": 6,
+  "version": "1.0.0",
+  "recipe": {
+    "generator": "AdvancedDungeon",
+    "template": "dungeon",
+    "seed": 54321,
+    "generatorVersion": "1.0.0",
+    "width": 60,
+    "height": 60,
+    "levels": 1,
+    "parameters": {
+      "trapDensity": "0.1",
+      "enemyCount": "5",
+      "keyLockChainDepth": "1",
+      "minRooms": "6",
+      "maxRooms": "10",
+      "minBranchingFactor": "0.4",
+      "maxBranchingFactor": "0.6",
+      "combatDifficulty": "0.5"
+    }
+  },
+  "successCriteria": {
+    "type": "SurviveTurns",
+    "minSurvivalTurns": 50,
+    "maxSteps": 300,
+    "maxTimeSeconds": 600.0
+  }
+}
+

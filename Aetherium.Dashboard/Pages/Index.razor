@@ -1,0 +1,54 @@
+@page "/"
+@inject AgentTelemetryService TelemetryService
+
+<PageTitle>Overview</PageTitle>
+
+<h1>Agent Training Overview</h1>
+
+<div class="row">
+    <div class="col-md-12">
+        <h2>Active Agents</h2>
+        <p>Monitor active agents and their training progress.</p>
+        <a href="/agent-monitor" class="btn btn-primary">View Agent Monitor</a>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h2>Quick Stats</h2>
+        <div class="row">
+            <div class="col-md-3">
+                <div class="metrics-card">
+                    <h3>Active Agents</h3>
+                    <div class="value">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metrics-card">
+                    <h3>Running Benchmarks</h3>
+                    <div class="value">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metrics-card">
+                    <h3>Completed Training Runs</h3>
+                    <div class="value">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metrics-card">
+                    <h3>Failed Runs</h3>
+                    <div class="value">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Initialize dashboard
+    }
+}
+

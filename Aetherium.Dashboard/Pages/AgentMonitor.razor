@@ -1,0 +1,141 @@
+@page "/agent-monitor"
+@inject AgentTelemetryService TelemetryService
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.SignalR.Client
+
+<PageTitle>Agent Monitor</PageTitle>
+
+<h1>Agent Monitor</h1>
+
+<div class="mb-3">
+    <label for="agentIdInput" class="form-label">Agent ID</label>
+    <input type="text" class="form-control" id="agentIdInput" @bind="agentId" @bind:event="oninput" />
+    <button class="btn btn-primary mt-2" @onclick="SubscribeToAgent" disabled="@(hubConnection?.State != HubConnectionState.Connected)">Subscribe</button>
+    @if (hubConnection != null)
+    {
+        <span class="badge @GetConnectionBadgeClass(hubConnection.State) ms-2">@hubConnection.State</span>
+    }
+</div>
+
+@if (currentTelemetry != null)
+{
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <MetricsCard Title="Success Rate" Value="@($"{currentTelemetry.SuccessRate:P1}")" />
+        </div>
+        <div class="col-md-6">
+            <MetricsCard Title="Total Steps" Value="@currentTelemetry.TotalSteps.ToString()" />
+        </div>
+        <div class="col-md-6">
+            <MetricsCard Title="Average Latency" Value="@($"{currentTelemetry.AverageDecisionLatencyMs:F0}ms")" />
+        </div>
+        <div class="col-md-6">
+            <MetricsCard Title="Perception Complexity" Value="@($"{currentTelemetry.AveragePerceptionComplexity:F0}")" />
+        </div>
+    </div>
+
+    @if (currentTelemetry.IdentifiedWeaknesses != null && currentTelemetry.IdentifiedWeaknesses.Count > 0)
+    {
+        <div class="alert alert-warning mt-3">
+            <h4>Identified Weaknesses</h4>
+            <ul>
+                @foreach (var weakness in currentTelemetry.IdentifiedWeaknesses)
+                {
+                    <li>@weakness</li>
+                }
+            </ul>
+        </div>
+    }
+
+    @if (currentTelemetry.Recommendations != null && currentTelemetry.Recommendations.Count > 0)
+    {
+        <div class="alert alert-info mt-3">
+            <h4>Recommendations</h4>
+            <ul>
+                @foreach (var rec in currentTelemetry.Recommendations)
+                {
+                    <li>@rec</li>
+                }
+            </ul>
+        </div>
+    }
+}
+else if (!string.IsNullOrEmpty(agentId))
+{
+    <div class="alert alert-info mt-3">
+        No telemetry data available for agent: @agentId
+    </div>
+}
+
+@code {
+    private string agentId = string.Empty;
+    private PerformanceAnalysis? currentTelemetry;
+    private HubConnection? hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl("http://localhost:5000/agentDashboardHub")
+            .Build();
+
+        hubConnection.On<PerformanceAnalysis>("TelemetryUpdate", (telemetry) =>
+        {
+            currentTelemetry = telemetry;
+            InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.On<string, ReplayData>("ReplayStored", (replayId, replay) =>
+        {
+            // Handle replay storage event if needed
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await hubConnection.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            // Connection failed - will retry on subscribe
+            Console.WriteLine($"Failed to connect to SignalR hub: {ex.Message}");
+        }
+    }
+
+    private async Task SubscribeToAgent()
+    {
+        if (hubConnection != null && !string.IsNullOrEmpty(agentId))
+        {
+            if (hubConnection.State != HubConnectionState.Connected)
+            {
+                await hubConnection.StartAsync();
+            }
+            
+            await hubConnection.SendAsync("SubscribeToAgent", agentId);
+            
+            // Also fetch current telemetry via Orleans
+            currentTelemetry = await TelemetryService.GetTelemetryAsync(agentId);
+        }
+    }
+
+    private string GetConnectionBadgeClass(HubConnectionState state)
+    {
+        return state switch
+        {
+            HubConnectionState.Connected => "bg-success",
+            HubConnectionState.Connecting => "bg-warning",
+            HubConnectionState.Disconnected => "bg-secondary",
+            HubConnectionState.Disconnecting => "bg-warning",
+            _ => "bg-secondary"
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
+

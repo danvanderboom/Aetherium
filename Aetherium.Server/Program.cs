@@ -24,6 +24,7 @@ namespace Aetherium.Server
 
             // Add services
             builder.Services.AddSignalR();
+            builder.Services.AddControllers(); // Add API controllers
             builder.Services.AddSingleton<GameSessionManager>();
             
             // Add world generation services
@@ -132,6 +133,13 @@ namespace Aetherium.Server
                         return host.Services.GetRequiredService<IHubContext<GameHub>>();
                     });
                     
+                    // Register IHubContext<AgentDashboardHub> for AgentRunnerGrain
+                    siloBuilder.Services.AddSingleton<IHubContext<Hubs.AgentDashboardHub>>(sp =>
+                    {
+                        var host = sp.GetRequiredService<IHost>();
+                        return host.Services.GetRequiredService<IHubContext<Hubs.AgentDashboardHub>>();
+                    });
+                    
                     // Register IGrainFactory for GameManagementGrain
                     siloBuilder.Services.AddSingleton<IGrainFactory>(sp =>
                     {
@@ -146,7 +154,10 @@ namespace Aetherium.Server
             var app = builder.Build();
 
             // Configure middleware
+            app.UseRouting();
             app.MapHub<GameHub>("/gamehub");
+            app.MapHub<Hubs.AgentDashboardHub>("/agentDashboardHub"); // Map dashboard hub
+            app.MapControllers(); // Map API controllers
             
             // Dashboard endpoint for viewing active agents
             app.MapGet("/dashboard", () =>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Aetherium.WorldGen.Training;
 
 namespace Aetherium.WorldGen
 {
@@ -24,6 +25,51 @@ namespace Aetherium.WorldGen
         public TimeSpan PhaseTimeout { get; set; } = TimeSpan.FromSeconds(2);
         public bool EnableMetrics { get; set; } = true;
         public bool EnableLogging { get; set; } = true;
+
+        /// <summary>
+        /// Optional curriculum stage for training scenarios.
+        /// </summary>
+        public CurriculumStage? CurriculumStage { get; set; }
+
+        /// <summary>
+        /// Whether this is a training scenario that should enable heatmap collection.
+        /// </summary>
+        public bool IsTrainingMode { get; set; } = false;
+
+        /// <summary>
+        /// Applies curriculum stage parameters to this request if stage is provided.
+        /// </summary>
+        public void ApplyCurriculumStage()
+        {
+            if (CurriculumStage == null)
+                return;
+
+            var stageParams = CurriculumStage.Parameters;
+            Width = stageParams.Width;
+            Height = stageParams.Height;
+            Levels = stageParams.Levels;
+
+            // Apply stage parameters to generator parameters
+            Parameters["trapDensity"] = stageParams.TrapDensity.ToString("F2");
+            Parameters["enemyCount"] = stageParams.EnemyCount.ToString();
+            Parameters["puzzleComplexity"] = stageParams.PuzzleComplexity.ToString("F2");
+            Parameters["keyLockChainDepth"] = stageParams.KeyLockChainDepth.ToString();
+            Parameters["secretRoomDensity"] = stageParams.SecretRoomDensity.ToString("F2");
+            Parameters["minRooms"] = stageParams.MinRooms.ToString();
+            Parameters["maxRooms"] = stageParams.MaxRooms.ToString();
+            Parameters["minBranchingFactor"] = stageParams.MinBranchingFactor.ToString("F2");
+            Parameters["maxBranchingFactor"] = stageParams.MaxBranchingFactor.ToString("F2");
+            Parameters["resourceAvailability"] = stageParams.ResourceAvailability.ToString("F2");
+            Parameters["combatDifficulty"] = stageParams.CombatDifficulty.ToString("F2");
+
+            // Apply any additional parameters
+            foreach (var kvp in stageParams.AdditionalParameters)
+            {
+                Parameters[kvp.Key] = kvp.Value;
+            }
+
+            IsTrainingMode = true;
+        }
     }
 }
 

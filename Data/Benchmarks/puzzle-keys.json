@@ -1,0 +1,39 @@
+{
+  "benchmarkId": "puzzle-keys",
+  "name": "Key-Lock Puzzle",
+  "description": "Navigate a multi-key lock chain to reach the goal",
+  "categories": ["puzzle", "keys", "interaction"],
+  "difficulty": 5,
+  "version": "1.0.0",
+  "recipe": {
+    "generator": "AdvancedDungeon",
+    "template": "dungeon",
+    "seed": 99999,
+    "generatorVersion": "1.0.0",
+    "width": 50,
+    "height": 50,
+    "levels": 1,
+    "parameters": {
+      "trapDensity": "0.05",
+      "enemyCount": "1",
+      "keyLockChainDepth": "2",
+      "minRooms": "5",
+      "maxRooms": "8",
+      "minBranchingFactor": "0.3",
+      "maxBranchingFactor": "0.5",
+      "secretRoomDensity": "0.1"
+    }
+  },
+  "successCriteria": {
+    "type": "ReachGoal",
+    "goalLocation": {
+      "x": 45,
+      "y": 45,
+      "z": 0
+    },
+    "requiredItems": [],
+    "maxSteps": 200,
+    "maxTimeSeconds": 400.0
+  }
+}
+
