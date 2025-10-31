@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Aetherium.Server.Persistence;
 using Aetherium.Server.Simulation;
+using Aetherium.Server.Events;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetherium.Server.MultiWorld
@@ -52,6 +53,11 @@ namespace Aetherium.Server.MultiWorld
         private SeasonManager? GetSeasonManager()
         {
             return this.ServiceProvider.GetService<SeasonManager>();
+        }
+
+        private IEventScheduler? GetEventScheduler()
+        {
+            return this.ServiceProvider.GetService<IEventScheduler>();
         }
 
         private IGameMapGrain? GetMapGrain()
@@ -148,6 +154,14 @@ namespace Aetherium.Server.MultiWorld
             {
                 var snapshot = await GetSnapshotAsync();
                 await modifierRegistry.ApplyAllAsync(this, snapshot, gameTimeElapsed, timeOfDay, day);
+            }
+            
+            // Process scheduled events for this region
+            var eventScheduler = GetEventScheduler();
+            if (eventScheduler != null && clock != null)
+            {
+                var currentGameTime = clock.GetTotalGameTimeHours();
+                await eventScheduler.ProcessScheduledEventsAsync(currentGameTime, day);
             }
             
             // Periodically persist state (not every tick to reduce writes)

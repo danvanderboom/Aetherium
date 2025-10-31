@@ -46,9 +46,9 @@ namespace Aetherium.Server
             // Add simulation services
             builder.Services.AddSingleton<WorldClock>();
             builder.Services.AddSingleton<IWorldSnapshotStore, MemoryWorldSnapshotStore>();
-                builder.Services.AddSingleton<SeasonManager>();
-                builder.Services.AddSingleton<WeatherSystem>();
-                builder.Services.AddSingleton<SpawnManager>();
+            builder.Services.AddSingleton<SeasonManager>();
+            builder.Services.AddSingleton<WeatherSystem>();
+            builder.Services.AddSingleton<SpawnManager>();
                 builder.Services.AddSingleton<BuilderAI>(sp =>
                 {
                     var prefabLibrary = sp.GetRequiredService<PrefabLibrary>();
@@ -62,7 +62,7 @@ namespace Aetherium.Server
                     var spawnManager = sp.GetService<SpawnManager>();
                     if (spawnManager != null)
                     {
-                        var spawnModifier = new SpawnModifier(spawnManager, spawnProbabilityPerTick: 0.01);
+                        var spawnModifier = new SpawnModifier(spawnManager, spawnProbabilityPerTick: 0.01, serviceProvider: sp);
                         registry.Register(spawnModifier);
                     }
                     
@@ -89,6 +89,26 @@ namespace Aetherium.Server
                     return registry;
                 });
             builder.Services.AddSingleton<IEventScheduler, EventScheduler>();
+            
+            // Add Orleans co-hosting (can be disabled for tests via env var)
+            var disableOrleans = Environment.GetEnvironmentVariable("DISABLE_ORLEANS") == "1";
+            
+            // Add world tick service (background service to drive world ticks)
+            builder.Services.AddSingleton<WorldTickService>(sp =>
+            {
+                var grainFactory = sp.GetService<Orleans.IGrainFactory>();
+                if (grainFactory == null && !disableOrleans)
+                {
+                    // If Orleans is enabled, we'll need to resolve IGrainFactory from Orleans host
+                    // For now, we'll create a wrapper that gets it from the Orleans host
+                    // This will be resolved when Orleans starts
+                }
+                var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SimulationOptions>>();
+                return new WorldTickService(grainFactory!, options);
+            });
+            // Note: WorldTickService is registered but not started as a hosted service
+            // Manual ticking can be done via API or other mechanisms
+            // Automatic ticking would require a world registry to track active worlds
             
             // Add world generation services
             builder.Services.AddSingleton<MapGeneratorRegistry>();
@@ -127,9 +147,6 @@ namespace Aetherium.Server
                 registry.LoadTemplates();
                 return registry;
             });
-
-            // Add Orleans co-hosting (can be disabled for tests via env var)
-            var disableOrleans = Environment.GetEnvironmentVariable("DISABLE_ORLEANS") == "1";
             
             if (!disableOrleans)
             {
