@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Aetherium.Core;
+using Aetherium.Components;
 using Aetherium.Entities;
 using Aetherium.Server.Narrative.Procedural;
 using Aetherium.WorldGen;

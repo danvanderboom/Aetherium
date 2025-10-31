@@ -1,4 +1,5 @@
 using System;
+using Aetherium.Core;
 
 namespace Aetherium.Components
 {
