@@ -45,6 +45,7 @@ The game features a comprehensive extensible agent tool system:
 
 ### Architecture & Design
 - ✅ [Agent Tool System](agents/TOOLS.md) - Extensible tool architecture
+- ✅ [Narrative Systems](narrative-systems.md) - Procedural storytelling and emergent narratives
 - Coming soon: System architecture overview
 - Coming soon: Entity-Component-System (ECS) guide
 - Coming soon: Client-Server communication protocol
@@ -144,6 +145,7 @@ Aetherium.Console/
 
 ### Planned Developer Documentation
 - [x] Agent tool system architecture
+- [x] Narrative systems guide
 - [ ] System architecture overview
 - [ ] ECS system guide
 - [ ] Perception system deep dive

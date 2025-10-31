@@ -1,8 +1,6 @@
 ## Purpose
 Defines how a `WorldBuilder` composes a `World` via features and includes torus and river generators.
-
 ## Requirements
-
 ### Requirement: WorldBuilder Registers Tile and Terrain Types
 The builder SHALL add tile and terrain types to a fresh `World`.
 
@@ -38,4 +36,23 @@ The river feature SHALL draw a meandering river band with forested borders.
 - THEN for each step along length, it MUST set a contiguous `Water` band centered at `riverCenter`
 - AND set `Forest` borders on both sides with random widths within configured bounds
 
+### Requirement: Environmental Story Generation Pass
+World generation SHALL include an EnvironmentalStoryPass that places storytelling elements (ruins, camps, lore fragments) during the population phase.
+
+#### Scenario: Environmental story pass execution
+- **WHEN** EnvironmentalStoryPass executes during world generation
+- **THEN** it SHALL place ruins if StoryPOIs contain "ruin" references
+- **AND** it SHALL place abandoned camps if StoryPOIs contain "camp" references
+- **AND** it SHALL place lore fragments if LoreTopics are specified in constraints
+
+#### Scenario: Story features placement
+- **WHEN** EnvironmentalStoryPass executes
+- **THEN** RuinsFeature SHALL place ancient ruins with historical inscriptions
+- **AND** AbandonedCampFeature SHALL place camps with clue inscriptions
+- **AND** PlaceLoreFragmentsFeature SHALL scatter lore fragments based on topics
+
+#### Scenario: Narrative constraints integration
+- **WHEN** NarrativeGenerationConstraints includes LoreTopics or StoryPOIs
+- **THEN** EnvironmentalStoryPass SHALL respect these constraints
+- **AND** story elements SHALL be placed using deterministic RNG from GeneratorContext
 

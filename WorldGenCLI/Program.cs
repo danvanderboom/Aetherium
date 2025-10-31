@@ -205,6 +205,7 @@ namespace WorldGenCLI
                     new OutdoorLayoutPass(),
                     new OutdoorThemingPass(),
                     new OutdoorPopulationPass(),
+                    new EnvironmentalStoryPass(),
                     new OutdoorInteractionsPass(),
                     new OutdoorValidationPass()
                 },
@@ -213,6 +214,7 @@ namespace WorldGenCLI
                     new DungeonLayoutPass(),
                     new DungeonThemingPass(),
                     new DungeonPopulationPass(),
+                    new EnvironmentalStoryPass(),
                     new DungeonInteractionsPass(),
                     new DungeonValidationPass()
                 }

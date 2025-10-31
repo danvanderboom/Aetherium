@@ -29,6 +29,7 @@ namespace Aetherium.Server.Narrative
         [Id(2)] public string Description { get; set; } = string.Empty;
         [Id(3)] public List<QuestObjective> Objectives { get; set; } = new List<QuestObjective>();
         [Id(4)] public Dictionary<string, string> Rewards { get; set; } = new Dictionary<string, string>();
+        [Id(5)] public List<string> PrerequisiteQuestIds { get; set; } = new List<string>(); // Quest IDs that must be completed first
     }
 
     /// <summary>

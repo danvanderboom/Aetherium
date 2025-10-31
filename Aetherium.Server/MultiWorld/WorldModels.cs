@@ -20,6 +20,8 @@ namespace Aetherium.Server.MultiWorld
         [Id(7)] public WorldSize Size { get; set; } = new WorldSize { Width = 100, Height = 100, Depth = 1 };
         [Id(8)] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         [Id(9)] public string CreatedBy { get; set; } = "system";
+        [Id(10)] public string NarrativeStateScope { get; set; } = "shared"; // "shared" or "per-world"
+        [Id(11)] public int? NarrativeSeed { get; set; } // Optional seed for deterministic narrative generation
     }
 
     /// <summary>

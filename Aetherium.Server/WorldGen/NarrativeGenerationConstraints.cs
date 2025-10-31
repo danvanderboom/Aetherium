@@ -25,6 +25,16 @@ namespace Aetherium.WorldGen
         /// Optional difficulty pacing curve expressed as expected challenge rating per level depth.
         /// </summary>
         public Dictionary<int, int> DifficultyByDepth { get; } = new Dictionary<int, int>();
+
+        /// <summary>
+        /// Topics for lore generation to create coherent historical flavor text.
+        /// </summary>
+        public List<string> LoreTopics { get; } = new List<string>(); // e.g., ["history", "legend", "journal"]
+
+        /// <summary>
+        /// Points of interest for environmental storytelling (ruins, camps, etc.).
+        /// </summary>
+        public List<NarrativePointOfInterest> StoryPOIs { get; } = new List<NarrativePointOfInterest>();
     }
 
     public sealed class NarrativeTokenRequest

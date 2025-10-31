@@ -1,0 +1,200 @@
+{
+  "NarrativeId": "emergent-storytelling-example",
+  "Name": "Emergent Storytelling Example",
+  "Description": "Example narrative showcasing procedural quest generation, environmental storytelling, and consequence propagation",
+  "Quests": [
+    {
+      "QuestId": "quest-discover-ruins",
+      "Title": "Discover the Ancient Ruins",
+      "Description": "Explore the mysterious ruins mentioned in local legends",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-find-ruins",
+          "Type": "reach_location",
+          "Parameters": {
+            "locationHint": "ruins",
+            "areaSize": 10
+          }
+        },
+        {
+          "ObjectiveId": "obj-read-inscription",
+          "Type": "interact",
+          "Parameters": {
+            "targetType": "inscription",
+            "action": "read"
+          }
+        }
+      ],
+      "Rewards": {
+        "Experience": "150",
+        "Gold": "75",
+        "Items": "ancient-key"
+      },
+      "PrerequisiteQuestIds": []
+    },
+    {
+      "QuestId": "quest-rescue-scholar",
+      "Title": "Rescue the Scholar",
+      "Description": "A scholar has been captured while investigating the ruins. Find and rescue them.",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-reach-capture-location",
+          "Type": "reach_location",
+          "Parameters": {
+            "locationHint": "dungeon"
+          }
+        },
+        {
+          "ObjectiveId": "obj-defeat-captors",
+          "Type": "kill",
+          "Parameters": {
+            "enemyType": "Guard",
+            "requiredCount": 3
+          }
+        },
+        {
+          "ObjectiveId": "obj-free-scholar",
+          "Type": "rescue",
+          "Parameters": {
+            "targetType": "npc-scholar"
+          }
+        }
+      ],
+      "Rewards": {
+        "Experience": "300",
+        "Gold": "150",
+        "Items": "rescue-medal"
+      },
+      "PrerequisiteQuestIds": ["quest-discover-ruins"]
+    }
+  ],
+  "LootTables": {
+    "loot-ruins": {
+      "TableId": "loot-ruins",
+      "Entries": [
+        {
+          "ItemType": "ancient-artifact",
+          "Weight": 20,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        },
+        {
+          "ItemType": "ancient-text",
+          "Weight": 60,
+          "MinQuantity": 1,
+          "MaxQuantity": 3
+        },
+        {
+          "ItemType": "gold-coins",
+          "Weight": 100,
+          "MinQuantity": 10,
+          "MaxQuantity": 50
+        }
+      ]
+    },
+    "loot-abandoned-camp": {
+      "TableId": "loot-abandoned-camp",
+      "Entries": [
+        {
+          "ItemType": "traveler-journal",
+          "Weight": 80,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        },
+        {
+          "ItemType": "provision-pack",
+          "Weight": 70,
+          "MinQuantity": 1,
+          "MaxQuantity": 1
+        }
+      ]
+    }
+  },
+  "MonsterDensity": {
+    "outdoor": {
+      "ZonePattern": "outdoor",
+      "MonsterTypes": {
+        "Bandit": 0.15,
+        "Wolf": 0.10,
+        "Bear": 0.05
+      }
+    },
+    "dungeon": {
+      "ZonePattern": "dungeon",
+      "MonsterTypes": {
+        "Guard": 0.25,
+        "Skeleton": 0.15,
+        "Troll": 0.05
+      }
+    }
+  },
+  "NPCGoals": [
+    {
+      "GoalId": "goal-scholar-research",
+      "NPCType": "scholar",
+      "GoalType": "collect_items",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-research-ruins",
+          "Type": "collect",
+          "Parameters": {
+            "itemType": "ancient-text",
+            "requiredCount": 5
+          }
+        }
+      ],
+      "GenerationRequirements": {
+        "RequiredPrefabs": ["ruins", "library"],
+        "PreferredZoneType": "outdoor",
+        "RequiredItems": ["ancient-text", "research-equipment"]
+      }
+    },
+    {
+      "GoalId": "goal-guard-patrol",
+      "NPCType": "guard",
+      "GoalType": "defend",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-patrol-route",
+          "Type": "patrol",
+          "Parameters": {
+            "routeLength": 10,
+            "duration": 300
+          }
+        }
+      ],
+      "GenerationRequirements": {
+        "PreferredZoneType": "outdoor",
+        "FeatureRequests": {
+          "patrol_path": {
+            "FeatureType": "patrol_path",
+            "Parameters": {
+              "length": 10,
+              "waypoints": 5
+            }
+          }
+        }
+      }
+    },
+    {
+      "GoalId": "goal-merchant-trade",
+      "NPCType": "merchant",
+      "GoalType": "collect_items",
+      "Objectives": [
+        {
+          "ObjectiveId": "obj-gather-supplies",
+          "Type": "collect",
+          "Parameters": {
+            "itemType": "provision-pack",
+            "requiredCount": 3
+          }
+        }
+      ],
+      "GenerationRequirements": {
+        "PreferredZoneType": "outdoor",
+        "RequiredPrefabs": ["trading-post"]
+      }
+    }
+  ]
+}
+

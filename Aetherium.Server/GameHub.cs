@@ -10,6 +10,7 @@ using Aetherium.Model;
 using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Management;
 using Aetherium.Server.MultiWorld;
+using Aetherium.Server.Narrative.Consequence;
 using Microsoft.AspNetCore.SignalR;
 using Orleans;
 
@@ -33,6 +34,43 @@ namespace Aetherium.Server
         {
             if (clusterClient == null) return null; // Orleans disabled
             return clusterClient.GetGrain<IGameManagementGrain>("GLOBAL");
+        }
+
+        /// <summary>
+        /// Processes a narrative event through the consequence engine if narrative is enabled.
+        /// Non-breaking: only processes if cluster client and world/narrative context are available.
+        /// </summary>
+        private async Task ProcessNarrativeEventAsync(GameSession session, string eventType, Dictionary<string, object> eventData)
+        {
+            if (clusterClient == null || session.WorldId == null)
+                return; // Orleans not available or no world context
+
+            try
+            {
+                // Get world info to find narrative ID
+                var worldGrain = clusterClient.GetGrain<Aetherium.Server.MultiWorld.IWorldGrain>(session.WorldId);
+                var worldInfo = await worldGrain.GetInfoAsync();
+                
+                if (worldInfo?.NarrativeId == null)
+                    return; // No narrative associated with this world
+
+                var consequenceEngine = new NarrativeConsequenceEngine(clusterClient);
+                var narrativeStateScope = worldInfo.Metadata?.TryGetValue("NarrativeStateScope", out var scopeObj) == true 
+                    ? scopeObj?.ToString() 
+                    : "shared";
+
+                await consequenceEngine.ProcessEventAsync(
+                    session.WorldId,
+                    worldInfo.NarrativeId,
+                    eventType,
+                    eventData,
+                    narrativeStateScope);
+            }
+            catch (Exception ex)
+            {
+                // Non-breaking: log but don't fail the interaction
+                Console.WriteLine($"[GameHub] Failed to process narrative event: {ex.Message}");
+            }
         }
 
         public override async Task OnConnectedAsync()
@@ -233,6 +271,16 @@ namespace Aetherium.Server
                 return new InteractionResultDto { Success = false, Reason = "No session" };
 
             var result = interactionSystem.TryPickup(session, targetEntityId);
+            
+            // Process narrative consequences if successful
+            if (result.Success && clusterClient != null && session.WorldId != null)
+            {
+                await ProcessNarrativeEventAsync(session, "item_collected", new Dictionary<string, object>
+                {
+                    ["itemId"] = targetEntityId
+                });
+            }
+            
             var perception = session.GetPerception();
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
@@ -259,6 +307,17 @@ namespace Aetherium.Server
                 return new InteractionResultDto { Success = false, Reason = "No session" };
 
             var result = interactionSystem.TryUse(session, itemEntityId, onEntityId);
+            
+            // Process narrative consequences if successful
+            if (result.Success && clusterClient != null && session.WorldId != null)
+            {
+                await ProcessNarrativeEventAsync(session, "item_used", new Dictionary<string, object>
+                {
+                    ["itemId"] = itemEntityId,
+                    ["targetId"] = onEntityId
+                });
+            }
+            
             var perception = session.GetPerception();
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };

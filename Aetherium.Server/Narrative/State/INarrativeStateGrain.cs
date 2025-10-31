@@ -1,0 +1,87 @@
+using Orleans;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace Aetherium.Server.Narrative.State
+{
+    /// <summary>
+    /// Orleans grain interface for managing runtime narrative state.
+    /// Supports both shared (per-narrative) and per-world state.
+    /// </summary>
+    public interface INarrativeStateGrain : IGrainWithStringKey
+    {
+        /// <summary>
+        /// Gets the current narrative state including active quests, completed quests, and consequences.
+        /// </summary>
+        Task<NarrativeState?> GetStateAsync();
+
+        /// <summary>
+        /// Marks a quest as completed, which may trigger follow-up quests.
+        /// </summary>
+        Task MarkQuestCompletedAsync(string questId);
+
+        /// <summary>
+        /// Records a world event that may trigger narrative consequences.
+        /// </summary>
+        Task RecordEventAsync(string eventType, Dictionary<string, object> eventData);
+
+        /// <summary>
+        /// Adds a procedurally generated quest to the state.
+        /// </summary>
+        Task AddGeneratedQuestAsync(QuestDefinition quest);
+
+        /// <summary>
+        /// Gets all available quests (base + generated) for a player.
+        /// </summary>
+        Task<List<QuestDefinition>> GetAvailableQuestsAsync();
+
+        /// <summary>
+        /// Gets all completed quest IDs.
+        /// </summary>
+        Task<HashSet<string>> GetCompletedQuestIdsAsync();
+
+        /// <summary>
+        /// Checks if a quest can be started (prerequisites met).
+        /// </summary>
+        Task<bool> CanStartQuestAsync(string questId);
+
+        /// <summary>
+        /// Updates relationship between two NPCs.
+        /// </summary>
+        Task UpdateRelationshipAsync(string npc1Id, string npc2Id, float relationshipValue);
+
+        /// <summary>
+        /// Gets relationship value between two NPCs.
+        /// </summary>
+        Task<float?> GetRelationshipAsync(string npc1Id, string npc2Id);
+    }
+
+    /// <summary>
+    /// Runtime state for narrative progression including quests, events, and relationships.
+    /// </summary>
+    [GenerateSerializer]
+    public class NarrativeState
+    {
+        [Id(0)] public string StateId { get; set; } = string.Empty;
+        [Id(1)] public string NarrativeId { get; set; } = string.Empty;
+        [Id(2)] public string? WorldId { get; set; } // null if shared across worlds
+        [Id(3)] public HashSet<string> CompletedQuestIds { get; set; } = new HashSet<string>();
+        [Id(4)] public HashSet<string> ActiveQuestIds { get; set; } = new HashSet<string>();
+        [Id(5)] public List<QuestDefinition> GeneratedQuests { get; set; } = new List<QuestDefinition>();
+        [Id(6)] public List<NarrativeEvent> Events { get; set; } = new List<NarrativeEvent>();
+        [Id(7)] public Dictionary<string, Dictionary<string, float>> Relationships { get; set; } = new Dictionary<string, Dictionary<string, float>>(); // NPC ID -> (NPC ID -> relationship value)
+    }
+
+    /// <summary>
+    /// A recorded world event that may have narrative consequences.
+    /// </summary>
+    [GenerateSerializer]
+    public class NarrativeEvent
+    {
+        [Id(0)] public string EventId { get; set; } = System.Guid.NewGuid().ToString("N");
+        [Id(1)] public string EventType { get; set; } = string.Empty;
+        [Id(2)] public Dictionary<string, object> EventData { get; set; } = new Dictionary<string, object>();
+        [Id(3)] public System.DateTime Timestamp { get; set; } = System.DateTime.UtcNow;
+    }
+}
+
