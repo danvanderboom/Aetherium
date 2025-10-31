@@ -99,6 +99,40 @@ namespace Aetherium.Audio
 			// No built-in playlist; caller should pass specific track names for MAUI builds
 		}
 
+		public void SetListener(AudioListenerState state)
+		{
+			// MAUI audio doesn't support spatial audio
+		}
+
+		public void PlayPositionalEffect(string effectName, AudioVector3 position, AudioPlaybackOptions? options = null)
+		{
+			// Fall back to non-positional playback
+			PlaySoundEffect(effectName);
+		}
+
+		public void PlayAmbientLoop(string id, string trackName, AudioPlaybackOptions? options = null)
+		{
+			if (!IsEnabled) return;
+			// Use background music as ambient loop (MAUI doesn't support multiple loops)
+			PlayBackgroundMusic(trackName, options?.Loop ?? true);
+		}
+
+		public void StopAmbientLoop(string id)
+		{
+			// Stop background music if it matches the loop ID
+			StopBackgroundMusic();
+		}
+
+		public void SetReverbPreset(string preset)
+		{
+			// MAUI audio doesn't support reverb
+		}
+
+		public void SetOcclusion(float amount)
+		{
+			// MAUI audio doesn't support occlusion
+		}
+
 		private string? FindAudioFile(string name, string subfolder, string[] extensions)
 		{
 			foreach (var ext in extensions)

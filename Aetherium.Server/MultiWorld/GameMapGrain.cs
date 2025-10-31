@@ -118,6 +118,7 @@ namespace Aetherium.Server.MultiWorld
                     new Passes.OutdoorPopulationPass(),
                     new Passes.EnvironmentalStoryPass(),
                     new Passes.PortalNetworkPass(),
+                    new Passes.AudioGenerationPass(),
                     new Passes.OutdoorInteractionsPass(),
                     new Passes.AdaptationPass(),
                     new Passes.OutdoorValidationPass()
@@ -129,6 +130,7 @@ namespace Aetherium.Server.MultiWorld
                     new Passes.DungeonPopulationPass(),
                     new Passes.EnvironmentalStoryPass(),
                     new Passes.PortalNetworkPass(),
+                    new Passes.AudioGenerationPass(),
                     new Passes.DungeonInteractionsPass(),
                     new Passes.AdaptationPass(),
                     new Passes.DungeonValidationPass()

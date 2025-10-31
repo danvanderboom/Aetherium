@@ -43,6 +43,36 @@ namespace Aetherium.Audio
             // No-op
         }
 
+        public void SetListener(AudioListenerState state)
+        {
+            // No-op
+        }
+
+        public void PlayPositionalEffect(string effectName, AudioVector3 position, AudioPlaybackOptions? options = null)
+        {
+            // No-op
+        }
+
+        public void PlayAmbientLoop(string id, string trackName, AudioPlaybackOptions? options = null)
+        {
+            // No-op
+        }
+
+        public void StopAmbientLoop(string id)
+        {
+            // No-op
+        }
+
+        public void SetReverbPreset(string preset)
+        {
+            // No-op
+        }
+
+        public void SetOcclusion(float amount)
+        {
+            // No-op
+        }
+
         public void Dispose()
         {
             // No-op

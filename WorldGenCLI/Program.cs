@@ -269,6 +269,7 @@ namespace WorldGenCLI
                     new OutdoorThemingPass(),
                     new OutdoorPopulationPass(),
                     new EnvironmentalStoryPass(),
+                    new Aetherium.WorldGen.Passes.AudioGenerationPass(),
                     new OutdoorInteractionsPass(),
                     new OutdoorValidationPass()
                 },
@@ -279,6 +280,7 @@ namespace WorldGenCLI
                     new DungeonThemingPass(),
                     new DungeonPopulationPass(),
                     new EnvironmentalStoryPass(),
+                    new Aetherium.WorldGen.Passes.AudioGenerationPass(),
                     new DungeonInteractionsPass(),
                     new DungeonValidationPass()
                 }

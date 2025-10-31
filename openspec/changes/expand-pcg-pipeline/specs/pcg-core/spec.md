@@ -39,4 +39,11 @@ The system MUST expose generation metrics (branching factor, loop rate, dead-end
 - WHEN a world is generated
 - THEN metrics are available to validators and logs
 
+### Requirement: Audio Zone Generation Pass
+The system SHALL include an AudioGenerationPass in the Adaptation phase that analyzes terrain and creates audio zones with biome mappings, reverb presets, and occlusion values.
+
+#### Scenario: Audio zones created during generation
+- WHEN world generation completes
+- THEN audio zones are stored in SharedData for use by perception system
+
 

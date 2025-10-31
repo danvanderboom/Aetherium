@@ -1,0 +1,80 @@
+[
+  {
+    "id": "forest",
+    "name": "Forest",
+    "ambientLoop": "forest-ambience-loop",
+    "explorationMusic": "mellow-guitar-loop",
+    "dangerMusic": "techno-synth-loop",
+    "footstepMaterial": "grass",
+    "reverbPreset": "outdoor",
+    "baseOcclusion": 0.2,
+    "ambientEmitters": {}
+  },
+  {
+    "id": "plains",
+    "name": "Plains",
+    "ambientLoop": null,
+    "explorationMusic": "mellow-guitar-loop",
+    "dangerMusic": "techno-synth-loop",
+    "footstepMaterial": "grass",
+    "reverbPreset": "outdoor",
+    "baseOcclusion": 0.0,
+    "ambientEmitters": {}
+  },
+  {
+    "id": "water",
+    "name": "Water",
+    "ambientLoop": "water-ambience-loop",
+    "explorationMusic": "mellow-guitar-loop",
+    "dangerMusic": "techno-synth-loop",
+    "footstepMaterial": "water",
+    "reverbPreset": "outdoor",
+    "baseOcclusion": 0.3,
+    "ambientEmitters": {}
+  },
+  {
+    "id": "dungeon",
+    "name": "Dungeon",
+    "ambientLoop": "dungeon-ambience-loop",
+    "explorationMusic": "dungeon-ambience-loop",
+    "dangerMusic": "techno-synth-loop",
+    "footstepMaterial": "stone",
+    "reverbPreset": "hall",
+    "baseOcclusion": 0.5,
+    "ambientEmitters": {}
+  },
+  {
+    "id": "cave",
+    "name": "Cave",
+    "ambientLoop": "cave-ambience-loop",
+    "explorationMusic": "dungeon-ambience-loop",
+    "dangerMusic": "techno-synth-loop",
+    "footstepMaterial": "stone",
+    "reverbPreset": "cave",
+    "baseOcclusion": 0.7,
+    "ambientEmitters": {}
+  },
+  {
+    "id": "indoors",
+    "name": "Indoors",
+    "ambientLoop": null,
+    "explorationMusic": "mellow-guitar-loop",
+    "dangerMusic": "techno-synth-loop",
+    "footstepMaterial": "stone",
+    "reverbPreset": "room",
+    "baseOcclusion": 0.4,
+    "ambientEmitters": {}
+  },
+  {
+    "id": "mountain",
+    "name": "Mountain",
+    "ambientLoop": null,
+    "explorationMusic": "mellow-guitar-loop",
+    "dangerMusic": "techno-synth-loop",
+    "footstepMaterial": "stone",
+    "reverbPreset": "outdoor",
+    "baseOcclusion": 0.1,
+    "ambientEmitters": {}
+  }
+]
+

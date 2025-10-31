@@ -24,6 +24,7 @@ namespace Aetherium.Core
         private readonly IGameRenderer renderer;
         private readonly WidgetManager widgetManager;
         private readonly IAudioSystem audioSystem;
+        private readonly AudioDirector audioDirector;
         private readonly ClientConsoleMapView mapView;
 
         private PerceptionDto? currentPerception;
@@ -46,6 +47,7 @@ namespace Aetherium.Core
             
             this.renderer = renderer ?? new SpectreConsoleRenderer();
             this.audioSystem = audioSystem ?? CreateAudioSystem();
+            this.audioDirector = new AudioDirector(this.audioSystem);
             
             widgetManager = new WidgetManager();
             
@@ -107,6 +109,9 @@ namespace Aetherium.Core
             compassWidget?.UpdateNavigationData(perception.NavigationData, 
                 perception.IsDirectionalVision, perception.FieldOfViewDegrees);
             inventoryWidget?.UpdateInventoryData(perception.Inventory);
+
+            // Update audio based on perception
+            audioDirector.OnPerception(perception);
 
             // Render frame
             RenderCurrentState();
@@ -209,25 +214,25 @@ namespace Aetherium.Core
                     case ConsoleKey.UpArrow:
                     case ConsoleKey.W:
                         await gameClient.MovePlayerAsync(RelativeDirection.Forward, 1);
-                        audioSystem.PlaySoundEffect("footstep");
+                        audioDirector.PlayFootstep();
                         break;
                     
                     case ConsoleKey.DownArrow:
                     case ConsoleKey.S:
                         await gameClient.MovePlayerAsync(RelativeDirection.Backward, 1);
-                        audioSystem.PlaySoundEffect("footstep");
+                        audioDirector.PlayFootstep();
                         break;
                     
                     case ConsoleKey.LeftArrow:
                     case ConsoleKey.A:
                         await gameClient.MovePlayerAsync(RelativeDirection.Left, 1);
-                        audioSystem.PlaySoundEffect("footstep");
+                        audioDirector.PlayFootstep();
                         break;
                     
                     case ConsoleKey.RightArrow:
                     case ConsoleKey.D:
                         await gameClient.MovePlayerAsync(RelativeDirection.Right, 1);
-                        audioSystem.PlaySoundEffect("footstep");
+                        audioDirector.PlayFootstep();
                         break;
 
                     // Rotation

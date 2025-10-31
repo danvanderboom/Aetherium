@@ -44,6 +44,9 @@ namespace Aetherium.Model
         public double GameTimeOfDay { get; set; } = 12.0; // 0-24 hours
         public (double r, double g, double b) AmbientTint { get; set; } = (1.0, 1.0, 1.0);
 
+        // Audio perception
+        public AudioPerceptionDto? Audio { get; set; }
+
         public PerceptionDto()
         {
         }

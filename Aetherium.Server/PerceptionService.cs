@@ -358,7 +358,153 @@ Light sources found:
             // Add navigation data if player has compass or map
             perception.NavigationData = ComputeNavigationData(world, playerLocation, playerHeading);
 
+            // Add audio perception
+            perception.Audio = ComputeAudioPerception(world, playerLocation, heatTracker, currentTime);
+
             return perception;
+        }
+
+        private AudioPerceptionDto ComputeAudioPerception(
+            World world,
+            WorldLocation playerLocation,
+            HeatTrailTracker? heatTracker,
+            DateTime currentTime)
+        {
+            var audio = new AudioPerceptionDto();
+
+            // Determine biome from terrain at player location
+            var terrain = world.GetTerrain(playerLocation);
+            if (terrain != null)
+            {
+                audio.Biome = MapTerrainToBiome(terrain.Type.Name);
+                audio.FootstepMaterial = DetermineFootstepMaterial(terrain.Type.Name);
+            }
+
+            // Compute danger level from heat tracking
+            if (heatTracker != null)
+            {
+                var heatLevel = (float)heatTracker.GetHeatAtLocation(playerLocation, currentTime);
+                audio.DangerLevel = Math.Min(heatLevel, 1.0f);
+
+                // Also check nearby locations for danger
+                var nearbyHeat = 0.0;
+                var deltas = new[] { (0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1) };
+                foreach (var (dx, dy) in deltas)
+                {
+                    var loc = playerLocation.FromDelta(dx, dy, 0);
+                    nearbyHeat += heatTracker.GetHeatAtLocation(loc, currentTime);
+                }
+                audio.DangerLevel = Math.Min((float)(nearbyHeat / deltas.Length), 1.0f);
+            }
+
+            // Compute reverb and occlusion heuristics
+            audio.ReverbPreset = DetermineReverbPreset(world, playerLocation, audio.Biome);
+            audio.Occlusion = ComputeOcclusionHeuristic(world, playerLocation);
+
+            // Determine suggested music track based on biome and danger
+            audio.SuggestedMusicTrack = DetermineMusicTrack(audio.Biome, audio.DangerLevel > 0.3f);
+
+            return audio;
+        }
+
+        private string MapTerrainToBiome(string terrainName)
+        {
+            return terrainName.ToLowerInvariant() switch
+            {
+                "forest" => "forest",
+                "plains" => "plains",
+                "water" => "water",
+                "cave" => "cave",
+                "indoors" => "indoors",
+                "mountain" => "mountain",
+                _ => "dungeon"
+            };
+        }
+
+        private string DetermineFootstepMaterial(string terrainName)
+        {
+            return terrainName.ToLowerInvariant() switch
+            {
+                "forest" => "grass",
+                "plains" => "grass",
+                "water" => "water",
+                "cave" => "stone",
+                "indoors" => "stone",
+                "mountain" => "stone",
+                _ => "stone"
+            };
+        }
+
+        private string DetermineReverbPreset(World world, WorldLocation location, string? biome)
+        {
+            // Simple heuristic: count connected open spaces for reverb hint
+            var openNeighbors = 0;
+            var directions = new[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
+
+            foreach (var (dx, dy) in directions)
+            {
+                var neighbor = location.FromDelta(dx, dy, 0);
+                var neighborTerrain = world.GetTerrain(neighbor);
+                if (neighborTerrain != null && IsPassableTerrain(neighborTerrain.Type.Name))
+                {
+                    openNeighbors++;
+                }
+            }
+
+            // If many open neighbors, suggest hall; otherwise use biome default
+            if (openNeighbors >= 3)
+                return "hall";
+            if (openNeighbors >= 2)
+                return "room";
+
+            // Default by biome
+            return biome?.ToLowerInvariant() switch
+            {
+                "cave" => "cave",
+                "dungeon" => "hall",
+                "indoors" => "room",
+                _ => "outdoor"
+            };
+        }
+
+        private float ComputeOcclusionHeuristic(World world, WorldLocation location)
+        {
+            var blockingNeighbors = 0;
+            var directions = new[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
+
+            foreach (var (dx, dy) in directions)
+            {
+                var neighbor = location.FromDelta(dx, dy, 0);
+                var neighborTerrain = world.GetTerrain(neighbor);
+                if (neighborTerrain != null && IsBlockingTerrain(neighborTerrain.Type.Name))
+                {
+                    blockingNeighbors++;
+                }
+            }
+
+            return Math.Min(blockingNeighbors * 0.15f, 0.6f);
+        }
+
+        private string? DetermineMusicTrack(string? biome, bool isDanger)
+        {
+            if (string.IsNullOrEmpty(biome))
+                return null;
+
+            // Simple mapping: danger music vs exploration music
+            // This will be enhanced by AudioDirector with actual profiles
+            return isDanger ? "techno-synth-loop" : "mellow-guitar-loop";
+        }
+
+        private bool IsPassableTerrain(string terrainName)
+        {
+            var lower = terrainName.ToLowerInvariant();
+            return lower != "wall" && lower != "none" && lower != "mountain";
+        }
+
+        private bool IsBlockingTerrain(string terrainName)
+        {
+            var lower = terrainName.ToLowerInvariant();
+            return lower == "wall" || lower == "none" || lower == "mountain";
         }
 
         private NavigationDataDto? ComputeNavigationData(World world, WorldLocation playerLocation, Aetherium.WorldDirection playerHeading)

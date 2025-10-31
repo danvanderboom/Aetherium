@@ -61,4 +61,19 @@ The console map view SHALL render only cells included in the current `VisionFram
 - **WHEN** the controlled character's location or move timestamp changes
 - **THEN** the map view MUST recompute vision for the visible rectangle before rendering
 
+### Requirement: Audio Perception Data
+The system SHALL include audio perception data in PerceptionDto with biome, danger level, reverb preset, occlusion, footstep material, and suggested music track.
+
+#### Scenario: Audio perception populated from terrain
+- **WHEN** perception is computed
+- **THEN** AudioPerceptionDto is populated with biome and footstep material from terrain type
+
+#### Scenario: Audio danger level from heat tracking
+- **WHEN** heat signatures exist near player
+- **THEN** danger level is computed and included in audio perception
+
+#### Scenario: Audio reverb and occlusion computed
+- **WHEN** perception is computed
+- **THEN** reverb preset and occlusion values are computed from surrounding terrain
+
 

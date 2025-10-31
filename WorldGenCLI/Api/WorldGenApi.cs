@@ -327,6 +327,7 @@ namespace WorldGenCLI.Api
                     new OutdoorThemingPass(),
                     new OutdoorPopulationPass(),
                     new EnvironmentalStoryPass(),
+                    new AudioGenerationPass(),
                     new OutdoorInteractionsPass(),
                     new OutdoorValidationPass()
                 },
@@ -337,6 +338,7 @@ namespace WorldGenCLI.Api
                     new DungeonThemingPass(),
                     new DungeonPopulationPass(),
                     new EnvironmentalStoryPass(),
+                    new AudioGenerationPass(),
                     new DungeonInteractionsPass(),
                     new DungeonValidationPass()
                 }
