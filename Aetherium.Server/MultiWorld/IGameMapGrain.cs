@@ -1,4 +1,5 @@
 using Orleans;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -43,7 +44,18 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>
         /// Processes a game tick for this map (NPC movement, etc.).
         /// </summary>
-        Task TickAsync();
+        /// <param name="gameTimeElapsed">Elapsed game time for this tick</param>
+        Task TickAsync(TimeSpan gameTimeElapsed);
+
+        /// <summary>
+        /// Saves all regions in this map to persistent storage.
+        /// </summary>
+        Task SaveMapAsync();
+
+        /// <summary>
+        /// Loads map regions from persistent storage.
+        /// </summary>
+        Task<bool> LoadMapAsync();
     }
 
     /// <summary>

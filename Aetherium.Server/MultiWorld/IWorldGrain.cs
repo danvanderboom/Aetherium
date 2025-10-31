@@ -74,6 +74,16 @@ namespace Aetherium.Server.MultiWorld
         /// Processes a world tick (delegates to map grains).
         /// </summary>
         Task TickAsync();
+
+        /// <summary>
+        /// Saves the current world state (all regions) to persistent storage.
+        /// </summary>
+        Task SaveWorldAsync();
+
+        /// <summary>
+        /// Loads a world from persistent storage.
+        /// </summary>
+        Task<bool> LoadWorldAsync();
     }
 }
 

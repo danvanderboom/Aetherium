@@ -8,7 +8,10 @@ using Microsoft.Extensions.Hosting;
 using Orleans;
 using Orleans.Hosting;
 using Aetherium.Server.Agents;
+using Aetherium.Server.Events;
 using Aetherium.Server.Management;
+using Aetherium.Server.Persistence;
+using Aetherium.Server.Simulation;
 using Aetherium.WorldGen;
 using Aetherium.WorldGen.Prefabs;
 using Aetherium.WorldBuilders.Validation;
@@ -26,6 +29,55 @@ namespace Aetherium.Server
             builder.Services.AddSignalR();
             builder.Services.AddControllers(); // Add API controllers
             builder.Services.AddSingleton<GameSessionManager>();
+            
+            // Update PerceptionService to use WorldClock
+            builder.Services.AddSingleton<PerceptionService>(sp =>
+            {
+                var clock = sp.GetService<WorldClock>();
+                var weather = sp.GetService<WeatherSystem>();
+                var season = sp.GetService<SeasonManager>();
+                return new PerceptionService(clock, weather, season);
+            });
+            
+            // Add simulation configuration
+            builder.Services.Configure<SimulationOptions>(
+                builder.Configuration.GetSection("Simulation"));
+            
+            // Add simulation services
+            builder.Services.AddSingleton<WorldClock>();
+            builder.Services.AddSingleton<IWorldSnapshotStore, MemoryWorldSnapshotStore>();
+                builder.Services.AddSingleton<SeasonManager>();
+                builder.Services.AddSingleton<WeatherSystem>();
+                builder.Services.AddSingleton<SpawnManager>();
+                builder.Services.AddSingleton<BuilderAI>(sp =>
+                {
+                    var prefabLibrary = sp.GetRequiredService<PrefabLibrary>();
+                    return new BuilderAI(prefabLibrary);
+                });
+                builder.Services.AddSingleton<TemporalModifierRegistry>(sp =>
+                {
+                    var registry = new TemporalModifierRegistry();
+                    
+                    // Register SpawnModifier for time/weather-weighted creature spawning
+                    var spawnManager = sp.GetService<SpawnManager>();
+                    if (spawnManager != null)
+                    {
+                        var spawnModifier = new SpawnModifier(spawnManager, spawnProbabilityPerTick: 0.01);
+                        registry.Register(spawnModifier);
+                    }
+                    
+                    // Register BuilderModifier if BuilderAI is available
+                    var builderAI = sp.GetService<BuilderAI>();
+                    if (builderAI != null)
+                    {
+                        // Note: World access is not available from IMapRegionGrain directly
+                        // For now, BuilderModifier will be skipped until World access is available
+                        // var builderModifier = new BuilderModifier(builderAI, ...);
+                        // registry.Register(builderModifier);
+                    }
+                    return registry;
+                });
+            builder.Services.AddSingleton<IEventScheduler, EventScheduler>();
             
             // Add world generation services
             builder.Services.AddSingleton<MapGeneratorRegistry>();
@@ -118,6 +170,13 @@ namespace Aetherium.Server
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<MapValidator>());
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<PrefabLibrary>());
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<Aetherium.Server.Agents.Tools.AgentToolRegistry>());
+                    
+                    // Register simulation services for grains
+                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<WorldClock>());
+                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<SeasonManager>());
+                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<WeatherSystem>());
+                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<SpawnManager>());
+                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<IEventScheduler>());
                     
                     // Register GameSessionManager for GameManagementGrain
                     siloBuilder.Services.AddSingleton<GameSessionManager>(sp =>

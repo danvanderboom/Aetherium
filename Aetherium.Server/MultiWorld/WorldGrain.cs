@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Aetherium.Server.Simulation;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -15,6 +17,7 @@ namespace Aetherium.Server.MultiWorld
     {
         private readonly IPersistentState<WorldGrainState> _worldState;
         private readonly IGrainFactory _grainFactory;
+        private WorldClock? _clock;
 
         public WorldGrain(
             [PersistentState("world", "worldStore")] IPersistentState<WorldGrainState> worldState,
@@ -22,6 +25,24 @@ namespace Aetherium.Server.MultiWorld
         {
             _worldState = worldState;
             _grainFactory = grainFactory;
+        }
+
+        private WorldClock GetClock()
+        {
+            if (_clock == null)
+            {
+                _clock = this.ServiceProvider.GetService<WorldClock>();
+                // If clock not available, create a default one (for tests)
+                _clock ??= new WorldClock(Microsoft.Extensions.Options.Options.Create(new SimulationOptions
+                {
+                    TickHz = 1,
+                    DayLengthMinutes = 24,
+                    RegionSize = 64,
+                    EnableWeather = true,
+                    EnableSeasons = true
+                }));
+            }
+            return _clock;
         }
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
@@ -224,15 +245,50 @@ namespace Aetherium.Server.MultiWorld
             if (_worldState.State.Info.State != WorldState.Active)
                 return;
 
-            // Tick all maps
+            // Get game time elapsed from clock
+            var clock = GetClock();
+            var gameTimeElapsed = clock.Tick(); // Advances clock and returns elapsed time
+            
+            // Tick all maps with game time
             var tickTasks = _worldState.State.Info.MapIds
-                .Select(mapId => _grainFactory.GetGrain<IGameMapGrain>(mapId).TickAsync())
+                .Select(mapId => _grainFactory.GetGrain<IGameMapGrain>(mapId).TickAsync(gameTimeElapsed))
                 .ToList();
 
             await Task.WhenAll(tickTasks);
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
             // Note: Not persisting on every tick to avoid excessive writes
+        }
+
+        public async Task SaveWorldAsync()
+        {
+            if (_worldState.State == null || _worldState.State.Info.State == WorldState.Creating)
+                return;
+
+            // Save all maps (which will save their regions)
+            var saveTasks = _worldState.State.Info.MapIds
+                .Select(mapId => _grainFactory.GetGrain<IGameMapGrain>(mapId).SaveMapAsync())
+                .ToList();
+
+            await Task.WhenAll(saveTasks);
+
+            // Save world metadata
+            _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
+            await _worldState.WriteStateAsync();
+        }
+
+        public async Task<bool> LoadWorldAsync()
+        {
+            if (_worldState.State == null)
+                return false;
+
+            // Load all maps
+            var loadTasks = _worldState.State.Info.MapIds
+                .Select(mapId => _grainFactory.GetGrain<IGameMapGrain>(mapId).LoadMapAsync())
+                .ToList();
+
+            var results = await Task.WhenAll(loadTasks);
+            return results.All(r => r);
         }
     }
 

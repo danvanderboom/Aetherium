@@ -18,14 +18,23 @@ namespace Aetherium.Server.MultiWorld
     {
         private readonly IPersistentState<MapState> _mapState;
         private readonly MapGeneratorRegistry _generatorRegistry;
+        private readonly IGrainFactory _grainFactory;
+        private readonly Microsoft.Extensions.Options.IOptions<Aetherium.Server.Simulation.SimulationOptions> _simulationOptions;
         private World? _world;
+        private Dictionary<string, IMapRegionGrain>? _regions; // Cache of region grains
+        private int _regionSize;
 
         public GameMapGrain(
             [PersistentState("map", "mapStore")] IPersistentState<MapState> mapState,
-            MapGeneratorRegistry generatorRegistry)
+            MapGeneratorRegistry generatorRegistry,
+            IGrainFactory grainFactory,
+            Microsoft.Extensions.Options.IOptions<Aetherium.Server.Simulation.SimulationOptions> simulationOptions)
         {
             _mapState = mapState;
             _generatorRegistry = generatorRegistry;
+            _grainFactory = grainFactory;
+            _simulationOptions = simulationOptions;
+            _regionSize = _simulationOptions.Value.RegionSize;
         }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -83,6 +92,9 @@ namespace Aetherium.Server.MultiWorld
 
             _world = result.World;
 
+            // Partition map into regions and initialize region grains
+            await PartitionIntoRegionsAsync();
+
             // Update state
             _mapState.State = new MapState
             {
@@ -117,9 +129,11 @@ namespace Aetherium.Server.MultiWorld
                     new Passes.OutdoorThemingPass(),
                     new Passes.OutdoorPopulationPass(),
                     new Passes.EnvironmentalStoryPass(),
+                    new Passes.TemporalInitPass(), // Added temporal initialization
                     new Passes.PortalNetworkPass(),
                     new Passes.AudioGenerationPass(),
                     new Passes.OutdoorInteractionsPass(),
+                    new Passes.EventSeedPass(), // Added event seeding
                     new Passes.AdaptationPass(),
                     new Passes.OutdoorValidationPass()
                 },
@@ -129,9 +143,11 @@ namespace Aetherium.Server.MultiWorld
                     new Passes.DungeonThemingPass(),
                     new Passes.DungeonPopulationPass(),
                     new Passes.EnvironmentalStoryPass(),
+                    new Passes.TemporalInitPass(), // Added temporal initialization
                     new Passes.PortalNetworkPass(),
                     new Passes.AudioGenerationPass(),
                     new Passes.DungeonInteractionsPass(),
+                    new Passes.EventSeedPass(), // Added event seeding
                     new Passes.AdaptationPass(),
                     new Passes.DungeonValidationPass()
                 }
@@ -197,15 +213,119 @@ namespace Aetherium.Server.MultiWorld
             return Task.FromResult(new List<string>(_mapState.State.PlayerIds));
         }
 
-        public Task TickAsync()
+        public async Task TickAsync(TimeSpan gameTimeElapsed)
         {
-            // TODO: Process game logic for this map
-            // - NPC movement
-            // - Environmental effects
-            // - Quest triggers
-            // - etc.
+            if (_mapState.State == null || _regions == null)
+                return;
 
-            return Task.CompletedTask;
+            // Tick all regions in parallel with game time
+            var tickTasks = _regions.Values
+                .Select(region => region.TickAsync(gameTimeElapsed))
+                .ToList();
+
+            await Task.WhenAll(tickTasks);
+        }
+
+        /// <summary>
+        /// Partitions the map into regions (64×64 chunks) and initializes region grains.
+        /// </summary>
+        private async Task PartitionIntoRegionsAsync()
+        {
+            if (_mapState.State == null || _world == null)
+                return;
+
+            var mapId = _mapState.State.MapId;
+            var size = _mapState.State.Size;
+            
+            _regions = new Dictionary<string, IMapRegionGrain>();
+
+            // Calculate number of regions in each dimension
+            var regionsX = (int)Math.Ceiling((double)size.Width / _regionSize);
+            var regionsY = (int)Math.Ceiling((double)size.Height / _regionSize);
+
+            // Initialize region grains for each Z level
+            for (int z = 0; z < size.Depth; z++)
+            {
+                for (int regionY = 0; regionY < regionsY; regionY++)
+                {
+                    for (int regionX = 0; regionX < regionsX; regionX++)
+                    {
+                        var regionKey = GetRegionKey(mapId, regionX, regionY, z);
+                        var regionGrain = _grainFactory.GetGrain<IMapRegionGrain>(regionKey);
+                        
+                        await regionGrain.InitializeAsync(mapId, regionX, regionY, z, _regionSize);
+                        
+                        _regions[regionKey] = regionGrain;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the region key for a given map, region coordinates, and Z level.
+        /// </summary>
+        private static string GetRegionKey(string mapId, int regionX, int regionY, int zLevel)
+        {
+            return $"{mapId}:region:{regionX},{regionY},{zLevel}";
+        }
+
+        /// <summary>
+        /// Gets the region key for a given world location.
+        /// </summary>
+        private string GetRegionKeyForLocation(int x, int y, int z)
+        {
+            if (_mapState.State == null)
+                throw new InvalidOperationException("Map not initialized");
+
+            var mapId = _mapState.State.MapId;
+            var regionX = x / _regionSize;
+            var regionY = y / _regionSize;
+            return GetRegionKey(mapId, regionX, regionY, z);
+        }
+
+        /// <summary>
+        /// Gets the region grain for a given world location.
+        /// </summary>
+        public IMapRegionGrain? GetRegionForLocation(int x, int y, int z)
+        {
+            if (_regions == null)
+                return null;
+
+            var regionKey = GetRegionKeyForLocation(x, y, z);
+            return _regions.TryGetValue(regionKey, out var region) ? region : null;
+        }
+
+        public async Task SaveMapAsync()
+        {
+            if (_regions == null || _mapState.State == null)
+                return;
+
+            // Save all regions
+            var saveTasks = _regions.Values
+                .Select(async region =>
+                {
+                    var snapshot = await region.GetSnapshotAsync();
+                    // Regions persist automatically via Orleans persistent state
+                    // This ensures all regions are persisted
+                })
+                .ToList();
+
+            await Task.WhenAll(saveTasks);
+
+            // Save map metadata
+            await _mapState.WriteStateAsync();
+        }
+
+        public async Task<bool> LoadMapAsync()
+        {
+            if (_mapState.State == null)
+                return false;
+
+            // Regions are loaded automatically on activation via Orleans persistent state
+            // We just need to rebuild the region cache
+            await PartitionIntoRegionsAsync();
+
+            return true;
         }
     }
 

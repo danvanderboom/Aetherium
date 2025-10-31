@@ -10,6 +10,8 @@ using Aetherium.Lighting;
 using Aetherium.Systems;
 using Aetherium.Model;
 using Aetherium.Server.Perception;
+using Aetherium.Server.Simulation;
+using Microsoft.Extensions.Options;
 
 namespace Aetherium.Server
 {
@@ -18,6 +20,20 @@ namespace Aetherium.Server
         private readonly VisionSystem visionSystem = new VisionSystem();
         private readonly LightingSystem lightingSystem = new LightingSystem();
         private readonly InfraredVisionSystem infraredVisionSystem = new InfraredVisionSystem();
+        private readonly SunlightCalculator sunlightCalculator = new SunlightCalculator();
+        private readonly WorldClock? worldClock;
+        private readonly WeatherSystem? weatherSystem;
+        private readonly SeasonManager? seasonManager;
+
+        public PerceptionService(
+            WorldClock? worldClock = null,
+            WeatherSystem? weatherSystem = null,
+            SeasonManager? seasonManager = null)
+        {
+            this.worldClock = worldClock;
+            this.weatherSystem = weatherSystem;
+            this.seasonManager = seasonManager;
+        }
 
         public PerceptionDto ComputePerception(
             World world,
@@ -211,8 +227,10 @@ Light sources found:
                 // Add mode information
                 CurrentLightingMode = lightingMode,
                 CurrentVisionMode = visionMode,
-                GameTimeOfDay = currentTime.TimeOfDay.TotalHours,
-                AmbientTint = (ambientR, ambientG, ambientB)
+                GameTimeOfDay = worldClock?.GetTimeOfDay() ?? currentTime.TimeOfDay.TotalHours,
+                AmbientTint = (ambientR, ambientG, ambientB),
+                Weather = weatherSystem != null ? weatherSystem.GetWeather(GetRegionIdForLocation(playerLocation)).ToString() : "Clear",
+                Season = seasonManager?.GetSeason((int)(worldClock?.GetDay() ?? 0)) ?? "spring"
             };
             
             // Diagnostic: Log vision stats for debugging (reusing testMode from above)
@@ -361,7 +379,27 @@ Light sources found:
             // Add audio perception
             perception.Audio = ComputeAudioPerception(world, playerLocation, heatTracker, currentTime);
 
+            // Apply sunlight calculation if using sunlight mode
+            if (lightingMode == LightingMode.Sunlight && worldClock != null)
+            {
+                var timeOfDay = worldClock.GetTimeOfDay();
+                sunlightCalculator.ComputeSunlight(
+                    world,
+                    bounds,
+                    playerLocation.Z,
+                    timeOfDay,
+                    lightFrame);
+            }
+
             return perception;
+        }
+
+        private string GetRegionIdForLocation(WorldLocation location)
+        {
+            // Generate a region ID from location coordinates (64×64 regions)
+            var regionX = location.X / 64;
+            var regionY = location.Y / 64;
+            return $"region:{regionX},{regionY},{location.Z}";
         }
 
         private AudioPerceptionDto ComputeAudioPerception(

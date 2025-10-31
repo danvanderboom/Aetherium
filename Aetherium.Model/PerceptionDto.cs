@@ -43,6 +43,8 @@ namespace Aetherium.Model
         public VisionMode CurrentVisionMode { get; set; } = VisionMode.Normal;
         public double GameTimeOfDay { get; set; } = 12.0; // 0-24 hours
         public (double r, double g, double b) AmbientTint { get; set; } = (1.0, 1.0, 1.0);
+        public string Weather { get; set; } = "Clear";
+        public string Season { get; set; } = "spring";
 
         // Audio perception
         public AudioPerceptionDto? Audio { get; set; }
