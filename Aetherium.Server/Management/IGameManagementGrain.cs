@@ -50,6 +50,7 @@ namespace Aetherium.Server.Management
         
         // Tool system
         Task<List<ToolInfoDto>> ListAvailableToolsAsync(string? profileName = null);
+        Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, string sessionId, Dictionary<string, object> args);
     }
 }
 

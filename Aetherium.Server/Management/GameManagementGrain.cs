@@ -760,6 +760,82 @@ namespace Aetherium.Server.Management
 
             return Task.FromResult(tools);
         }
+
+        public async Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, string sessionId, Dictionary<string, object> args)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(toolId))
+                    return new ToolExecutionResultDto { Success = false, Message = "Tool ID cannot be null or empty" };
+
+                if (string.IsNullOrEmpty(sessionId))
+                    return new ToolExecutionResultDto { Success = false, Message = "Session ID cannot be null or empty" };
+
+                // Get tool registry
+                var toolRegistry = ServiceProvider.GetService(typeof(Aetherium.Server.Agents.Tools.AgentToolRegistry)) 
+                    as Aetherium.Server.Agents.Tools.AgentToolRegistry;
+
+                if (toolRegistry == null)
+                    return new ToolExecutionResultDto { Success = false, Message = "Tool registry not available" };
+
+                // Get the tool
+                var tool = toolRegistry.GetTool(toolId);
+                if (tool == null)
+                    return new ToolExecutionResultDto { Success = false, Message = $"Tool not found: {toolId}" };
+
+                // Get session metadata
+                if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                    return new ToolExecutionResultDto { Success = false, Message = $"Session not found: {sessionId}" };
+
+                // Get the actual session
+                var session = _sessionManager.GetSession(metadata.ConnectionId);
+                if (session == null)
+                    return new ToolExecutionResultDto { Success = false, Message = "Session not found in session manager" };
+
+                // Use Player profile capabilities (default for game sessions)
+                var profile = Aetherium.Server.Agents.Tools.AgentToolProfile.Player;
+
+                // Check if tool is allowed for this profile
+                if (!profile.IsToolAllowed(tool))
+                    return new ToolExecutionResultDto { Success = false, Message = $"Tool '{toolId}' is not allowed for the Player profile" };
+
+                // Create execution context
+                var context = new Aetherium.Server.Agents.Tools.ToolExecutionContext
+                {
+                    SessionId = sessionId,
+                    ConnectionId = metadata.ConnectionId,
+                    Session = session,
+                    InteractionSystem = _interactionSystem,
+                    ManagementGrain = this,
+                    GrantedCapabilities = new HashSet<string>(profile.GrantedCapabilities),
+                    ServiceProvider = ServiceProvider
+                };
+
+                // Execute the tool
+                var result = await tool.ExecuteAsync(context, args);
+
+                // Send updated perception to client if successful
+                if (result.Success)
+                {
+                    var perception = session.GetPerception();
+                    await _hubContext.Clients.Client(metadata.ConnectionId)
+                        .SendAsync("ReceivePerceptionUpdate", perception);
+                }
+
+                Console.WriteLine($"[GameManagementGrain] Executed tool '{toolId}' for session {sessionId}: {(result.Success ? "Success" : "Failed")} - {result.Message}");
+
+                return result.ToDto();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error executing tool {toolId} for session {sessionId}: {ex.Message}");
+                return new ToolExecutionResultDto 
+                { 
+                    Success = false, 
+                    Message = $"Error executing tool: {ex.Message}" 
+                };
+            }
+        }
     }
 }
 
