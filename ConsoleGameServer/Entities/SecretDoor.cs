@@ -16,3 +16,4 @@ namespace ConsoleGame.Entities
         }
     }
 }
+

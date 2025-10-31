@@ -18,3 +18,4 @@ namespace ConsoleGame.Components
         public Climbable() : base() { }
     }
 }
+

@@ -13,3 +13,4 @@ namespace ConsoleGame.Components
         public PlaceableLight() : base() { }
     }
 }
+

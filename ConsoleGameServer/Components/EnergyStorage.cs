@@ -11,3 +11,4 @@ namespace ConsoleGame.Components
         public EnergyStorage() : base() { }
     }
 }
+

@@ -55,6 +55,13 @@ namespace ConsoleGame.WorldGen
                     }
                 }
 
+                // Also register legacy Maze generator if present in this assembly even if it doesn't implement IMapGenerator
+                var legacyMazeType = assembly.GetType("ConsoleGame.MazeGenerator");
+                if (legacyMazeType != null)
+                {
+                    _generatorTypes["Maze"] = legacyMazeType;
+                }
+
                 // Register common aliases for backward compatibility with tests
                 // Maze -> RoomsAndCorridors (only if no explicit Maze generator exists)
                 var rac = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key).Contains("roomsandcorridors"));

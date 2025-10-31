@@ -6,11 +6,9 @@ using ConsoleGame.Core;
 using ConsoleGame.Geometry;
 using ConsoleGame.Components;
 
-using ConsoleGame.WorldGen;
-
 namespace ConsoleGame
 {
-    public class MazeGenerator : IMapGenerator
+    public class MazeGenerator
     {
         public IList<WorldLocation> AllLocations { get; set; }
 
@@ -229,12 +227,5 @@ namespace ConsoleGame
                 RemoveWall(loc);
         }
 
-        // Minimal implementation to satisfy IMapGenerator discovery in tests
-        public World Generate(GeneratorContext context)
-        {
-            // Delegate to a modern generator for actual world creation
-            var delegateGen = new ConsoleGame.WorldGen.Generators.RoomsAndCorridorsGenerator();
-            return delegateGen.Generate(context);
-        }
     }
 }

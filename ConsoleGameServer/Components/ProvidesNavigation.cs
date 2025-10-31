@@ -10,3 +10,4 @@ namespace ConsoleGame.Components
         public ProvidesNavigation() : base() { }
     }
 }
+

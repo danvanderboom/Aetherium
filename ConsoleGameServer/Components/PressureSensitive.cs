@@ -12,3 +12,4 @@ namespace ConsoleGame.Components
         public PressureSensitive() : base() { }
     }
 }
+

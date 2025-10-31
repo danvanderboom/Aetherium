@@ -9,3 +9,4 @@ namespace ConsoleGame.Components
         public CapacityBoost() : base() { }
     }
 }
+
