@@ -56,19 +56,22 @@ $env:AGENT_MODEL="phi-4"
 agentcli mgmt sessions
 
 # List available tools
-agentcli agent tool list
-agentcli agent tool list --profile explorer
-agentcli agent tool list --category movement
+agentcli tools list
+agentcli tools list --profile explorer
+agentcli tools list --category movement
 
 # Get tool details
-agentcli agent tool info move
+agentcli tools describe move
 
 # View tool categories
-agentcli agent tool categories
+agentcli tools categories
+
+# Test a tool execution
+agentcli tools test move --session-id <sessionId> --args '{"direction":"forward"}'
 
 # List agent profiles
-agentcli agent profile list
-agentcli agent profile show worldbuilder
+agentcli tools profile list
+agentcli tools profile show worldbuilder
 
 # Attach an agent to a session
 agentcli agent attach <sessionId> --agent agent-1 --runner runner-1
@@ -168,38 +171,42 @@ Invoke-RestMethod -Method Post `
 agentcli mgmt sessions
 ```
 
-### Tool Management Commands (New!)
+### Tool Management Commands
 
 ```powershell
 # List all available tools
-agentcli agent tool list
+agentcli tools list
 
 # Filter tools by profile
-agentcli agent tool list --profile explorer
-agentcli agent tool list --profile worldbuilder
+agentcli tools list --profile explorer
+agentcli tools list --profile worldbuilder
 
 # Filter tools by category
-agentcli agent tool list --category movement
-agentcli agent tool list --category interaction
+agentcli tools list --category movement
+agentcli tools list --category interaction
 
 # Get detailed information about a specific tool
-agentcli agent tool info move
-agentcli agent tool info pickup
+agentcli tools describe move
+agentcli tools describe pickup
 
 # List all tool categories
-agentcli agent tool categories
+agentcli tools categories
+
+# Test tool execution (requires active session)
+agentcli tools test move --session-id <sessionId> --args '{"direction":"forward"}'
+agentcli tools test pickup --session-id <sessionId> --args '{"targetEntityId":"entity-123"}'
 ```
 
-### Profile Management Commands (New!)
+### Profile Management Commands
 
 ```powershell
 # List all predefined agent profiles
-agentcli agent profile list
+agentcli tools profile list
 
 # Show details of a specific profile
-agentcli agent profile show explorer
-agentcli agent profile show worldbuilder
-agentcli agent profile show admin
+agentcli tools profile show explorer
+agentcli tools profile show worldbuilder
+agentcli tools profile show admin
 ```
 
 ### Agent Runner Commands
@@ -252,7 +259,7 @@ When `AGENT_LLM_ENABLED=1`, agents:
 - **Vision** (4 tools): toggledirectionalvision, setfov, setlightingmode, setvisionmode
 - **World-Building** (13 tools): Entity/terrain/map/narrative management (for WorldBuilder agents)
 
-**Note:** Tool availability depends on the agent's profile. Use `agentcli agent tool list --profile <profile>` to see which tools are available for each profile.
+**Note:** Tool availability depends on the agent's profile. Use `agentcli tools list --profile <profile>` to see which tools are available for each profile.
 
 ### Heuristic Agents
 
@@ -299,6 +306,7 @@ When `AGENT_LLM_ENABLED=0`, agents use simple heuristic:
 
 - **`GameManagementGrain`**: Provides gameplay control APIs
   - `ListAvailableToolsAsync`: Query available tools for a profile
+  - `ExecuteToolAsync`: Execute a tool with provided arguments
   - Legacy action methods (deprecated, use tool system)
   - `GetPerceptionAsync`: Returns JSON perception data
 
@@ -506,10 +514,13 @@ public class MyTool : IAgentTool
 3. **Test it**:
 ```powershell
 # Verify tool was discovered
-agentcli agent tool list | Select-String mytool
+agentcli tools list | Select-String mytool
 
 # Get tool details
-agentcli agent tool info mytool
+agentcli tools describe mytool
+
+# Test tool execution (requires active session)
+agentcli tools test mytool --session-id <sessionId> --args '{"param1":"value1"}'
 ```
 
 For more details, see [TOOLS.md](TOOLS.md).

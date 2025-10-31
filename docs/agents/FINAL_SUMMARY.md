@@ -88,13 +88,14 @@ Successfully implemented a comprehensive, extensible agent tool system for the A
 
 ### CLI Commands (100%)
 - ✅ **Tool Management**:
-  - `agent tool list [--profile] [--category]`
-  - `agent tool info <toolId>`
-  - `agent tool categories`
+  - `tools list [--profile] [--category]`
+  - `tools describe <toolId>`
+  - `tools categories`
+  - `tools test <toolId> --session-id <sessionId> [--args <json>]`
   
 - ✅ **Profile Management**:
-  - `agent profile list`
-  - `agent profile show <profileName>`
+  - `tools profile list`
+  - `tools profile show <profileName>`
 
 ### Documentation (100%)
 - ✅ **TOOLS.md**: Comprehensive architecture and usage guide

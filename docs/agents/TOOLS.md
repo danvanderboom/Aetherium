@@ -219,7 +219,20 @@ dotnet run
 
 # In another terminal, use AgentCLI
 cd AgentCLI
-dotnet run -- mgmt sessions          # List sessions
+
+# List active sessions
+dotnet run -- mgmt sessions
+
+# List available tools
+dotnet run -- tools list
+dotnet run -- tools list --profile explorer
+dotnet run -- tools describe move
+
+# Test a tool execution (requires active session)
+dotnet run -- tools test move --session-id <sessionId> --args '{"direction":"forward"}'
+dotnet run -- tools test pickup --session-id <sessionId> --args '{"targetEntityId":"entity-123"}'
+
+# Agent management
 dotnet run -- agent attach <sessionId> --agent test-agent --runner runner-1
 dotnet run -- agent run runner-1 --max-steps 10 --delay 500
 dotnet run -- agent status runner-1
