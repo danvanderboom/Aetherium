@@ -123,6 +123,7 @@ namespace Aetherium.Server
             if (open)
             {
                 target.Clear<ObstructsView>();
+                target.Clear<ObstructsMovement>();
                 var tile = target.Get<Tile>();
                 if (tile != null && world.TileTypes.ContainsKey("Indoors"))
                     tile.Type = world.TileTypes["Indoors"];
@@ -130,6 +131,7 @@ namespace Aetherium.Server
             else
             {
                 target.Set(new ObstructsView { Opacity = 1 });
+                target.Set(new ObstructsMovement { Obstruction = 1 });
                 var tile = target.Get<Tile>();
                 if (tile != null && world.TileTypes.ContainsKey("Wall"))
                     tile.Type = world.TileTypes["Wall"];

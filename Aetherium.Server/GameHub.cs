@@ -331,6 +331,16 @@ namespace Aetherium.Server
                 return new InteractionResultDto { Success = false, Reason = "No session" };
 
             var result = interactionSystem.TryOpen(session, targetEntityId);
+            
+            // Process narrative consequences if successful
+            if (result.Success && clusterClient != null && session.WorldId != null)
+            {
+                await ProcessNarrativeEventAsync(session, "door_opened", new Dictionary<string, object>
+                {
+                    ["doorId"] = targetEntityId
+                });
+            }
+            
             var perception = session.GetPerception();
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
@@ -344,6 +354,16 @@ namespace Aetherium.Server
                 return new InteractionResultDto { Success = false, Reason = "No session" };
 
             var result = interactionSystem.TryClose(session, targetEntityId);
+            
+            // Process narrative consequences if successful
+            if (result.Success && clusterClient != null && session.WorldId != null)
+            {
+                await ProcessNarrativeEventAsync(session, "door_closed", new Dictionary<string, object>
+                {
+                    ["doorId"] = targetEntityId
+                });
+            }
+            
             var perception = session.GetPerception();
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
@@ -535,6 +555,25 @@ namespace Aetherium.Server
                 
                 // Execute the tool
                 var result = await tool.ExecuteAsync(context, args);
+                
+                // Process narrative consequences for interaction tools
+                if (result.Success && clusterClient != null && session.WorldId != null)
+                {
+                    if (toolId == "open" && args.TryGetValue("targetEntityId", out var openTargetId))
+                    {
+                        await ProcessNarrativeEventAsync(session, "door_opened", new Dictionary<string, object>
+                        {
+                            ["doorId"] = openTargetId?.ToString() ?? string.Empty
+                        });
+                    }
+                    else if (toolId == "close" && args.TryGetValue("targetEntityId", out var closeTargetId))
+                    {
+                        await ProcessNarrativeEventAsync(session, "door_closed", new Dictionary<string, object>
+                        {
+                            ["doorId"] = closeTargetId?.ToString() ?? string.Empty
+                        });
+                    }
+                }
                 
                 // Send updated perception to client
                 var perception = session.GetPerception();
