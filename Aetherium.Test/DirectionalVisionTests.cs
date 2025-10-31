@@ -6,6 +6,9 @@ using Aetherium.Core;
 using Aetherium.Systems;
 using Aetherium.Entities;
 using Aetherium.Components;
+using World = Aetherium.Core.World;
+using TileType = Aetherium.Core.TileType;
+using TerrainType = Aetherium.Core.TerrainType;
 
 namespace Aetherium.Test
 {

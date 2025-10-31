@@ -1,7 +1,12 @@
+extern alias Console;
 using System;
 using NUnit.Framework;
-using Aetherium.Audio;
 using Aetherium.Model;
+using AudioDirector = Console::Aetherium.Audio.AudioDirector;
+using IAudioSystem = Console::Aetherium.Audio.IAudioSystem;
+using AudioListenerState = Console::Aetherium.Audio.AudioListenerState;
+using AudioVector3 = Console::Aetherium.Audio.AudioVector3;
+using AudioPlaybackOptions = Console::Aetherium.Audio.AudioPlaybackOptions;
 
 namespace Aetherium.Test.Audio
 {

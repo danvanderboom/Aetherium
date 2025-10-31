@@ -99,6 +99,12 @@ namespace Aetherium.Audio
 
         private void UpdateBiomeAudio(AudioPerceptionDto audio)
         {
+            // Stop any biome-scoped ambient when changing biomes
+            if (!string.IsNullOrEmpty(currentBiome))
+            {
+                audioSystem.StopAmbientLoop($"biome:{currentBiome}");
+            }
+
             // Stop old ambient loops
             foreach (var loopId in activeAmbientLoops.Keys)
             {

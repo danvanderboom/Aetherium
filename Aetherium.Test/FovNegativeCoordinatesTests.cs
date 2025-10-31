@@ -5,6 +5,7 @@ using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Systems;
 using Aetherium.WorldBuilders;
+using World = Aetherium.Core.World;
 
 namespace Aetherium.Test
 {

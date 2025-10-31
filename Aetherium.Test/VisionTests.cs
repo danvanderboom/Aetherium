@@ -1,3 +1,4 @@
+extern alias Server;
 using System;
 using System.Drawing;
 using System.Linq;
@@ -6,6 +7,7 @@ using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.WorldBuilders;
 using Aetherium.Systems;
+using World = Server::Aetherium.Core.World;
 
 namespace Aetherium.Test
 {

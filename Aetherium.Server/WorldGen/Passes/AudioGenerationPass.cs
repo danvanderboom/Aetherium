@@ -48,8 +48,9 @@ namespace Aetherium.WorldGen.Passes
             var biomeMapping = BuildBiomeMapping(context.World);
             context.SharedData["audio:biomeMapping"] = biomeMapping;
 
-            // Note: Metrics are tracked through standard GenerationMetrics properties
-            // Audio-specific metrics could be added as properties if needed
+            // Record audio-related metrics
+            context.Metrics.SetMetric("audio.zones.count", audioZones.Count);
+            context.Metrics.SetMetric("audio.biomes.detected", biomeMapping.Values.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         }
 
         private Dictionary<WorldLocation, AudioZone> BuildAudioZones(World world)
@@ -74,8 +75,6 @@ namespace Aetherium.WorldGen.Passes
 
                 // Get or create audio profile
                 var profile = GetProfile(biomeId);
-                if (profile == null)
-                    continue;
 
                 // Compute reverb based on room connectivity (simple heuristic)
                 var reverb = ComputeReverbHeuristic(world, location);
@@ -87,12 +86,12 @@ namespace Aetherium.WorldGen.Passes
                 var zone = new AudioZone
                 {
                     BiomeId = biomeId,
-                    ReverbPreset = profile.ReverbPreset,
-                    BaseOcclusion = profile.BaseOcclusion + occlusion,
-                    FootstepMaterial = profile.FootstepMaterial,
-                    AmbientLoop = profile.AmbientLoop,
-                    ExplorationMusic = profile.ExplorationMusic,
-                    DangerMusic = profile.DangerMusic
+                    ReverbPreset = profile?.ReverbPreset ?? "outdoor",
+                    BaseOcclusion = (profile?.BaseOcclusion ?? 0.0f) + occlusion,
+                    FootstepMaterial = profile?.FootstepMaterial ?? (biomeId == "forest" || biomeId == "plains" ? "grass" : "stone"),
+                    AmbientLoop = profile?.AmbientLoop,
+                    ExplorationMusic = profile?.ExplorationMusic,
+                    DangerMusic = profile?.DangerMusic
                 };
 
                 zones[location] = zone;

@@ -13,6 +13,7 @@ namespace Aetherium.WorldGen
         private readonly Dictionary<int, int> _pathLengthHistogram = new();
         private readonly Dictionary<string, double> _biomeCoverage = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, double> _phaseDurationsMs = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, double> _customMetrics = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _validationFailures = new();
 
         public double BranchingFactor { get; set; }
@@ -40,6 +41,7 @@ namespace Aetherium.WorldGen
         public IReadOnlyDictionary<int, int> PathLengthHistogram => _pathLengthHistogram;
         public IReadOnlyDictionary<string, double> BiomeCoverage => _biomeCoverage;
         public IReadOnlyDictionary<string, double> PhaseDurationsMs => _phaseDurationsMs;
+        public IReadOnlyDictionary<string, double> CustomMetrics => _customMetrics;
         public IReadOnlyList<string> ValidationFailures => _validationFailures;
 
         public void RecordPhaseDuration(string phaseName, double milliseconds)
@@ -85,6 +87,42 @@ namespace Aetherium.WorldGen
         public void ClearValidationFailures()
         {
             _validationFailures.Clear();
+        }
+
+        /// <summary>
+        /// Sets or updates a custom numeric metric by key.
+        /// </summary>
+        public void SetMetric(string key, double value)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return;
+
+            _customMetrics[key] = value;
+        }
+
+        /// <summary>
+        /// Gets a custom numeric metric by key if it exists.
+        /// </summary>
+        public bool TryGetMetric(string key, out double value)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                value = 0;
+                return false;
+            }
+
+            return _customMetrics.TryGetValue(key, out value);
+        }
+
+        /// <summary>
+        /// Returns true if a custom metric with the given key exists.
+        /// </summary>
+        public bool HasMetric(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return false;
+
+            return _customMetrics.ContainsKey(key);
         }
 
         /// <summary>

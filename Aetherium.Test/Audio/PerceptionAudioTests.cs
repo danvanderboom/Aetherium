@@ -6,6 +6,10 @@ using Aetherium.Entities;
 using Aetherium.Model;
 using Aetherium.Server;
 using Aetherium.Server.Perception;
+using World = Aetherium.Core.World;
+using TileType = Aetherium.Core.TileType;
+using TerrainType = Aetherium.Core.TerrainType;
+using WorldLocation = Aetherium.Components.WorldLocation;
 
 namespace Aetherium.Test.Audio
 {

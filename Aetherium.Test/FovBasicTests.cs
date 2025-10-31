@@ -8,6 +8,10 @@ using Aetherium.Components;
 using Aetherium.WorldBuilders;
 using Aetherium.Systems;
 using Aetherium.Entities;
+using World = Aetherium.Core.World;
+using TileType = Aetherium.Core.TileType;
+using TerrainType = Aetherium.Core.TerrainType;
+using WorldBuilder = Aetherium.WorldBuilders.WorldBuilder;
 
 namespace Aetherium.Test
 {

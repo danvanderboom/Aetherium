@@ -1,8 +1,9 @@
+extern alias Server;
 using System;
 using System.Collections.Generic;
 using System.Text;
 using NUnit.Framework;
-using Aetherium.Geometry;
+using ServerGridColoring = Server::Aetherium.Geometry.GridColoring<string>;
 
 namespace Aetherium.Test
 {
@@ -34,14 +35,14 @@ namespace Aetherium.Test
                     colors[y, x] = coloring.GetColor(x, y);
         }
 
-        GridColoring<string> GridColoring2x2() => new GridColoring<string>(
+        ServerGridColoring GridColoring2x2() => new ServerGridColoring(
             new string[,]
             {
                 { "Red", "Blue" },
                 { "Blue", "White" },
             });
 
-        GridColoring<string> GridColoring3x3() => new GridColoring<string>(
+        ServerGridColoring GridColoring3x3() => new ServerGridColoring(
             new string[,]
             {
                 { "White", "Yellow", "Yellow" },

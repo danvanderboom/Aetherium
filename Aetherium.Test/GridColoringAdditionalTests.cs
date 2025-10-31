@@ -1,5 +1,6 @@
+extern alias Server;
 using NUnit.Framework;
-using Aetherium.Geometry;
+using ServerGridColoring = Server::Aetherium.Geometry.GridColoring<string>;
 
 namespace Aetherium.Test
 {
@@ -14,7 +15,7 @@ namespace Aetherium.Test
                 { "C", "D" },
             };
 
-            var coloring = new GridColoring<string>(grid);
+            var coloring = new ServerGridColoring(grid);
 
             // Base cells
             Assert.AreEqual("A", coloring.GetColor(0, 0));
@@ -41,7 +42,7 @@ namespace Aetherium.Test
                 { "X", "Y", "X" },
             };
 
-            var coloring = new GridColoring<string>(grid);
+            var coloring = new ServerGridColoring(grid);
 
             // Center (1,1) has color X. Its 4-neighbors are Y, so component is just itself.
             var cells = coloring.GetConnectedCells(1, 1);

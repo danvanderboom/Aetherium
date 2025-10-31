@@ -1,3 +1,4 @@
+extern alias Server;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -5,6 +6,8 @@ using NUnit.Framework;
 using Aetherium.Core;
 using Aetherium.Entities;
 using Aetherium.Components;
+using World = Server::Aetherium.Core.World;
+using Bomb = Server::Aetherium.Entities.Bomb;
 
 namespace Aetherium.Test
 {

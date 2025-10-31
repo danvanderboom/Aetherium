@@ -22,9 +22,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Aetherium.Server\Aetherium.Server.csproj" />
+    <ProjectReference Include="..\Aetherium.Server\Aetherium.Server.csproj">
+      <Aliases>Server,global</Aliases>
+    </ProjectReference>
     <ProjectReference Include="..\Aetherium.Model\Aetherium.Model.csproj" />
-    <ProjectReference Include="..\Aetherium.Console\Aetherium.Console.csproj" />
+    <ProjectReference Include="..\Aetherium.Console\Aetherium.Console.csproj">
+      <Aliases>Console</Aliases>
+    </ProjectReference>
     <ProjectReference Include="..\WorldGenCLI\WorldGenCLI.csproj" />
   </ItemGroup>
 
