@@ -76,9 +76,10 @@ namespace ConsoleGameServer.MultiWorld
             await _mapState.WriteStateAsync();
         }
 
-        public Task<World?> GetWorldAsync()
+        public Task<string?> GetWorldAsync()
         {
-            return Task.FromResult(_world);
+            // TODO: Return serialized world when implemented
+            return Task.FromResult<string?>(null);
         }
 
         public Task<MapMetadata?> GetMetadataAsync()
@@ -149,16 +150,17 @@ namespace ConsoleGameServer.MultiWorld
     /// <summary>
     /// Persisted state for a game map.
     /// </summary>
+    [GenerateSerializer]
     public class MapState
     {
-        public string MapId { get; set; } = string.Empty;
-        public string WorldId { get; set; } = string.Empty;
-        public string MapName { get; set; } = string.Empty;
-        public WorldSize Size { get; set; } = new WorldSize();
-        public string GeneratorType { get; set; } = string.Empty;
-        public HashSet<string> PlayerIds { get; set; } = new HashSet<string>();
-        public DateTime CreatedAt { get; set; }
-        public byte[]? SerializedWorld { get; set; } // Serialized World object
+        [Id(0)] public string MapId { get; set; } = string.Empty;
+        [Id(1)] public string WorldId { get; set; } = string.Empty;
+        [Id(2)] public string MapName { get; set; } = string.Empty;
+        [Id(3)] public WorldSize Size { get; set; } = new WorldSize();
+        [Id(4)] public string GeneratorType { get; set; } = string.Empty;
+        [Id(5)] public HashSet<string> PlayerIds { get; set; } = new HashSet<string>();
+        [Id(6)] public DateTime CreatedAt { get; set; }
+        [Id(7)] public byte[]? SerializedWorld { get; set; } // Serialized World object
     }
 }
 

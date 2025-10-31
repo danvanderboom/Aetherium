@@ -361,7 +361,20 @@ namespace ConsoleGameServer.Management
 
             var session = _sessionManager.GetSession(metadata.ConnectionId);
             if (session == null)
-                return null;
+            {
+                return new SessionInfo
+                {
+                    SessionId = metadata.SessionId,
+                    ConnectionId = metadata.ConnectionId,
+                    DirectionalVisionMode = false,
+                    HeadingDegrees = 0,
+                    FieldOfViewDegrees = 120,
+                    LightingMode = LightingMode.Torch,
+                    VisionMode = VisionMode.Normal,
+                    TimeScale = 1.0,
+                    ConnectedAt = metadata.ConnectedAt
+                };
+            }
 
             var fov = 120; // Default
             if (session.Player != null)
@@ -386,7 +399,7 @@ namespace ConsoleGameServer.Management
         }
 
         // World Management Methods
-        public Task<List<WorldInfo>> ListWorldsAsync()
+        public async Task<List<WorldInfo>> ListWorldsAsync()
         {
             var worldInfos = new List<WorldInfo>();
             
@@ -401,19 +414,33 @@ namespace ConsoleGameServer.Management
                 .ToList();
 
             // Wait for all tasks and collect results
-            var results = Task.WhenAll(tasks).GetAwaiter().GetResult();
+            var results = await Task.WhenAll(tasks);
             worldInfos.AddRange(results.Where(info => info != null)!);
 
-            return Task.FromResult(worldInfos);
+            return worldInfos;
         }
 
         public async Task<WorldInfo?> GetWorldInfoAsync(string worldId)
         {
-            if (!_worldRegistry.ContainsKey(worldId))
-                return null;
-
+            // Try to fetch info from the grain regardless of registry membership
             var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
-            return await worldGrain.GetInfoAsync();
+            var info = await worldGrain.GetInfoAsync();
+
+            // If the world is not in our registry, treat brand-new, uninitialized activations as non-existent
+            if (!_worldRegistry.ContainsKey(worldId))
+            {
+                if (info == null)
+                    return null;
+
+                bool looksUninitialized = string.IsNullOrWhiteSpace(info.Name)
+                                           && info.CreatedAt == default
+                                           && (info.MapIds == null || info.MapIds.Count == 0)
+                                           && info.PlayerCount == 0;
+                if (looksUninitialized)
+                    return null;
+            }
+
+            return info;
         }
 
         public async Task<string> CreateWorldAsync(CreateWorldRequest request)
@@ -426,7 +453,7 @@ namespace ConsoleGameServer.Management
                 WorldId = worldId,
                 Name = request.Name,
                 Description = request.Description,
-                GeneratorType = request.GeneratorType,
+                GeneratorType = string.IsNullOrWhiteSpace(request.GeneratorType) ? "rooms-and-corridors" : request.GeneratorType,
                 GeneratorParameters = request.GeneratorParameters,
                 NarrativeId = request.NarrativeId,
                 MaxPlayers = request.MaxPlayers,

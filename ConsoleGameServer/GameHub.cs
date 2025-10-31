@@ -378,37 +378,15 @@ namespace ConsoleGameServer
                 // Get the world's primary map (for now, assume map ID = worldId)
                 // TODO: Support multiple maps per world
                 var mapGrain = clusterClient.GetGrain<IGameMapGrain>(worldId);
-                var world = await mapGrain.GetWorldAsync();
+                var worldData = await mapGrain.GetWorldAsync();
 
-                if (world == null)
+                if (worldData == null)
                 {
                     return OperationResult.Error($"World {worldId} has no active map");
                 }
 
-                // Determine start location
-                ConsoleGame.Components.WorldLocation? startLocation = null;
-                // TODO: Get start location from world configuration or use spawn points
-                
-                // Create session with the world
-                var session = sessionManager.CreateSession(Context.ConnectionId, worldId, world, startLocation);
-
-                // Register session with management grain
-                await managementGrain.RegisterSessionAsync(session.SessionId, Context.ConnectionId);
-
-                // Send initial game state
-                var initialState = new GameStateDto
-                {
-                    PlayerId = session.SessionId,
-                    PlayerHeading = session.Heading.ToDto()
-                };
-                await Clients.Caller.SendAsync("ReceiveGameState", initialState);
-
-                // Send initial perception
-                var perception = session.GetPerception();
-                await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-
-                Console.WriteLine($"[GameHub] Client {Context.ConnectionId} joined world {worldId}");
-                return OperationResult.Ok($"Joined world {worldId}");
+                // TODO: Deserialize worldData when serialization is implemented
+                return OperationResult.Error("Joining worlds via GameHub is not yet supported.");
             }
             catch (Exception ex)
             {

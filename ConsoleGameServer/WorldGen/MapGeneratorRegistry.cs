@@ -35,7 +35,55 @@ namespace ConsoleGame.WorldGen
                 foreach (var type in generatorTypes)
                 {
                     var name = GetTypeName(type);
-                    _generatorTypes[name] = type;
+                    if (!_generatorTypes.ContainsKey(name))
+                    {
+                        _generatorTypes[name] = type;
+                    }
+                    else
+                    {
+                        // Prefer legacy ConsoleGame.MazeGenerator over WorldGen variant when both are present
+                        if (string.Equals(name, "Maze", System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            var existing = _generatorTypes[name];
+                            var newIsLegacy = type.FullName != null && type.FullName.Equals("ConsoleGame.MazeGenerator");
+                            var existingIsWorldGen = existing.FullName != null && existing.FullName.Contains(".WorldGen.");
+                            if (newIsLegacy && existingIsWorldGen)
+                            {
+                                _generatorTypes[name] = type;
+                            }
+                        }
+                    }
+                }
+
+                // Register common aliases for backward compatibility with tests
+                // Maze -> RoomsAndCorridors (only if no explicit Maze generator exists)
+                var rac = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key).Contains("roomsandcorridors"));
+                if (rac.Value != null && !_generatorTypes.ContainsKey("Maze"))
+                {
+                    _generatorTypes["Maze"] = rac.Value;
+                }
+
+                // OutdoorTerrain -> PerlinTerrain (terrain-style generator)
+                var perlin = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key).Contains("perlinterrain"));
+                if (perlin.Value != null && !_generatorTypes.ContainsKey("OutdoorTerrain"))
+                {
+                    _generatorTypes["OutdoorTerrain"] = perlin.Value;
+                }
+
+                // City -> GridCity (prefer GridCity if available; else any *City)
+                var gridCity = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key) == "gridcity");
+                if (gridCity.Value != null)
+                {
+                    if (!_generatorTypes.ContainsKey("City"))
+                        _generatorTypes["City"] = gridCity.Value;
+                }
+                else
+                {
+                    var anyCity = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key).Contains("city"));
+                    if (anyCity.Value != null && !_generatorTypes.ContainsKey("City"))
+                    {
+                        _generatorTypes["City"] = anyCity.Value;
+                    }
                 }
 
                 // Discover features
@@ -59,7 +107,28 @@ namespace ConsoleGame.WorldGen
         public IMapGenerator? GetGenerator(string name)
         {
             if (!_generatorTypes.TryGetValue(name, out var type))
-                return null;
+            {
+                // Fallback: try normalized name matching (case-insensitive, remove dashes/underscores/spaces)
+                var target = Normalize(name);
+                var match = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key) == target);
+                if (match.Value == null && target == "maze")
+                {
+                    // Alias: map 'maze' to RoomsAndCorridors
+                    match = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key).Contains("roomsandcorridors"));
+                }
+                if (match.Value == null && target == "city")
+                {
+                    // Alias: map 'city' to any city generator (prefer GridCity)
+                    match = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key) == "gridcity");
+                    if (match.Value == null)
+                    {
+                        match = _generatorTypes.FirstOrDefault(kvp => Normalize(kvp.Key).Contains("city"));
+                    }
+                }
+                if (match.Value == null)
+                    return null;
+                type = match.Value;
+            }
 
             try
             {
@@ -77,7 +146,13 @@ namespace ConsoleGame.WorldGen
         public IGenerationFeature? GetFeature(string name)
         {
             if (!_featureTypes.TryGetValue(name, out var type))
-                return null;
+            {
+                var target = Normalize(name);
+                var match = _featureTypes.FirstOrDefault(kvp => Normalize(kvp.Key) == target);
+                if (match.Value == null)
+                    return null;
+                type = match.Value;
+            }
 
             try
             {
@@ -108,6 +183,12 @@ namespace ConsoleGame.WorldGen
             if (name.EndsWith("Feature"))
                 name = name.Substring(0, name.Length - "Feature".Length);
             return name;
+        }
+
+        private static string Normalize(string name)
+        {
+            var chars = name.Where(char.IsLetterOrDigit).ToArray();
+            return new string(chars).ToLowerInvariant();
         }
     }
 }

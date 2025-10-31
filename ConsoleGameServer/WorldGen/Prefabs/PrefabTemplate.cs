@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace ConsoleGame.WorldGen.Prefabs
 {
@@ -13,6 +14,7 @@ namespace ConsoleGame.WorldGen.Prefabs
         public int Width { get; set; }
         public int Height { get; set; }
         public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+        [JsonConverter(typeof(PrefabTile2DConverter))]
         public PrefabTile[,] Tiles { get; set; } = new PrefabTile[0, 0];
     }
 

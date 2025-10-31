@@ -60,6 +60,8 @@ namespace ConsoleGameServer.MultiWorld
                 MapIds = new List<string>()
             };
 
+            _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
+
             // Create initial map
             var initialMapId = await AddMapAsync(
                 "Main",

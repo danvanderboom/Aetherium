@@ -18,7 +18,7 @@ namespace ConsoleGameServer.MultiWorld
         /// <summary>
         /// Gets the current world state for this map.
         /// </summary>
-        Task<ConsoleGame.Core.World?> GetWorldAsync();
+        Task<string?> GetWorldAsync();
 
         /// <summary>
         /// Gets map metadata.
@@ -49,15 +49,16 @@ namespace ConsoleGameServer.MultiWorld
     /// <summary>
     /// Metadata about a game map.
     /// </summary>
+    [GenerateSerializer]
     public class MapMetadata
     {
-        public string MapId { get; set; } = string.Empty;
-        public string WorldId { get; set; } = string.Empty;
-        public string MapName { get; set; } = string.Empty;
-        public WorldSize Size { get; set; } = new WorldSize();
-        public string GeneratorType { get; set; } = string.Empty;
-        public int PlayerCount { get; set; }
-        public System.DateTime CreatedAt { get; set; }
+        [Id(0)] public string MapId { get; set; } = string.Empty;
+        [Id(1)] public string WorldId { get; set; } = string.Empty;
+        [Id(2)] public string MapName { get; set; } = string.Empty;
+        [Id(3)] public WorldSize Size { get; set; } = new WorldSize();
+        [Id(4)] public string GeneratorType { get; set; } = string.Empty;
+        [Id(5)] public int PlayerCount { get; set; }
+        [Id(6)] public System.DateTime CreatedAt { get; set; }
     }
 }
 

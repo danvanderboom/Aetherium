@@ -1,12 +1,18 @@
+using Orleans;
+
 namespace ConsoleGameServer.Management
 {
     /// <summary>
     /// Represents the result of an operation with success/failure status and an optional message.
     /// </summary>
+    [GenerateSerializer]
     public struct OperationResult
     {
+        [Id(0)]
         public bool Success { get; init; }
-        public string Message { get; init; }
+        
+        [Id(1)]
+        public string Message { get; init; } = string.Empty;
 
         private OperationResult(bool success, string message)
         {

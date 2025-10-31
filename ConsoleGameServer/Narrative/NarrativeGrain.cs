@@ -122,6 +122,7 @@ namespace ConsoleGameServer.Narrative
         public async Task DeleteAsync()
         {
             await _narrativeState.ClearStateAsync();
+            _narrativeState.State = null!;
         }
     }
 }
