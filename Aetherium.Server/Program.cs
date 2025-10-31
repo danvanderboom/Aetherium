@@ -70,10 +70,21 @@ namespace Aetherium.Server
                     var builderAI = sp.GetService<BuilderAI>();
                     if (builderAI != null)
                     {
-                        // Note: World access is not available from IMapRegionGrain directly
-                        // For now, BuilderModifier will be skipped until World access is available
-                        // var builderModifier = new BuilderModifier(builderAI, ...);
-                        // registry.Register(builderModifier);
+                        var builderModifier = new BuilderModifier(builderAI, async (region) =>
+                        {
+                            // Get snapshot to retrieve MapId
+                            var snapshot = await region.GetSnapshotAsync();
+                            if (string.IsNullOrEmpty(snapshot.MapId))
+                                return null;
+
+                            var grainFactory = sp.GetService<Orleans.IGrainFactory>();
+                            if (grainFactory == null)
+                                return null;
+
+                            var mapGrain = grainFactory.GetGrain<Aetherium.Server.MultiWorld.IGameMapGrain>(snapshot.MapId);
+                            return await mapGrain.PerformWorldOperationAsync(async world => await Task.FromResult(world));
+                        });
+                        registry.Register(builderModifier);
                     }
                     return registry;
                 });

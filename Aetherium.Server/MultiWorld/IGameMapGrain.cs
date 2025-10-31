@@ -56,6 +56,17 @@ namespace Aetherium.Server.MultiWorld
         /// Loads map regions from persistent storage.
         /// </summary>
         Task<bool> LoadMapAsync();
+
+        /// <summary>
+        /// Performs an operation on the World for this map.
+        /// This allows modifiers to access World without exposing it directly.
+        /// </summary>
+        Task<T> PerformWorldOperationAsync<T>(Func<Aetherium.Core.World, Task<T>> operation);
+        
+        /// <summary>
+        /// Performs an operation on the World for this map (void version).
+        /// </summary>
+        Task PerformWorldOperationAsync(Func<Aetherium.Core.World, Task> operation);
     }
 
     /// <summary>

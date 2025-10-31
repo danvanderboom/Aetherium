@@ -327,6 +327,22 @@ namespace Aetherium.Server.MultiWorld
 
             return true;
         }
+
+        public async Task<T> PerformWorldOperationAsync<T>(Func<World, Task<T>> operation)
+        {
+            if (_world == null)
+                throw new InvalidOperationException("World not initialized for this map");
+
+            return await operation(_world);
+        }
+
+        public async Task PerformWorldOperationAsync(Func<World, Task> operation)
+        {
+            if (_world == null)
+                throw new InvalidOperationException("World not initialized for this map");
+
+            await operation(_world);
+        }
     }
 
     /// <summary>

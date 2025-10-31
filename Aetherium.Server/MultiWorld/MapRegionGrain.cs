@@ -54,6 +54,18 @@ namespace Aetherium.Server.MultiWorld
             return this.ServiceProvider.GetService<SeasonManager>();
         }
 
+        private IGameMapGrain? GetMapGrain()
+        {
+            if (string.IsNullOrEmpty(_mapId))
+                return null;
+
+            var grainFactory = this.ServiceProvider.GetService<Orleans.IGrainFactory>();
+            if (grainFactory == null)
+                return null;
+
+            return grainFactory.GetGrain<IGameMapGrain>(_mapId);
+        }
+
         public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             // Try to restore from persisted state
