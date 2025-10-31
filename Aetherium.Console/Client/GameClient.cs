@@ -160,6 +160,32 @@ namespace Aetherium.Client
                 return;
             await connection.InvokeAsync("SetVisionMode", mode);
         }
+        
+        // ============================================================
+        // Unified Tool Execution API (New)
+        // ============================================================
+        
+        /// <summary>
+        /// Executes a tool by ID with specified arguments (new unified API).
+        /// </summary>
+        public async Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, Dictionary<string, object> args)
+        {
+            if (connection == null || !IsConnected)
+                return new ToolExecutionResultDto { Success = false, Message = "Not connected" };
+            
+            return await connection.InvokeAsync<ToolExecutionResultDto>("ExecuteTool", toolId, args);
+        }
+        
+        /// <summary>
+        /// Lists all available tools for the current player.
+        /// </summary>
+        public async Task<List<ToolInfoDto>> GetAvailableToolsAsync()
+        {
+            if (connection == null || !IsConnected)
+                return new List<ToolInfoDto>();
+            
+            return await connection.InvokeAsync<List<ToolInfoDto>>("ListAvailableTools");
+        }
 
         public async Task DisconnectAsync()
         {

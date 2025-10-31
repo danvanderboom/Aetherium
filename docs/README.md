@@ -31,15 +31,20 @@ Documentation for developers working on the codebase.
 ### Agents & AI
 📁 **[agents/](agents/)** - AI agent system documentation
 
-The game supports LLM-driven agents powered by LM Studio (phi-4) or heuristic-based NPCs:
-- LLM-driven agents using OpenAI-compatible APIs
-- Heuristic fallback agents
-- CLI tools for agent management
-- Rate limiting and error handling
+The game features a comprehensive extensible agent tool system:
+- **LLM-driven agents** using OpenAI-compatible APIs (phi-4 via LM Studio)
+- **Heuristic fallback agents** with simple rule-based behavior
+- **Extensible tool system** with 26+ discoverable tools
+- **Profile-based access control** (Explorer, Player, WorldBuilder, etc.)
+- **OpenAI function calling support** for advanced LLM integration
+- **CLI tools** for agent and tool management
+- **Rate limiting and error handling**
 
-**Start here:** [Agent System Guide](agents/README.md)
+**Start here:** [Agent System Guide](agents/README.md)  
+**Deep dive:** [Tool System Architecture](agents/TOOLS.md)
 
 ### Architecture & Design
+- ✅ [Agent Tool System](agents/TOOLS.md) - Extensible tool architecture
 - Coming soon: System architecture overview
 - Coming soon: Entity-Component-System (ECS) guide
 - Coming soon: Client-Server communication protocol
@@ -138,7 +143,8 @@ Aetherium.Console/
 - [ ] Modding guide (if supported)
 
 ### Planned Developer Documentation
-- [ ] Architecture overview
+- [x] Agent tool system architecture
+- [ ] System architecture overview
 - [ ] ECS system guide
 - [ ] Perception system deep dive
 - [ ] Network protocol specification

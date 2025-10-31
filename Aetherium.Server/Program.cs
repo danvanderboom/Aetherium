@@ -48,6 +48,14 @@ namespace Aetherium.Server
                 return library;
             });
             
+            // Add AgentToolRegistry for discovering and managing agent tools
+            builder.Services.AddSingleton<Aetherium.Server.Agents.Tools.AgentToolRegistry>(sp =>
+            {
+                var toolRegistry = new Aetherium.Server.Agents.Tools.AgentToolRegistry(sp);
+                toolRegistry.DiscoverTools(System.Reflection.Assembly.GetExecutingAssembly());
+                return toolRegistry;
+            });
+            
             // Add PromptRegistry for loading agent prompts
             builder.Services.AddSingleton<PromptRegistry>(sp =>
             {
@@ -108,6 +116,7 @@ namespace Aetherium.Server
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<MapGeneratorRegistry>());
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<MapValidator>());
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<PrefabLibrary>());
+                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<Aetherium.Server.Agents.Tools.AgentToolRegistry>());
                     
                     // Register GameSessionManager for GameManagementGrain
                     siloBuilder.Services.AddSingleton<GameSessionManager>(sp =>

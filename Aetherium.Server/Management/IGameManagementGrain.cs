@@ -47,6 +47,9 @@ namespace Aetherium.Server.Management
         Task<OperationResult> UseAsync(string sessionId, string itemEntityId, string onEntityId);
         Task<OperationResult> OpenAsync(string sessionId, string targetEntityId);
         Task<OperationResult> CloseAsync(string sessionId, string targetEntityId);
+        
+        // Tool system
+        Task<List<ToolInfoDto>> ListAvailableToolsAsync(string? profileName = null);
     }
 }
 

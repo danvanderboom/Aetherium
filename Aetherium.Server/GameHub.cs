@@ -19,11 +19,13 @@ namespace Aetherium.Server
         private readonly GameSessionManager sessionManager;
         private readonly InteractionSystem interactionSystem = new InteractionSystem();
         private readonly IClusterClient? clusterClient;
+        private readonly Aetherium.Server.Agents.Tools.AgentToolRegistry? toolRegistry;
 
-        public GameHub(GameSessionManager sessionManager, IClusterClient? clusterClient = null)
+        public GameHub(GameSessionManager sessionManager, IClusterClient? clusterClient = null, Aetherium.Server.Agents.Tools.AgentToolRegistry? toolRegistry = null)
         {
             this.sessionManager = sessionManager;
             this.clusterClient = clusterClient;
+            this.toolRegistry = toolRegistry;
         }
 
         private IGameManagementGrain? GetManagementGrain()
@@ -123,6 +125,10 @@ namespace Aetherium.Server
             await base.OnDisconnectedAsync(exception);
         }
 
+        /// <summary>
+        /// Moves the player in the specified direction.
+        /// </summary>
+        [Obsolete("Use ExecuteTool(\"move\", args) instead. This method will be removed in a future version.")]
         public async Task MovePlayer(Aetherium.Model.RelativeDirection direction, int distance)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -136,6 +142,10 @@ namespace Aetherium.Server
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
         }
 
+        /// <summary>
+        /// Rotates the player's view.
+        /// </summary>
+        [Obsolete("Use ExecuteTool(\"rotate\", args) instead. This method will be removed in a future version.")]
         public async Task RotatePlayer(bool clockwise)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -153,6 +163,7 @@ namespace Aetherium.Server
         /// Rotates the player by a specific number of degrees.
         /// Positive values rotate clockwise, negative values rotate counter-clockwise.
         /// </summary>
+        [Obsolete("Use ExecuteTool(\"rotate\", args) instead. This method will be removed in a future version.")]
         public async Task RotatePlayerDegrees(int degrees)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -170,6 +181,7 @@ namespace Aetherium.Server
         /// Toggles directional vision mode on or off.
         /// When enabled, the player can only see within a forward-facing cone.
         /// </summary>
+        [Obsolete("Use ExecuteTool(\"toggledirectionalvision\", args) instead. This method will be removed in a future version.")]
         public async Task ToggleDirectionalVision()
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -184,6 +196,7 @@ namespace Aetherium.Server
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
         }
 
+        [Obsolete("Use ExecuteTool(\"changelevel\", args) instead. This method will be removed in a future version.")]
         public async Task ChangeLevel(int deltaZ)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -197,6 +210,7 @@ namespace Aetherium.Server
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
         }
 
+        [Obsolete("Use ExecuteTool(\"jumptolocation\", args) instead. This method will be removed in a future version.")]
         public async Task JumpToRandomLocation()
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -210,6 +224,7 @@ namespace Aetherium.Server
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
         }
 
+        [Obsolete("Use ExecuteTool(\"pickup\", args) instead. This method will be removed in a future version.")]
         public async Task<InteractionResultDto> Pickup(string targetEntityId)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -222,6 +237,7 @@ namespace Aetherium.Server
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
         }
 
+        [Obsolete("Use ExecuteTool(\"drop\", args) instead. This method will be removed in a future version.")]
         public async Task<InteractionResultDto> Drop(string itemEntityId)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -234,6 +250,7 @@ namespace Aetherium.Server
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
         }
 
+        [Obsolete("Use ExecuteTool(\"use\", args) instead. This method will be removed in a future version.")]
         public async Task<InteractionResultDto> Use(string itemEntityId, string onEntityId)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -246,6 +263,7 @@ namespace Aetherium.Server
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
         }
 
+        [Obsolete("Use ExecuteTool(\"open\", args) instead. This method will be removed in a future version.")]
         public async Task<InteractionResultDto> Open(string targetEntityId)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -258,6 +276,7 @@ namespace Aetherium.Server
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
         }
 
+        [Obsolete("Use ExecuteTool(\"close\", args) instead. This method will be removed in a future version.")]
         public async Task<InteractionResultDto> Close(string targetEntityId)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -270,6 +289,7 @@ namespace Aetherium.Server
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
         }
 
+        [Obsolete("Use ExecuteTool(\"setlightingmode\", args) instead. This method will be removed in a future version.")]
         public async Task SetLightingMode(LightingMode mode)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -283,6 +303,7 @@ namespace Aetherium.Server
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
         }
 
+        [Obsolete("Use ExecuteTool(\"setvisionmode\", args) instead. This method will be removed in a future version.")]
         public async Task SetVisionMode(VisionMode mode)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
@@ -392,6 +413,109 @@ namespace Aetherium.Server
             {
                 Console.WriteLine($"[GameHub] Error joining world: {ex.Message}");
                 return OperationResult.Error($"Failed to join world: {ex.Message}");
+            }
+        }
+        
+        // ============================================================
+        // Unified Tool Execution API
+        // ============================================================
+        
+        /// <summary>
+        /// Executes a tool by ID with the specified arguments.
+        /// This is the new unified API for all game actions.
+        /// </summary>
+        public async Task<ToolExecutionResultDto> ExecuteTool(string toolId, Dictionary<string, object> args)
+        {
+            try
+            {
+                if (toolRegistry == null)
+                {
+                    return new ToolExecutionResultDto 
+                    { 
+                        Success = false, 
+                        Message = "Tool registry not available" 
+                    };
+                }
+                
+                var session = sessionManager.GetSession(Context.ConnectionId);
+                if (session == null)
+                {
+                    return new ToolExecutionResultDto 
+                    { 
+                        Success = false, 
+                        Message = "No active session" 
+                    };
+                }
+                
+                var tool = toolRegistry.GetTool(toolId);
+                if (tool == null)
+                {
+                    return new ToolExecutionResultDto 
+                    { 
+                        Success = false, 
+                        Message = $"Tool not found: {toolId}" 
+                    };
+                }
+                
+                // Create execution context for player
+                var context = new Aetherium.Server.Agents.Tools.ToolExecutionContext
+                {
+                    SessionId = session.SessionId,
+                    ConnectionId = Context.ConnectionId,
+                    Session = session,
+                    InteractionSystem = interactionSystem,
+                    ManagementGrain = GetManagementGrain(),
+                    GrantedCapabilities = new HashSet<string> 
+                    { 
+                        // Players get full access to player-level capabilities
+                        "basic_movement", "inventory_access", "interaction", "vision" 
+                    },
+                    ServiceProvider = Context.GetHttpContext()?.RequestServices ?? throw new InvalidOperationException("Service provider not available")
+                };
+                
+                // Execute the tool
+                var result = await tool.ExecuteAsync(context, args);
+                
+                // Send updated perception to client
+                var perception = session.GetPerception();
+                await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+                
+                return result.ToDto();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Error executing tool {toolId}: {ex.Message}");
+                return new ToolExecutionResultDto 
+                { 
+                    Success = false, 
+                    Message = $"Error executing tool: {ex.Message}" 
+                };
+            }
+        }
+        
+        /// <summary>
+        /// Lists all available tools for the current player.
+        /// </summary>
+        public async Task<List<ToolInfoDto>> ListAvailableTools()
+        {
+            try
+            {
+                if (toolRegistry == null)
+                    return new List<ToolInfoDto>();
+                
+                // Get default player profile (full access to player tools)
+                var profile = Aetherium.Server.Agents.Tools.AgentToolProfile.FullAccess;
+                
+                var tools = toolRegistry.GetToolsForProfile(profile)
+                    .Select(t => t.ToDto())
+                    .ToList();
+                
+                return await Task.FromResult(tools);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Error listing tools: {ex.Message}");
+                return new List<ToolInfoDto>();
             }
         }
     }

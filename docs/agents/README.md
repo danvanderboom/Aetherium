@@ -1,12 +1,24 @@
 # Agent System Documentation
 
-This guide covers the AI agent system for Console Game, including LLM-driven agents powered by LM Studio (phi-4) and heuristic-based fallback agents.
+This guide covers the AI agent system for Console Game, including the extensible tool system, LLM-driven agents powered by LM Studio (phi-4), and heuristic-based fallback agents.
 
 ## Overview
 
-The agent system allows NPCs (non-player characters) to autonomously explore the game world, pick up items, open doors, and complete objectives. Agents can use either:
-- **LLM-driven decisions**: Powered by local LLMs via LM Studio (phi-4 model)
+The agent system allows NPCs (non-player characters) to autonomously explore the game world, pick up items, open doors, and complete objectives using a comprehensive extensible tool system. Agents can use either:
+- **LLM-driven decisions**: Powered by local LLMs via LM Studio (phi-4 model) with OpenAI function calling support
 - **Heuristic fallback**: Simple rule-based behavior (always works, no LLM required)
+
+### New: Extensible Tool System
+
+The agent system now features a fully extensible tool architecture with:
+- **26+ discoverable tools** organized into categories (movement, interaction, vision, world-building)
+- **Profile-based access control** with predefined profiles (Explorer, Player, WorldBuilder, Admin, etc.)
+- **OpenAI function calling** support for advanced LLM integration
+- **Dual API support** for both human players (SignalR) and AI agents (Orleans)
+- **Dynamic tool discovery** via reflection - new tools are automatically available
+- **CLI tool management** commands for inspection and debugging
+
+**📖 For detailed architecture and usage, see: [Tool System Documentation](TOOLS.md)**
 
 ## Quick Start
 
@@ -42,6 +54,21 @@ $env:AGENT_MODEL="phi-4"
 ```powershell
 # List active game sessions
 agentcli mgmt sessions
+
+# List available tools
+agentcli agent tool list
+agentcli agent tool list --profile explorer
+agentcli agent tool list --category movement
+
+# Get tool details
+agentcli agent tool info move
+
+# View tool categories
+agentcli agent tool categories
+
+# List agent profiles
+agentcli agent profile list
+agentcli agent profile show worldbuilder
 
 # Attach an agent to a session
 agentcli agent attach <sessionId> --agent agent-1 --runner runner-1
@@ -141,6 +168,40 @@ Invoke-RestMethod -Method Post `
 agentcli mgmt sessions
 ```
 
+### Tool Management Commands (New!)
+
+```powershell
+# List all available tools
+agentcli agent tool list
+
+# Filter tools by profile
+agentcli agent tool list --profile explorer
+agentcli agent tool list --profile worldbuilder
+
+# Filter tools by category
+agentcli agent tool list --category movement
+agentcli agent tool list --category interaction
+
+# Get detailed information about a specific tool
+agentcli agent tool info move
+agentcli agent tool info pickup
+
+# List all tool categories
+agentcli agent tool categories
+```
+
+### Profile Management Commands (New!)
+
+```powershell
+# List all predefined agent profiles
+agentcli agent profile list
+
+# Show details of a specific profile
+agentcli agent profile show explorer
+agentcli agent profile show worldbuilder
+agentcli agent profile show admin
+```
+
 ### Agent Runner Commands
 
 ```powershell
@@ -178,19 +239,20 @@ When `AGENT_LLM_ENABLED=1`, agents:
    - Player location and heading
    - Visible entities and items
    - Available affordances (actions)
-2. Send perception to LLM with system prompt
-3. Receive JSON decision: `{"action": "move", "args": {"direction": "F"}}`
-4. Execute the action via game management APIs
-5. Rate limited to 10 requests/second
-6. Fall back to "move forward" on errors
+2. **NEW:** Receive dynamic list of available tools based on agent profile
+3. Send perception + tool definitions to LLM (supports OpenAI function calling format)
+4. Receive decision (either OpenAI tool_calls or simple JSON: `{"action": "move", "args": {"direction": "forward"}}`)
+5. Execute the tool via the extensible tool system
+6. Rate limited to 10 requests/second
+7. Fall back to "move forward" on errors
 
-**Supported Actions:**
-- `move {direction}`: Move in direction (F/L/R/B/N/E/S/W)
-- `pickup {targetEntityId}`: Pick up an item
-- `drop {itemEntityId}`: Drop an item from inventory
-- `open {targetEntityId}`: Open a door
-- `close {targetEntityId}`: Close a door
-- `use {itemEntityId, onEntityId}`: Use an item on another entity (e.g., key on door)
+**Available Tool Categories:**
+- **Movement** (4 tools): move, rotate, changelevel, jumptolocation
+- **Interaction** (5 tools): pickup, drop, use, open, close
+- **Vision** (4 tools): toggledirectionalvision, setfov, setlightingmode, setvisionmode
+- **World-Building** (13 tools): Entity/terrain/map/narrative management (for WorldBuilder agents)
+
+**Note:** Tool availability depends on the agent's profile. Use `agentcli agent tool list --profile <profile>` to see which tools are available for each profile.
 
 ### Heuristic Agents
 
@@ -203,21 +265,47 @@ When `AGENT_LLM_ENABLED=0`, agents use simple heuristic:
 
 ### Components
 
+- **`AgentToolRegistry`**: Central registry for all agent tools
+  - Automatic tool discovery via reflection
+  - DI-based tool instantiation
+  - Category and capability filtering
+  - Profile-based access control
+
+- **`IAgentTool`**: Interface for all agent tools
+  - `ExecuteAsync`: Tool execution logic
+  - `GetParameterSchema`: OpenAI-compatible parameter definitions
+  - `Categories`: Tool categorization
+  - `RequiredCapabilities`: Security capabilities
+
+- **`AgentToolProfile`**: Profile-based access control
+  - Predefined profiles: Explorer, Player, WorldBuilder, NarrativeDesigner, Admin
+  - Category-based and capability-based filtering
+  - Runtime profile selection
+
 - **`MicrosoftAgentAdapter`**: Handles LLM API communication
-  - OpenAI-compatible chat completions
+  - OpenAI-compatible chat completions with function calling support
+  - Dynamic tool schema generation
+  - Dual format parsing (OpenAI tool_calls + simple JSON)
   - Rate limiting (10 req/sec, configurable concurrency)
   - Error handling with fallback actions
   - Timeout protection (10 seconds)
 
 - **`AgentRunnerGrain`**: Orleans grain for agent orchestration
   - Attaches to game sessions
-  - Executes steps (LLM or heuristic)
+  - Executes steps using tool system
+  - Profile-aware tool filtering
   - Tracks status and error counts
   - Supports continuous execution with delay
 
 - **`GameManagementGrain`**: Provides gameplay control APIs
-  - `MoveAsync`, `PickupAsync`, `DropAsync`, `OpenAsync`, `CloseAsync`, `UseAsync`
+  - `ListAvailableToolsAsync`: Query available tools for a profile
+  - Legacy action methods (deprecated, use tool system)
   - `GetPerceptionAsync`: Returns JSON perception data
+
+- **`GameHub`**: SignalR hub for human players
+  - `ExecuteTool`: Unified tool execution API
+  - `ListAvailableTools`: Query tools for current player
+  - Legacy methods (marked `[Obsolete]`)
 
 ### Flow
 
@@ -370,8 +458,60 @@ You can customize this prompt file to change agent behavior.
 
 ## See Also
 
-- [Client-Server README](../CLIENT_SERVER_README.md) - Architecture overview
+- **[Tool System Documentation](TOOLS.md)** - Complete architecture and usage guide for the extensible tool system
+- **[Tool Implementation Summary](FINAL_SUMMARY.md)** - Implementation status and metrics
 - [OpenSpec Agents Guide](../../openspec/AGENTS.md) - Development workflow
 - [Agent Prompt Template](../../Aetherium.Server/Prompts/agent_explorer.md) - LLM prompt definition
+
+## Adding New Tools
+
+To add a new tool to the system:
+
+1. **Create a new class** implementing `IAgentTool`:
+```csharp
+[AgentTool("mytool", "Description of what this tool does")]
+public class MyTool : IAgentTool
+{
+    public string ToolId => "mytool";
+    public string Description => "Description of what this tool does";
+    public IEnumerable<string> Categories => new[] { "movement", "custom" };
+    public IEnumerable<string> RequiredCapabilities => new[] { "basic_movement" };
+    
+    public ToolParameterSchema GetParameterSchema()
+    {
+        return new ToolParameterSchema
+        {
+            Properties = new Dictionary<string, ParameterDefinition>
+            {
+                ["param1"] = new() { Type = "string", Description = "Parameter description" }
+            },
+            Required = new List<string> { "param1" }
+        };
+    }
+    
+    public async Task<ToolExecutionResult> ExecuteAsync(ToolExecutionContext context, Dictionary<string, object> args)
+    {
+        // Tool implementation
+        return ToolExecutionResult.Ok("Success!");
+    }
+}
+```
+
+2. **That's it!** The tool is automatically:
+   - Discovered at startup via reflection
+   - Available to appropriate agent profiles
+   - Exposed to LLMs with auto-generated schemas
+   - Accessible via CLI commands
+
+3. **Test it**:
+```powershell
+# Verify tool was discovered
+agentcli agent tool list | Select-String mytool
+
+# Get tool details
+agentcli agent tool info mytool
+```
+
+For more details, see [TOOLS.md](TOOLS.md).
 
 

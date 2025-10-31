@@ -1,14 +1,17 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Aetherium.Server.Management;
+using Aetherium.Server.Agents.Tools;
 using Orleans;
 
 namespace Aetherium.Server.Agents
 {
     /// <summary>
-    /// Simple runner that pulls perception and executes a heuristic policy.
-    /// Pluggable with Microsoft Agent Framework in future iterations.
+    /// Simple runner that pulls perception and executes actions using the tool system.
+    /// Supports both LLM-driven and heuristic policies.
     /// </summary>
     public class AgentRunnerGrain : Grain, IAgentRunnerGrain
     {
@@ -22,11 +25,20 @@ namespace Aetherium.Server.Agents
 
         private IGameManagementGrain? _mgmt;
         private MicrosoftAgentAdapter? _adapter;
+        private AgentToolRegistry? _toolRegistry;
+        private AgentToolProfile? _toolProfile;
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             var key = this.GetPrimaryKeyString();
             Console.WriteLine($"[AgentRunner] Activated {key}");
+            
+            // Get tool registry from service provider
+            _toolRegistry = ServiceProvider.GetService(typeof(AgentToolRegistry)) as AgentToolRegistry;
+            
+            // Default to explorer profile (can be changed later)
+            _toolProfile = AgentToolProfile.Explorer;
+            
             return base.OnActivateAsync(cancellationToken);
         }
 
@@ -79,65 +91,107 @@ namespace Aetherium.Server.Agents
                 return;
             }
 
-            OperationResult result;
+            ToolExecutionResult result;
             string actionSummary;
 
             var llmEnabled = string.Equals(Environment.GetEnvironmentVariable("AGENT_LLM_ENABLED"), "1", StringComparison.OrdinalIgnoreCase);
-            if (llmEnabled)
+            
+            if (llmEnabled && _toolRegistry != null && _toolProfile != null)
             {
+                // LLM-driven execution using tool system
                 _adapter ??= new MicrosoftAgentAdapter();
-                var decision = await _adapter.DecideAsync(p, CancellationToken.None);
-                var act = (decision.Action ?? string.Empty).Trim().ToLowerInvariant();
-                var args = decision.Args ?? new System.Collections.Generic.Dictionary<string, string>();
-
-                switch (act)
+                
+                // Get available tools for this agent
+                var availableTools = _toolRegistry.GetToolsForProfile(_toolProfile).ToList();
+                
+                var decision = await _adapter.DecideAsync(p, availableTools, CancellationToken.None);
+                var tool = _toolRegistry.GetTool(decision.Action ?? "move");
+                
+                if (tool != null && _toolProfile.IsToolAllowed(tool))
                 {
-                    case "move":
-                        var dir = args.TryGetValue("direction", out var d) ? d : "F";
-                        actionSummary = $"move {dir}";
-                        result = await _mgmt.MoveAsync(_sessionId, dir);
-                        break;
-                    case "pickup":
-                        var pickId = args.TryGetValue("targetEntityId", out var pe) ? pe : string.Empty;
-                        actionSummary = $"pickup {pickId}";
-                        result = await _mgmt.PickupAsync(_sessionId, pickId);
-                        break;
-                    case "drop":
-                        var dropId = args.TryGetValue("itemEntityId", out var de) ? de : string.Empty;
-                        actionSummary = $"drop {dropId}";
-                        result = await _mgmt.DropAsync(_sessionId, dropId);
-                        break;
-                    case "open":
-                        var openId = args.TryGetValue("targetEntityId", out var oe) ? oe : string.Empty;
-                        actionSummary = $"open {openId}";
-                        result = await _mgmt.OpenAsync(_sessionId, openId);
-                        break;
-                    case "close":
-                        var closeId = args.TryGetValue("targetEntityId", out var ce) ? ce : string.Empty;
-                        actionSummary = $"close {closeId}";
-                        result = await _mgmt.CloseAsync(_sessionId, closeId);
-                        break;
-                    case "use":
-                        var itemId = args.TryGetValue("itemEntityId", out var ie) ? ie : string.Empty;
-                        var onId = args.TryGetValue("onEntityId", out var oe2) ? oe2 : string.Empty;
-                        actionSummary = $"use {itemId} on {onId}";
-                        result = await _mgmt.UseAsync(_sessionId, itemId, onId);
-                        break;
-                    default:
-                        actionSummary = "move F";
-                        result = await _mgmt.MoveAsync(_sessionId, "F");
-                        break;
+                    // Create execution context
+                    var context = new ToolExecutionContext
+                    {
+                        SessionId = _sessionId,
+                        AgentId = _agentId,
+                        ManagementGrain = _mgmt,
+                        GrantedCapabilities = _toolProfile.GrantedCapabilities,
+                        ServiceProvider = ServiceProvider
+                    };
+                    
+                    // Convert string args to object args
+                    var objectArgs = decision.Args?.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value) 
+                        ?? new Dictionary<string, object>();
+                    
+                    result = await tool.ExecuteAsync(context, objectArgs);
+                    actionSummary = $"{tool.ToolId} {string.Join(", ", objectArgs.Select(kvp => $"{kvp.Key}={kvp.Value}"))}";
+                }
+                else
+                {
+                    // Fallback to move forward if tool not found or not allowed
+                    var moveTool = _toolRegistry.GetTool("move");
+                    if (moveTool != null)
+                    {
+                        var context = new ToolExecutionContext
+                        {
+                            SessionId = _sessionId,
+                            AgentId = _agentId,
+                            ManagementGrain = _mgmt,
+                            GrantedCapabilities = _toolProfile.GrantedCapabilities,
+                            ServiceProvider = ServiceProvider
+                        };
+                        result = await moveTool.ExecuteAsync(context, new Dictionary<string, object> { ["direction"] = "F" });
+                        actionSummary = "move F (fallback)";
+                    }
+                    else
+                    {
+                        result = ToolExecutionResult.Error("No tools available");
+                        actionSummary = "error";
+                    }
+                }
+            }
+            else if (_toolRegistry != null)
+            {
+                // Heuristic execution using tool system: try to move forward, if blocked turn right
+                var moveTool = _toolRegistry.GetTool("move");
+                if (moveTool != null)
+                {
+                    var context = new ToolExecutionContext
+                    {
+                        SessionId = _sessionId,
+                        AgentId = _agentId,
+                        ManagementGrain = _mgmt,
+                        GrantedCapabilities = new HashSet<string> { "basic_movement" },
+                        ServiceProvider = ServiceProvider
+                    };
+                    
+                    result = await moveTool.ExecuteAsync(context, new Dictionary<string, object> { ["direction"] = "F" });
+                    actionSummary = "move F";
+                    
+                    if (!result.Success)
+                    {
+                        result = await moveTool.ExecuteAsync(context, new Dictionary<string, object> { ["direction"] = "R" });
+                        actionSummary = "move R";
+                    }
+                }
+                else
+                {
+                    result = ToolExecutionResult.Error("Move tool not available");
+                    actionSummary = "error";
                 }
             }
             else
             {
-                // Heuristic: try to move forward; if blocked, turn right then move
-                actionSummary = "move F";
-                result = await _mgmt.MoveAsync(_sessionId, "F");
-                if (!result.Success)
+                // Fallback to direct management grain calls if tool system not available
+                var mgmtResult = await _mgmt.MoveAsync(_sessionId, "F");
+                result = mgmtResult.Success ? ToolExecutionResult.Ok("Moved F") : ToolExecutionResult.Error(mgmtResult.Message);
+                actionSummary = "move F (legacy)";
+                
+                if (!mgmtResult.Success)
                 {
-                    actionSummary = "move R";
-                    result = await _mgmt.MoveAsync(_sessionId, "R");
+                    mgmtResult = await _mgmt.MoveAsync(_sessionId, "R");
+                    result = mgmtResult.Success ? ToolExecutionResult.Ok("Moved R") : ToolExecutionResult.Error(mgmtResult.Message);
+                    actionSummary = "move R (legacy)";
                 }
             }
 

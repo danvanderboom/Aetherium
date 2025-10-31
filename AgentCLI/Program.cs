@@ -643,6 +643,194 @@ namespace AgentCLI
 
             agentCmd.AddCommand(policyCmd);
 
+            // Tool management commands
+            var toolCmd = new Command("tool", "Tool management and inspection");
+
+            var toolListCmd = new Command("list", "List all available tools or tools for a specific profile");
+            var toolProfileOpt = new Option<string?>("--profile", "Filter tools by profile (e.g., explorer, player, worldbuilder)");
+            var toolCategoryOpt = new Option<string?>("--category", "Filter tools by category (e.g., movement, interaction)");
+            toolListCmd.AddOption(toolProfileOpt);
+            toolListCmd.AddOption(toolCategoryOpt);
+            toolListCmd.SetHandler(async (string? profile, string? category) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var tools = await mgmt.ListAvailableToolsAsync(profile);
+                    
+                    if (tools == null || !tools.Any())
+                    {
+                        Console.WriteLine("No tools found.");
+                        return;
+                    }
+
+                    var filtered = category != null 
+                        ? tools.Where(t => t.Categories.Contains(category, StringComparer.OrdinalIgnoreCase))
+                        : tools;
+
+                    Console.WriteLine($"\n{(profile != null ? $"Tools for profile '{profile}'" : "All tools")}:");
+                    Console.WriteLine(new string('-', 80));
+                    
+                    foreach (var tool in filtered.OrderBy(t => t.ToolId))
+                    {
+                        Console.WriteLine($"\n[{tool.ToolId}]");
+                        Console.WriteLine($"  Description: {tool.Description}");
+                        Console.WriteLine($"  Categories: {string.Join(", ", tool.Categories)}");
+                        if (tool.Parameters.Any())
+                        {
+                            Console.WriteLine($"  Parameters:");
+                            foreach (var param in tool.Parameters)
+                            {
+                                var required = tool.RequiredParameters.Contains(param.Key) ? "*" : " ";
+                                Console.WriteLine($"    {required} {param.Key}: {param.Value.Type} - {param.Value.Description}");
+                            }
+                        }
+                    }
+                    Console.WriteLine();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error listing tools: {ex.Message}");
+                }
+            }, toolProfileOpt, toolCategoryOpt);
+            toolCmd.AddCommand(toolListCmd);
+
+            var toolInfoCmd = new Command("info", "Get detailed information about a specific tool");
+            var toolIdInfoArg = new Argument<string>("toolId", "Tool ID");
+            toolInfoCmd.AddArgument(toolIdInfoArg);
+            toolInfoCmd.SetHandler(async (string toolId) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var tools = await mgmt.ListAvailableToolsAsync(null);
+                    var tool = tools?.FirstOrDefault(t => t.ToolId.Equals(toolId, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (tool == null)
+                    {
+                        Console.WriteLine($"✗ Tool '{toolId}' not found.");
+                        return;
+                    }
+
+                    Console.WriteLine($"\nTool: {tool.ToolId}");
+                    Console.WriteLine(new string('=', 80));
+                    Console.WriteLine($"Description: {tool.Description}");
+                    Console.WriteLine($"Categories: {string.Join(", ", tool.Categories)}");
+                    
+                    if (tool.Parameters.Any())
+                    {
+                        Console.WriteLine("\nParameters:");
+                        foreach (var param in tool.Parameters)
+                        {
+                            var required = tool.RequiredParameters.Contains(param.Key);
+                            Console.WriteLine($"  • {param.Key} ({param.Value.Type}){(required ? " [REQUIRED]" : "")}");
+                            Console.WriteLine($"    {param.Value.Description}");
+                            if (param.Value.AllowedValues.Any())
+                            {
+                                Console.WriteLine($"    Allowed values: {string.Join(", ", param.Value.AllowedValues)}");
+                            }
+                        }
+                    }
+                    Console.WriteLine();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error getting tool info: {ex.Message}");
+                }
+            }, toolIdInfoArg);
+            toolCmd.AddCommand(toolInfoCmd);
+
+            var toolCategoriesCmd = new Command("categories", "List all available tool categories");
+            toolCategoriesCmd.SetHandler(async () =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var tools = await mgmt.ListAvailableToolsAsync(null);
+                    var categories = tools?.SelectMany(t => t.Categories).Distinct().OrderBy(c => c).ToList();
+                    
+                    if (categories == null || !categories.Any())
+                    {
+                        Console.WriteLine("No categories found.");
+                        return;
+                    }
+
+                    Console.WriteLine("\nAvailable tool categories:");
+                    foreach (var category in categories)
+                    {
+                        var count = tools.Count(t => t.Categories.Contains(category));
+                        Console.WriteLine($"  • {category} ({count} tools)");
+                    }
+                    Console.WriteLine();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error listing categories: {ex.Message}");
+                }
+            });
+            toolCmd.AddCommand(toolCategoriesCmd);
+
+            agentCmd.AddCommand(toolCmd);
+
+            // Profile management commands
+            var profileCmd = new Command("profile", "Agent tool profile management");
+
+            var profileListCmd = new Command("list", "List all predefined profiles");
+            profileListCmd.SetHandler(() =>
+            {
+                Console.WriteLine("\nPredefined profiles:");
+                Console.WriteLine("  • explorer    - Basic movement and perception");
+                Console.WriteLine("  • player      - Full player capabilities");
+                Console.WriteLine("  • fullaccess  - All player tools");
+                Console.WriteLine("  • worldbuilder - World editing tools");
+                Console.WriteLine("  • narrativedesigner - Narrative and quest tools");
+                Console.WriteLine("  • admin       - Unrestricted access");
+                Console.WriteLine();
+            });
+            profileCmd.AddCommand(profileListCmd);
+
+            var profileShowCmd = new Command("show", "Show details of a specific profile");
+            var profileNameArg = new Argument<string>("profileName", "Profile name");
+            profileShowCmd.AddArgument(profileNameArg);
+            profileShowCmd.SetHandler(async (string profileName) =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var tools = await mgmt.ListAvailableToolsAsync(profileName);
+                    
+                    if (tools == null || !tools.Any())
+                    {
+                        Console.WriteLine($"✗ Profile '{profileName}' not found or has no tools.");
+                        return;
+                    }
+
+                    Console.WriteLine($"\nProfile: {profileName}");
+                    Console.WriteLine(new string('=', 80));
+                    Console.WriteLine($"Tools available: {tools.Count()}");
+                    Console.WriteLine("\nCategories:");
+                    var categories = tools.SelectMany(t => t.Categories).Distinct().OrderBy(c => c);
+                    foreach (var category in categories)
+                    {
+                        var count = tools.Count(t => t.Categories.Contains(category));
+                        Console.WriteLine($"  • {category} ({count} tools)");
+                    }
+                    Console.WriteLine("\nTools:");
+                    foreach (var tool in tools.OrderBy(t => t.ToolId))
+                    {
+                        Console.WriteLine($"  • {tool.ToolId}");
+                    }
+                    Console.WriteLine();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Error showing profile: {ex.Message}");
+                }
+            }, profileNameArg);
+            profileCmd.AddCommand(profileShowCmd);
+
+            agentCmd.AddCommand(profileCmd);
+
             rootCommand.AddCommand(agentCmd);
 
 

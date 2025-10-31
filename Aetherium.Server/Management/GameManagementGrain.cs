@@ -7,7 +7,9 @@ using System.Threading.Tasks;
 using Aetherium.Components;
 using Aetherium.Model;
 using Aetherium.Server.MultiWorld;
+using Aetherium.Server.Agents.Tools;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using Orleans;
 using Aetherium.Server;
 using ModelRelativeDirection = Aetherium.Model.RelativeDirection;
@@ -738,6 +740,25 @@ namespace Aetherium.Server.Management
                 Console.WriteLine($"[GameManagementGrain] Error shutting down world: {ex.Message}");
                 return OperationResult.Error($"Failed to shut down world: {ex.Message}");
             }
+        }
+
+        public Task<List<ToolInfoDto>> ListAvailableToolsAsync(string? profileName = null)
+        {
+            var toolRegistry = ServiceProvider.GetService(typeof(Aetherium.Server.Agents.Tools.AgentToolRegistry)) 
+                as Aetherium.Server.Agents.Tools.AgentToolRegistry;
+
+            if (toolRegistry == null)
+                return Task.FromResult(new List<ToolInfoDto>());
+
+            var profile = string.IsNullOrEmpty(profileName)
+                ? Aetherium.Server.Agents.Tools.AgentToolProfile.FullAccess
+                : Aetherium.Server.Agents.Tools.AgentToolProfile.GetPredefinedProfile(profileName);
+
+            var tools = toolRegistry.GetToolsForProfile(profile)
+                .Select(t => t.ToDto())
+                .ToList();
+
+            return Task.FromResult(tools);
         }
     }
 }
