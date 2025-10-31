@@ -57,6 +57,8 @@ namespace WorldGenCLI
                 registry.DiscoverTypes(typeof(IMapGenerator).Assembly);
 
                 WorldGenerationRequest request;
+                WorldGenerationTemplate templateEnum;
+                int seedValue;
 
                 // If benchmark specified, load benchmark and use its recipe
                 if (!string.IsNullOrWhiteSpace(benchmarkId))
@@ -73,14 +75,16 @@ namespace WorldGenCLI
 
                     Console.WriteLine($"Loading benchmark: {benchmark.Name}");
                     request = BenchmarkGenerator.GenerateRequest(benchmark.Recipe);
+                    templateEnum = request.Template;
+                    seedValue = request.Seed;
                 }
                 else
                 {
-                    var templateEnum = template.Equals("outdoor", StringComparison.OrdinalIgnoreCase)
+                    templateEnum = template.Equals("outdoor", StringComparison.OrdinalIgnoreCase)
                         ? WorldGenerationTemplate.Outdoor
                         : WorldGenerationTemplate.Dungeon;
 
-                    var seedValue = seedOption ?? Environment.TickCount;
+                    seedValue = seedOption ?? Environment.TickCount;
 
                     request = new WorldGenerationRequest
                     {

@@ -1,0 +1,247 @@
+@page "/behavior/{AgentId}"
+@using Aetherium.Server.Agents.Analysis
+@using System.Net.Http.Json
+@inject IHttpClientFactory HttpClientFactory
+@inject ILogger<BehaviorAnalysis> Logger
+
+<PageTitle>Behavior Analysis - @AgentId</PageTitle>
+
+<h1>Behavior Analysis: @AgentId</h1>
+
+@if (loading)
+{
+    <p>Loading behavior analysis...</p>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else if (behaviorAnalysis != null)
+{
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Action Patterns</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Action Type</th>
+                                <th>Count</th>
+                                <th>Success Rate</th>
+                                <th>Avg Latency</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var pattern in behaviorAnalysis.ActionPatterns.OrderByDescending(p => p.TotalCount))
+                            {
+                                <tr>
+                                    <td>@pattern.ActionType</td>
+                                    <td>@pattern.TotalCount</td>
+                                    <td>@pattern.SuccessRate:P1</td>
+                                    <td>@pattern.AverageLatencyMs:F0 ms</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Struggle Patterns</h5>
+                </div>
+                <div class="card-body">
+                    @if (behaviorAnalysis.StrugglePatterns.Count == 0)
+                    {
+                        <p class="text-muted">No struggle patterns identified.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @foreach (var struggle in behaviorAnalysis.StrugglePatterns.OrderByDescending(s => s.FailureCount))
+                            {
+                                <li class="list-group-item">
+                                    <strong>@struggle.ContextType</strong><br />
+                                    <small>Failures: @struggle.FailureCount | Steps: @struggle.FirstFailureStep - @struggle.LastFailureStep</small>
+                                    @if (!string.IsNullOrEmpty(struggle.FailureReason))
+                                    {
+                                        <br /><small class="text-muted">@struggle.FailureReason</small>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Success Patterns</h5>
+                </div>
+                <div class="card-body">
+                    @if (behaviorAnalysis.SuccessPatterns.Count == 0)
+                    {
+                        <p class="text-muted">No success patterns identified.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @foreach (var success in behaviorAnalysis.SuccessPatterns.OrderByDescending(s => s.SuccessCount))
+                            {
+                                <li class="list-group-item">
+                                    <strong>@success.ContextType</strong><br />
+                                    <small>Success Rate: @success.SuccessRate:P1 | Count: @success.SuccessCount</small>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Exploration Patterns</h5>
+                </div>
+                <div class="card-body">
+                    @if (behaviorAnalysis.ExplorationPatterns.Count == 0)
+                    {
+                        <p class="text-muted">No exploration patterns identified.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @foreach (var area in behaviorAnalysis.ExplorationPatterns)
+                            {
+                                <li class="list-group-item">
+                                    <strong>@area.AreaType</strong><br />
+                                    <small>Visits: @area.VisitCount | Success Rate: @area.SuccessRate:P1</small>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (interestProfile != null)
+    {
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Interest Profile</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Engaging Interactions</h6>
+                                <ul>
+                                    @foreach (var interaction in interestProfile.EngagingInteractions)
+                                    {
+                                        <li>@interaction</li>
+                                    }
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Preferred Content Types</h6>
+                                <ul>
+                                    @foreach (var contentType in interestProfile.PreferredContentTypes)
+                                    {
+                                        <li>@contentType</li>
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (contentNeeds != null && contentNeeds.Count > 0)
+    {
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Content Needs</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group">
+                            @foreach (var need in contentNeeds.OrderByDescending(n => n.Priority))
+                            {
+                                <li class="list-group-item">
+                                    <strong>@need.NeedType</strong> (Priority: @need.Priority:P1)<br />
+                                    <small>@need.Description</small><br />
+                                    <small>Suggested: @string.Join(", ", need.SuggestedContent)</small>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public string AgentId { get; set; } = string.Empty;
+
+    private bool loading = true;
+    private string? error;
+    private BehaviorAnalysis? behaviorAnalysis;
+    private InterestProfile? interestProfile;
+    private List<ContentNeed>? contentNeeds;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient();
+            httpClient.BaseAddress = new Uri("http://localhost:5000");
+
+            // Get behavior analysis
+            var response = await httpClient.GetAsync($"/api/adaptation/behavior/{AgentId}");
+            if (response.IsSuccessStatusCode)
+            {
+                behaviorAnalysis = await response.Content.ReadFromJsonAsync<BehaviorAnalysis>();
+            }
+
+            // Get interest profile
+            var profileResponse = await httpClient.GetAsync($"/api/adaptation/interest/{AgentId}");
+            if (profileResponse.IsSuccessStatusCode)
+            {
+                interestProfile = await profileResponse.Content.ReadFromJsonAsync<InterestProfile>();
+            }
+
+            // Get content needs
+            var needsResponse = await httpClient.GetAsync($"/api/adaptation/needs/{AgentId}");
+            if (needsResponse.IsSuccessStatusCode)
+            {
+                contentNeeds = await needsResponse.Content.ReadFromJsonAsync<List<ContentNeed>>();
+            }
+
+            loading = false;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            loading = false;
+            Logger.LogError(ex, "Error loading behavior analysis");
+        }
+    }
+}
+

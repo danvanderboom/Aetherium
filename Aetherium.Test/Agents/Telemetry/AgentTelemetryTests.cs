@@ -14,11 +14,11 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalyzer_EmptySnapshots_ReturnsEmptyAnalysis()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>();
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis, Is.Not.Null);
@@ -34,16 +34,16 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalyzer_AllSuccessfulSnapshots_Returns100PercentSuccessRate()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>
             {
-                new PerformanceSnapshot { ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 },
-                new PerformanceSnapshot { ActionSucceeded = true, ActionType = "pickup", DecisionLatencyMs = 150, PerceptionComplexity = 15 },
-                new PerformanceSnapshot { ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 120, PerceptionComplexity = 12 }
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 },
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "pickup", DecisionLatencyMs = 150, PerceptionComplexity = 15 },
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 120, PerceptionComplexity = 12 }
             };
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis.TotalSteps, Is.EqualTo(3));
@@ -57,15 +57,15 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalyzer_AllFailedSnapshots_Returns0PercentSuccessRate()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>
             {
-                new PerformanceSnapshot { ActionSucceeded = false, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 },
-                new PerformanceSnapshot { ActionSucceeded = false, ActionType = "pickup", DecisionLatencyMs = 150, PerceptionComplexity = 15 }
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = false, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 },
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = false, ActionType = "pickup", DecisionLatencyMs = 150, PerceptionComplexity = 15 }
             };
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis.TotalSteps, Is.EqualTo(2));
@@ -78,16 +78,16 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalyzer_GroupsByActionType()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>
             {
-                new PerformanceSnapshot { ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 },
-                new PerformanceSnapshot { ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 120, PerceptionComplexity = 12 },
-                new PerformanceSnapshot { ActionSucceeded = false, ActionType = "pickup", DecisionLatencyMs = 150, PerceptionComplexity = 15 }
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 },
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 120, PerceptionComplexity = 12 },
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = false, ActionType = "pickup", DecisionLatencyMs = 150, PerceptionComplexity = 15 }
             };
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis.ActionTypeStats, Contains.Key("move"));
@@ -102,7 +102,7 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalyzer_IdentifiesWeakness_LowSuccessRate()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>();
             
             // Add 15 snapshots with low success rate (<50%)
@@ -110,6 +110,7 @@ namespace Aetherium.Test.Agents.Telemetry
             {
                 snapshots.Add(new PerformanceSnapshot 
                 { 
+                    AgentId = agentId,
                     ActionSucceeded = i < 6, // Only 6 successful out of 15 = 40%
                     ActionType = "move",
                     DecisionLatencyMs = 100,
@@ -118,7 +119,7 @@ namespace Aetherium.Test.Agents.Telemetry
             }
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis.IdentifiedWeaknesses, Is.Not.Empty);
@@ -129,16 +130,16 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalyzer_IdentifiesWeakness_HighLatency()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>
             {
-                new PerformanceSnapshot { ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 5000, PerceptionComplexity = 10 },
-                new PerformanceSnapshot { ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 6000, PerceptionComplexity = 12 },
-                new PerformanceSnapshot { ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 5500, PerceptionComplexity = 15 }
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 5000, PerceptionComplexity = 10 },
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 6000, PerceptionComplexity = 12 },
+                new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 5500, PerceptionComplexity = 15 }
             };
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis.AverageDecisionLatencyMs, Is.GreaterThan(4000));
@@ -149,30 +150,30 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalyzer_CalculatesTrends_WithEnoughSnapshots()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>();
             
             // First 10: high success rate
             for (int i = 0; i < 10; i++)
             {
-                snapshots.Add(new PerformanceSnapshot { ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 });
+                snapshots.Add(new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = true, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 });
             }
             
             // Next 10: low success rate (degrading trend)
             for (int i = 0; i < 10; i++)
             {
-                snapshots.Add(new PerformanceSnapshot { ActionSucceeded = i < 3, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 });
+                snapshots.Add(new PerformanceSnapshot { AgentId = agentId, ActionSucceeded = i < 3, ActionType = "move", DecisionLatencyMs = 100, PerceptionComplexity = 10 });
             }
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis.TrendMetrics, Is.Not.Empty);
-            Assert.That(analysis.TrendMetrics.ContainsKey("SuccessRateTrend"), Is.True);
+            Assert.That(analysis.TrendMetrics.ContainsKey("success_rate_trend"), Is.True);
             
             // First half: 100%, Second half: 30%, so trend should be negative
-            Assert.That(analysis.TrendMetrics["SuccessRateTrend"], Is.LessThan(0));
+            Assert.That(analysis.TrendMetrics["success_rate_trend"], Is.LessThan(0));
         }
 
         [Test]

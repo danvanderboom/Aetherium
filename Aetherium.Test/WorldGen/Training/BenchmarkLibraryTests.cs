@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
-using Aetherium.Server.WorldGen.Training;
+using Aetherium.WorldGen.Training;
 using Aetherium.Server.WorldGen;
+using Aetherium.WorldGen;
 
 namespace Aetherium.Test.WorldGen.Training
 {
@@ -59,7 +60,6 @@ namespace Aetherium.Test.WorldGen.Training
         public void BenchmarkLibrary_GetBenchmark_ValidId_ReturnsBenchmark()
         {
             // Arrange
-            var library = new BenchmarkLibrary();
             var benchmarkId = "test-benchmark";
             var benchmark = new BenchmarkScenario
             {
@@ -70,15 +70,15 @@ namespace Aetherium.Test.WorldGen.Training
             // Manually add to library (in real implementation, loaded from directory)
             var benchmarks = new Dictionary<string, BenchmarkScenario> { [benchmarkId] = benchmark };
             var libraryType = typeof(BenchmarkLibrary);
-            var benchmarksField = libraryType.GetField("_benchmarks", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var benchmarksField = libraryType.GetField("_benchmarks", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
             
             if (benchmarksField != null)
             {
-                benchmarksField.SetValue(library, benchmarks);
+                benchmarksField.SetValue(null, benchmarks);
             }
 
             // Act
-            var result = library.GetBenchmark(benchmarkId);
+            var result = BenchmarkLibrary.GetBenchmark(benchmarkId);
 
             // Assert
             Assert.That(result, Is.Not.Null);
@@ -89,11 +89,10 @@ namespace Aetherium.Test.WorldGen.Training
         public void BenchmarkLibrary_GetBenchmark_InvalidId_ReturnsNull()
         {
             // Arrange
-            var library = new BenchmarkLibrary();
             var benchmarkId = "non-existent-benchmark";
 
             // Act
-            var result = library.GetBenchmark(benchmarkId);
+            var result = BenchmarkLibrary.GetBenchmark(benchmarkId);
 
             // Assert
             Assert.That(result, Is.Null);
@@ -103,7 +102,6 @@ namespace Aetherium.Test.WorldGen.Training
         public void BenchmarkLibrary_GetBenchmarksByCategory_ReturnsMatchingBenchmarks()
         {
             // Arrange
-            var library = new BenchmarkLibrary();
             var benchmark1 = new BenchmarkScenario
             {
                 BenchmarkId = "benchmark1",
@@ -122,16 +120,16 @@ namespace Aetherium.Test.WorldGen.Training
                 ["benchmark2"] = benchmark2
             };
             var libraryType = typeof(BenchmarkLibrary);
-            var benchmarksField = libraryType.GetField("_benchmarks", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var benchmarksField = libraryType.GetField("_benchmarks", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
             
             if (benchmarksField != null)
             {
-                benchmarksField.SetValue(library, benchmarks);
+                benchmarksField.SetValue(null, benchmarks);
             }
 
             // Act
-            var navigationBenchmarks = library.GetBenchmarksByCategory("navigation");
-            var combatBenchmarks = library.GetBenchmarksByCategory("combat");
+            var navigationBenchmarks = BenchmarkLibrary.GetBenchmarksByCategory("navigation");
+            var combatBenchmarks = BenchmarkLibrary.GetBenchmarksByCategory("combat");
 
             // Assert
             Assert.That(navigationBenchmarks, Is.Not.Empty);
@@ -144,17 +142,16 @@ namespace Aetherium.Test.WorldGen.Training
         public void BenchmarkGenerator_GenerateRequest_FromRecipe_CreatesValidRequest()
         {
             // Arrange
-            var generator = new BenchmarkGenerator();
             var recipe = new BenchmarkRecipe
             {
                 Generator = "AdvancedDungeonGenerator",
-                Template = GenerationTemplate.Dungeon,
+                Template = "dungeon",
                 Seed = 12345,
                 GeneratorVersion = "1.0",
                 Width = 40,
                 Height = 40,
                 Levels = 1,
-                Parameters = new Dictionary<string, object>
+                Parameters = new Dictionary<string, string>
                 {
                     ["roomCount"] = "10",
                     ["trapDensity"] = "0.2"
@@ -162,14 +159,14 @@ namespace Aetherium.Test.WorldGen.Training
             };
 
             // Act
-            var request = generator.GenerateRequest(recipe);
+            var request = BenchmarkGenerator.GenerateRequest(recipe);
 
             // Assert
             Assert.That(request, Is.Not.Null);
             Assert.That(request.Width, Is.EqualTo(40));
             Assert.That(request.Height, Is.EqualTo(40));
             Assert.That(request.Levels, Is.EqualTo(1));
-            Assert.That(request.Template, Is.EqualTo(GenerationTemplate.Dungeon));
+            Assert.That(request.Template, Is.EqualTo(WorldGenerationTemplate.Dungeon));
             Assert.That(request.IsTrainingMode, Is.True);
             Assert.That(request.Parameters.ContainsKey("roomCount"), Is.True);
             Assert.That(request.Parameters.ContainsKey("trapDensity"), Is.True);
@@ -179,7 +176,6 @@ namespace Aetherium.Test.WorldGen.Training
         public void BenchmarkGenerator_GenerateVariations_CreatesVariationsWithDifferentSeeds()
         {
             // Arrange
-            var generator = new BenchmarkGenerator();
             var baseBenchmark = new BenchmarkScenario
             {
                 BenchmarkId = "base-benchmark",
@@ -193,7 +189,7 @@ namespace Aetherium.Test.WorldGen.Training
             var count = 3;
 
             // Act
-            var variations = generator.GenerateVariations(baseBenchmark, count);
+            var variations = BenchmarkGenerator.GenerateVariations(baseBenchmark, count);
 
             // Assert
             Assert.That(variations, Is.Not.Null);
@@ -211,50 +207,50 @@ namespace Aetherium.Test.WorldGen.Training
         public void BenchmarkGenerator_GenerateEdgeCase_NavigationFailure_IncreasesMapSize()
         {
             // Arrange
-            var generator = new BenchmarkGenerator();
             var baseRecipe = new BenchmarkRecipe
             {
                 Width = 30,
                 Height = 30,
-                Parameters = new Dictionary<string, object>
+                Parameters = new Dictionary<string, string>
                 {
                     ["branchingFactor"] = "0.5"
                 }
             };
             var failurePattern = "navigation_failure";
+            var benchmarkId = "edge-case-nav";
 
             // Act
-            var edgeCase = generator.GenerateEdgeCase(baseRecipe, failurePattern);
+            var edgeCase = BenchmarkGenerator.GenerateEdgeCase(benchmarkId, failurePattern, baseRecipe);
 
             // Assert
             Assert.That(edgeCase, Is.Not.Null);
-            Assert.That(edgeCase.Width, Is.GreaterThanOrEqualTo(30));
-            Assert.That(edgeCase.Height, Is.GreaterThanOrEqualTo(30));
+            Assert.That(edgeCase.Recipe.Width, Is.GreaterThanOrEqualTo(30));
+            Assert.That(edgeCase.Recipe.Height, Is.GreaterThanOrEqualTo(30));
         }
 
         [Test]
         public void BenchmarkGenerator_GenerateEdgeCase_KeyLockFailure_IncreasesChainDepth()
         {
             // Arrange
-            var generator = new BenchmarkGenerator();
             var baseRecipe = new BenchmarkRecipe
             {
                 Width = 30,
                 Height = 30,
-                Parameters = new Dictionary<string, object>
+                Parameters = new Dictionary<string, string>
                 {
                     ["keyLockChainDepth"] = "2"
                 }
             };
             var failurePattern = "key_lock_failure";
+            var benchmarkId = "edge-case-keylock";
 
             // Act
-            var edgeCase = generator.GenerateEdgeCase(baseRecipe, failurePattern);
+            var edgeCase = BenchmarkGenerator.GenerateEdgeCase(benchmarkId, failurePattern, baseRecipe);
 
             // Assert
             Assert.That(edgeCase, Is.Not.Null);
-            if (edgeCase.Parameters.ContainsKey("keyLockChainDepth") && 
-                int.TryParse(edgeCase.Parameters["keyLockChainDepth"].ToString(), out var depth))
+            if (edgeCase.Recipe.Parameters.ContainsKey("keyLockChainDepth") && 
+                int.TryParse(edgeCase.Recipe.Parameters["keyLockChainDepth"], out var depth))
             {
                 Assert.That(depth, Is.GreaterThanOrEqualTo(2));
             }

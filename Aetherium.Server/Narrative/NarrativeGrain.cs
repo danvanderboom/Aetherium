@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Aetherium.Server.Agents.Analysis;
+using Aetherium.Server.WorldGen.Adaptation;
 
 namespace Aetherium.Server.Narrative
 {
@@ -123,6 +125,27 @@ namespace Aetherium.Server.Narrative
         {
             await _narrativeState.ClearStateAsync();
             _narrativeState.State = null!;
+        }
+
+        public async Task<List<QuestDefinition>> GetAdaptiveQuestsAsync(string agentId, int maxQuests = 5)
+        {
+            // Get adaptive narrative grain for this narrative
+            var adaptiveGrain = GrainFactory.GetGrain<IAdaptiveNarrativeGrain>(this.GetPrimaryKeyString());
+            return await adaptiveGrain.GenerateAdaptiveQuestsAsync(agentId, maxQuests);
+        }
+
+        public async Task<QuestDefinition?> AdaptQuestForAgentAsync(string questId, string agentId)
+        {
+            // Get existing quest
+            var quest = _narrativeState.State.Quests.FirstOrDefault(q => q.QuestId == questId);
+            if (quest == null)
+            {
+                return null;
+            }
+
+            // Get adaptive narrative grain for this narrative
+            var adaptiveGrain = GrainFactory.GetGrain<IAdaptiveNarrativeGrain>(this.GetPrimaryKeyString());
+            return await adaptiveGrain.AdaptQuestAsync(questId, agentId);
         }
     }
 }

@@ -9,7 +9,8 @@ namespace Aetherium.WorldGen
         Theming = 1,
         Population = 2,
         Interactions = 3,
-        Validation = 4
+        Adaptation = 4, // Post-generation adaptation based on agent behavior
+        Validation = 5
     }
 }
 

@@ -1,54 +1,75 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Orleans;
 
 namespace Aetherium.Server.Agents.Telemetry
 {
     /// <summary>
     /// Analyzes agent performance telemetry to identify trends, weaknesses, and improvement opportunities.
     /// </summary>
+    [GenerateSerializer]
     public sealed class PerformanceAnalysis
     {
+        [Id(0)]
         public string AgentId { get; set; } = string.Empty;
 
+        [Id(1)]
         public DateTime AnalysisTimestamp { get; set; } = DateTime.UtcNow;
 
+        [Id(2)]
         public int TotalSteps { get; set; }
 
+        [Id(3)]
         public int TotalSuccessfulActions { get; set; }
 
+        [Id(4)]
         public int TotalFailedActions { get; set; }
 
+        [Id(5)]
         public double SuccessRate { get; set; }
 
+        [Id(6)]
         public double AverageDecisionLatencyMs { get; set; }
 
+        [Id(7)]
         public double AveragePerceptionComplexity { get; set; }
 
+        [Id(8)]
         public Dictionary<string, ActionTypeStats> ActionTypeStats { get; set; } = new Dictionary<string, ActionTypeStats>();
 
+        [Id(9)]
         public List<string> IdentifiedWeaknesses { get; set; } = new List<string>();
 
+        [Id(10)]
         public List<string> Recommendations { get; set; } = new List<string>();
 
+        [Id(11)]
         public Dictionary<string, double> TrendMetrics { get; set; } = new Dictionary<string, double>();
     }
 
     /// <summary>
     /// Statistics for a specific action type.
     /// </summary>
+    [GenerateSerializer]
     public sealed class ActionTypeStats
     {
+        [Id(0)]
         public string ActionType { get; set; } = string.Empty;
 
+        [Id(1)]
         public int TotalCount { get; set; }
 
+        [Id(2)]
         public int SuccessCount { get; set; }
 
+        [Id(3)]
         public int FailureCount { get; set; }
 
+        [Id(4)]
         public double SuccessRate { get; set; }
 
+        [Id(5)]
         public double AverageLatencyMs { get; set; }
     }
 
@@ -116,14 +137,14 @@ namespace Aetherium.Server.Agents.Telemetry
             // Identify weaknesses
             IdentifyWeaknesses(analysis);
 
-            // Generate recommendations
-            GenerateRecommendations(analysis);
-
             // Calculate trends (comparing first half to second half)
             if (snapshots.Count >= 10)
             {
                 CalculateTrends(snapshots, analysis);
             }
+
+            // Generate recommendations (after trends are computed)
+            GenerateRecommendations(analysis);
 
             return analysis;
         }
@@ -174,7 +195,7 @@ namespace Aetherium.Server.Agents.Telemetry
 
             if (analysis.AverageDecisionLatencyMs > 2000)
             {
-                analysis.Recommendations.Add("Consider optimizing decision-making process or reducing perception complexity");
+                analysis.Recommendations.Add($"High decision latency detected ({analysis.AverageDecisionLatencyMs:F0}ms avg) - optimize or reduce complexity");
             }
 
             if (analysis.TrendMetrics.ContainsKey("success_rate_trend") && analysis.TrendMetrics["success_rate_trend"] < 0)

@@ -77,7 +77,8 @@ namespace Aetherium.Server.Agents
                 {
                     _currentReplay.FailureReason = "Session ended with failed action";
                     // Fire and forget - don't await in synchronous method
-                    _ = _telemetryGrain.RecordFailedRunAsync(_currentReplay);
+                    var replayJson = System.Text.Json.JsonSerializer.Serialize(_currentReplay);
+                    _ = _telemetryGrain.RecordFailedRunAsync(replayJson);
                 }
                 _currentReplay = null;
             }
@@ -300,12 +301,13 @@ namespace Aetherium.Server.Agents
                 // Store replay if this is a critical failure
                 if (_currentReplay.Steps.Count(s => !s.Succeeded) >= 3 && _telemetryGrain != null)
                 {
-                    var replayId = await _telemetryGrain.RecordFailedRunAsync(_currentReplay);
+                    var replayJson = System.Text.Json.JsonSerializer.Serialize(_currentReplay);
+                    var replayId = await _telemetryGrain.RecordFailedRunAsync(replayJson);
                     
                     // Broadcast replay storage event via SignalR if hub context available
                     if (_dashboardHub != null && _agentId != null)
                     {
-                        await _dashboardHub.Clients.Group($"agent:{_agentId}").SendAsync("ReplayStored", replayId, _currentReplay);
+                        await _dashboardHub.Clients.Group($"agent:{_agentId}").SendAsync("ReplayStored", replayId, replayJson);
                     }
                     
                     _currentReplay = null; // Reset for next failure sequence

@@ -60,12 +60,12 @@ namespace Aetherium.Server.Controllers
         {
             var filePath = Path.Combine("Data", "Curricula", $"{curriculumId}.json");
             
-            if (!File.Exists(filePath))
+            if (!System.IO.File.Exists(filePath))
                 return null;
 
             try
             {
-                var json = File.ReadAllText(filePath);
+                var json = System.IO.File.ReadAllText(filePath);
                 return JsonSerializer.Deserialize<CurriculumDefinition>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
@@ -88,7 +88,7 @@ namespace Aetherium.Server.Controllers
                 WriteIndented = true
             });
             
-            File.WriteAllText(filePath, json);
+            System.IO.File.WriteAllText(filePath, json);
         }
     }
 }

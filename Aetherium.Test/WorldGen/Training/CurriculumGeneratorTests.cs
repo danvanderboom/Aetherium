@@ -4,8 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
-using Aetherium.Server.WorldGen.Training;
+using Aetherium.WorldGen.Training;
 using Aetherium.Server.WorldGen;
+using Aetherium.Server.Agents.Telemetry;
+using Aetherium.WorldGen;
+using PerformanceAnalysis = Aetherium.Server.Agents.Telemetry.PerformanceAnalysis;
 
 namespace Aetherium.Test.WorldGen.Training
 {
@@ -16,25 +19,26 @@ namespace Aetherium.Test.WorldGen.Training
         public void AutoCurriculumGenerator_GenerateNextStage_InitialStage_LowDifficulty()
         {
             // Arrange
-            var generator = new AutoCurriculumGenerator();
-            PerformanceAnalysis? previousAnalysis = null;
+            var initialAnalysis = new PerformanceAnalysis { TotalSteps = 0, SuccessRate = 0 };
 
-            // Act
-            var stage = generator.GenerateNextStage(previousAnalysis, null);
+            // Act - Generate initial stage (currentStage is null)
+            var stage = AutoCurriculumGenerator.GenerateNextStage(
+                initialAnalysis,
+                null,
+                agentSkillLevel: 1);
 
             // Assert
             Assert.That(stage, Is.Not.Null);
             Assert.That(stage.Difficulty, Is.LessThanOrEqualTo(30));
-            Assert.That(stage.Prerequisites, Is.Empty);
-            Assert.That(stage.Parameters.ContainsKey("width"), Is.True);
-            Assert.That(stage.Parameters.ContainsKey("height"), Is.True);
+            Assert.That(stage.Prerequisites, Is.Not.Null);
+            Assert.That(stage.Parameters.Width, Is.GreaterThan(0));
+            Assert.That(stage.Parameters.Height, Is.GreaterThan(0));
         }
 
         [Test]
         public void AutoCurriculumGenerator_GenerateNextStage_HighSuccessRate_IncreasesDifficulty()
         {
             // Arrange
-            var generator = new AutoCurriculumGenerator();
             var previousAnalysis = new PerformanceAnalysis
             {
                 TotalSteps = 25,
@@ -47,7 +51,7 @@ namespace Aetherium.Test.WorldGen.Training
             };
 
             // Act
-            var stage = generator.GenerateNextStage(previousAnalysis, previousStage);
+            var stage = AutoCurriculumGenerator.GenerateNextStage(previousAnalysis, previousStage, agentSkillLevel: 1);
 
             // Assert
             Assert.That(stage, Is.Not.Null);
@@ -59,7 +63,6 @@ namespace Aetherium.Test.WorldGen.Training
         public void AutoCurriculumGenerator_GenerateNextStage_LowSuccessRate_DecreasesDifficulty()
         {
             // Arrange
-            var generator = new AutoCurriculumGenerator();
             var previousAnalysis = new PerformanceAnalysis
             {
                 TotalSteps = 25,
@@ -72,7 +75,7 @@ namespace Aetherium.Test.WorldGen.Training
             };
 
             // Act
-            var stage = generator.GenerateNextStage(previousAnalysis, previousStage);
+            var stage = AutoCurriculumGenerator.GenerateNextStage(previousAnalysis, previousStage, agentSkillLevel: 1);
 
             // Assert
             Assert.That(stage, Is.Not.Null);
@@ -84,7 +87,6 @@ namespace Aetherium.Test.WorldGen.Training
         public void AutoCurriculumGenerator_GenerateNextStage_NavigationWeakness_ReducesMapSize()
         {
             // Arrange
-            var generator = new AutoCurriculumGenerator();
             var previousAnalysis = new PerformanceAnalysis
             {
                 TotalSteps = 25,
@@ -95,26 +97,21 @@ namespace Aetherium.Test.WorldGen.Training
             {
                 StageId = "stage1",
                 Difficulty = 40,
-                Parameters = new Dictionary<string, object>
+                Parameters = new StageParameters
                 {
-                    ["width"] = "50",
-                    ["height"] = "50",
-                    ["roomCount"] = "20"
+                    Width = 50,
+                    Height = 50,
+                    MinRooms = 20,
+                    MaxRooms = 20
                 }
             };
 
             // Act
-            var stage = generator.GenerateNextStage(previousAnalysis, previousStage);
+            var stage = AutoCurriculumGenerator.GenerateNextStage(previousAnalysis, previousStage, agentSkillLevel: 1);
 
             // Assert
-            Assert.That(stage.Parameters.ContainsKey("width"), Is.True);
-            Assert.That(stage.Parameters.ContainsKey("height"), Is.True);
-            
-            // Map size should be reduced
-            if (stage.Parameters.ContainsKey("width") && int.TryParse(stage.Parameters["width"].ToString(), out var width))
-            {
-                Assert.That(width, Is.LessThanOrEqualTo(50));
-            }
+            Assert.That(stage.Parameters.Width, Is.LessThanOrEqualTo(50));
+            Assert.That(stage.Parameters.Height, Is.LessThanOrEqualTo(50));
         }
 
         [Test]
@@ -179,24 +176,25 @@ namespace Aetherium.Test.WorldGen.Training
                 Width = 20,
                 Height = 20,
                 Levels = 1,
-                Template = GenerationTemplate.Dungeon
+                Template = WorldGenerationTemplate.Dungeon
             };
             var stage = new CurriculumStage
             {
                 StageId = "stage1",
                 Difficulty = 40,
-                Parameters = new Dictionary<string, object>
+                Parameters = new StageParameters
                 {
-                    ["width"] = "40",
-                    ["height"] = "40",
-                    ["levels"] = "2",
-                    ["trapDensity"] = "0.3",
-                    ["enemyCount"] = "5"
+                    Width = 40,
+                    Height = 40,
+                    Levels = 2,
+                    TrapDensity = 0.3,
+                    EnemyCount = 5
                 }
             };
 
             // Act
-            request.ApplyCurriculumStage(stage);
+            request.CurriculumStage = stage;
+            request.ApplyCurriculumStage();
 
             // Assert
             Assert.That(request.Width, Is.EqualTo(40));

@@ -30,9 +30,9 @@ namespace Aetherium.Server.Agents.Telemetry
         Task<PerformanceAnalysis> GetAnalysisAsync();
 
         /// <summary>
-        /// Records a failed run for replay storage.
+        /// Records a failed run for replay storage (serialized JSON payload).
         /// </summary>
-        Task<string> RecordFailedRunAsync(ReplayData replayData);
+        Task<string> RecordFailedRunAsync(string replayJson);
 
         /// <summary>
         /// Gets replay IDs for failed runs.
@@ -43,6 +43,11 @@ namespace Aetherium.Server.Agents.Telemetry
         /// Clears all telemetry data for this agent.
         /// </summary>
         Task ClearTelemetryAsync();
+
+        /// <summary>
+        /// Gets a serialized replay (JSON) by ID.
+        /// </summary>
+        Task<string?> GetReplayAsync(string replayId);
     }
 }
 

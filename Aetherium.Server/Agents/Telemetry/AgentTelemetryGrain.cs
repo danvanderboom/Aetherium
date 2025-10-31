@@ -90,12 +90,11 @@ namespace Aetherium.Server.Agents.Telemetry
             }
         }
 
-        public Task<string> RecordFailedRunAsync(ReplayData replayData)
+        public Task<string> RecordFailedRunAsync(string replayJson)
         {
-            if (replayData == null)
+            if (string.IsNullOrWhiteSpace(replayJson))
                 return Task.FromResult(string.Empty);
-
-            var replayId = ReplayStorage.StoreReplay(replayData);
+            var replayId = ReplayStorage.StoreReplayJson(replayJson);
             
             lock (_failedRunIds)
             {
@@ -136,6 +135,12 @@ namespace Aetherium.Server.Agents.Telemetry
             }
 
             return Task.CompletedTask;
+        }
+
+        public Task<string?> GetReplayAsync(string replayId)
+        {
+            var replay = ReplayStorage.GetReplayJson(replayId);
+            return Task.FromResult(replay);
         }
     }
 }

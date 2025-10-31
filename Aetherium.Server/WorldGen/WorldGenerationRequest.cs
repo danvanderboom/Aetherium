@@ -37,6 +37,11 @@ namespace Aetherium.WorldGen
         public bool IsTrainingMode { get; set; } = false;
 
         /// <summary>
+        /// Optional agent ID for adaptive content generation.
+        /// </summary>
+        public string? AdaptiveAgentId { get; set; }
+
+        /// <summary>
         /// Applies curriculum stage parameters to this request if stage is provided.
         /// </summary>
         public void ApplyCurriculumStage()
@@ -50,17 +55,17 @@ namespace Aetherium.WorldGen
             Levels = stageParams.Levels;
 
             // Apply stage parameters to generator parameters
-            Parameters["trapDensity"] = stageParams.TrapDensity.ToString("F2");
+            Parameters["trapDensity"] = stageParams.TrapDensity.ToString("0.##");
             Parameters["enemyCount"] = stageParams.EnemyCount.ToString();
-            Parameters["puzzleComplexity"] = stageParams.PuzzleComplexity.ToString("F2");
+            Parameters["puzzleComplexity"] = stageParams.PuzzleComplexity.ToString("0.##");
             Parameters["keyLockChainDepth"] = stageParams.KeyLockChainDepth.ToString();
-            Parameters["secretRoomDensity"] = stageParams.SecretRoomDensity.ToString("F2");
+            Parameters["secretRoomDensity"] = stageParams.SecretRoomDensity.ToString("0.##");
             Parameters["minRooms"] = stageParams.MinRooms.ToString();
             Parameters["maxRooms"] = stageParams.MaxRooms.ToString();
-            Parameters["minBranchingFactor"] = stageParams.MinBranchingFactor.ToString("F2");
-            Parameters["maxBranchingFactor"] = stageParams.MaxBranchingFactor.ToString("F2");
-            Parameters["resourceAvailability"] = stageParams.ResourceAvailability.ToString("F2");
-            Parameters["combatDifficulty"] = stageParams.CombatDifficulty.ToString("F2");
+            Parameters["minBranchingFactor"] = stageParams.MinBranchingFactor.ToString("0.##");
+            Parameters["maxBranchingFactor"] = stageParams.MaxBranchingFactor.ToString("0.##");
+            Parameters["resourceAvailability"] = stageParams.ResourceAvailability.ToString("0.##");
+            Parameters["combatDifficulty"] = stageParams.CombatDifficulty.ToString("0.##");
 
             // Apply any additional parameters
             foreach (var kvp in stageParams.AdditionalParameters)

@@ -70,7 +70,7 @@ namespace Aetherium.WorldGen.Training
             for (int i = 0; i < variationCount; i++)
             {
                 var seed = baseBenchmark.Recipe.Seed.HasValue
-                    ? baseBenchmark.Recipe.Seed.Value + (seedOffset ?? 0) + i
+                    ? baseBenchmark.Recipe.Seed.Value + (seedOffset ?? 1) + i
                     : null as int?;
 
                 var variation = new BenchmarkScenario
@@ -175,7 +175,7 @@ namespace Aetherium.WorldGen.Training
                 Recipe = recipe,
                 SuccessCriteria = new SuccessCriteria
                 {
-                    Type = SuccessCriteriaType.CompleteWithinLimits,
+                    Type = SuccessCriteriaType.CompleteWithinLimits.ToString(),
                     MaxSteps = 200
                 },
                 Difficulty = 8,

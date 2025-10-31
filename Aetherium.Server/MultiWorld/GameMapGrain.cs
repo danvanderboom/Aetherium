@@ -117,6 +117,7 @@ namespace Aetherium.Server.MultiWorld
                     new Passes.OutdoorThemingPass(),
                     new Passes.OutdoorPopulationPass(),
                     new Passes.OutdoorInteractionsPass(),
+                    new Passes.AdaptationPass(),
                     new Passes.OutdoorValidationPass()
                 },
                 _ => new IWorldGenerationPass[]
@@ -125,6 +126,7 @@ namespace Aetherium.Server.MultiWorld
                     new Passes.DungeonThemingPass(),
                     new Passes.DungeonPopulationPass(),
                     new Passes.DungeonInteractionsPass(),
+                    new Passes.AdaptationPass(),
                     new Passes.DungeonValidationPass()
                 }
             };

@@ -1,0 +1,199 @@
+@page "/adaptation/{AgentId}"
+@using Aetherium.Server.Agents.Analysis
+@using Aetherium.Server.Narrative
+@using System.Net.Http.Json
+@inject IHttpClientFactory HttpClientFactory
+@inject ILogger<AdaptationMonitor> Logger
+
+<PageTitle>Adaptation Monitor - @AgentId</PageTitle>
+
+<h1>Adaptation Monitor: @AgentId</h1>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="RefreshData">Refresh</button>
+</div>
+
+@if (loading)
+{
+    <p>Loading adaptation data...</p>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else
+{
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Active Adaptations</h5>
+                </div>
+                <div class="card-body">
+                    @if (adaptiveQuests != null && adaptiveQuests.Count > 0)
+                    {
+                        <h6>Adaptive Quests</h6>
+                        <ul class="list-group">
+                            @foreach (var quest in adaptiveQuests)
+                            {
+                                <li class="list-group-item">
+                                    <strong>@quest.Title</strong><br />
+                                    <small>@quest.Description</small><br />
+                                    <small>Objectives: @quest.Objectives.Count</small>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No adaptive quests generated yet.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Content Needs</h5>
+                </div>
+                <div class="card-body">
+                    @if (contentNeeds != null && contentNeeds.Count > 0)
+                    {
+                        <ul class="list-group">
+                            @foreach (var need in contentNeeds.OrderByDescending(n => n.Priority))
+                            {
+                                <li class="list-group-item">
+                                    <strong>@need.NeedType</strong> (Priority: @need.Priority:P1)<br />
+                                    <small>@need.Description</small>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No content needs identified.</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Action Preferences</h5>
+                </div>
+                <div class="card-body">
+                    @if (actionPreferences != null && actionPreferences.Count > 0)
+                    {
+                        <ul class="list-group">
+                            @foreach (var pref in actionPreferences.OrderByDescending(p => p.Value.PreferenceScore))
+                            {
+                                <li class="list-group-item">
+                                    <strong>@pref.Key</strong><br />
+                                    <small>Usage: @pref.Value.UsageCount | Success Rate: @pref.Value.SuccessRate:P1 | Score: @pref.Value.PreferenceScore:F2</small>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No action preferences identified.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (behaviorAnalysis != null && behaviorAnalysis.StrugglePatterns.Count > 0)
+    {
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Recent Struggles</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group">
+                            @foreach (var struggle in behaviorAnalysis.StrugglePatterns.OrderByDescending(s => s.FailureCount).Take(5))
+                            {
+                                <li class="list-group-item">
+                                    <strong>@struggle.ContextType</strong><br />
+                                    <small>Failures: @struggle.FailureCount | Steps: @struggle.FirstFailureStep - @struggle.LastFailureStep</small>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public string AgentId { get; set; } = string.Empty;
+
+    private bool loading = true;
+    private string? error;
+    private BehaviorAnalysis? behaviorAnalysis;
+    private List<ContentNeed>? contentNeeds;
+    private List<QuestDefinition>? adaptiveQuests;
+    private Dictionary<string, ActionPreference>? actionPreferences;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshData();
+    }
+
+    private async Task RefreshData()
+    {
+        loading = true;
+        error = null;
+
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient();
+            httpClient.BaseAddress = new Uri("http://localhost:5000");
+
+            // Get behavior analysis
+            var behaviorResponse = await httpClient.GetAsync($"/api/adaptation/behavior/{AgentId}");
+            if (behaviorResponse.IsSuccessStatusCode)
+            {
+                behaviorAnalysis = await behaviorResponse.Content.ReadFromJsonAsync<BehaviorAnalysis>();
+            }
+
+            // Get content needs
+            var needsResponse = await httpClient.GetAsync($"/api/adaptation/needs/{AgentId}");
+            if (needsResponse.IsSuccessStatusCode)
+            {
+                contentNeeds = await needsResponse.Content.ReadFromJsonAsync<List<ContentNeed>>();
+            }
+
+            // Get adaptive quests
+            var questsResponse = await httpClient.GetAsync($"/api/adaptation/quests/{AgentId}");
+            if (questsResponse.IsSuccessStatusCode)
+            {
+                adaptiveQuests = await questsResponse.Content.ReadFromJsonAsync<List<QuestDefinition>>();
+            }
+
+            // Get action preferences
+            var prefsResponse = await httpClient.GetAsync($"/api/adaptation/preferences/{AgentId}/actions");
+            if (prefsResponse.IsSuccessStatusCode)
+            {
+                actionPreferences = await prefsResponse.Content.ReadFromJsonAsync<Dictionary<string, ActionPreference>>();
+            }
+
+            loading = false;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            loading = false;
+            Logger.LogError(ex, "Error loading adaptation data");
+        }
+    }
+}
+

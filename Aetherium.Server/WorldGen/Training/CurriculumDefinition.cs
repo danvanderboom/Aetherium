@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace Aetherium.WorldGen.Training
 {
@@ -12,36 +13,43 @@ namespace Aetherium.WorldGen.Training
         /// <summary>
         /// Unique identifier for this curriculum.
         /// </summary>
+        [JsonPropertyName("curriculumId")]
         public string CurriculumId { get; set; } = string.Empty;
 
         /// <summary>
         /// Display name for the curriculum.
         /// </summary>
+        [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
         /// Description of the curriculum's purpose.
         /// </summary>
+        [JsonPropertyName("description")]
         public string Description { get; set; } = string.Empty;
 
         /// <summary>
         /// Category/tags for organizing curricula.
         /// </summary>
+        [JsonPropertyName("categories")]
         public List<string> Categories { get; set; } = new List<string>();
 
         /// <summary>
         /// Version of the curriculum format.
         /// </summary>
+        [JsonPropertyName("version")]
         public string Version { get; set; } = "1.0.0";
 
         /// <summary>
         /// Ordered list of stages in this curriculum.
         /// </summary>
+        [JsonPropertyName("stages")]
         public List<CurriculumStage> Stages { get; set; } = new List<CurriculumStage>();
 
         /// <summary>
         /// Whether this curriculum uses automatic progression.
         /// </summary>
+        [JsonPropertyName("autoProgression")]
         public bool AutoProgression { get; set; } = false;
 
         /// <summary>

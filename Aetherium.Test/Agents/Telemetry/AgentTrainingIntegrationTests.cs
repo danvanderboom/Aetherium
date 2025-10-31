@@ -4,8 +4,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using Aetherium.Server.Agents.Telemetry;
-using Aetherium.Server.WorldGen.Training;
+using Aetherium.WorldGen.Training;
 using Aetherium.Server.WorldGen;
+using Aetherium.WorldGen;
+using PerformanceAnalysis = Aetherium.Server.Agents.Telemetry.PerformanceAnalysis;
 
 namespace Aetherium.Test.Agents.Telemetry
 {
@@ -16,7 +18,7 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalyzer_WithTelemetrySnapshots_GeneratesCompleteAnalysis()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>
             {
                 new PerformanceSnapshot { AgentId = "test-agent", SessionId = "session1", ActionType = "move", ActionSucceeded = true, DecisionLatencyMs = 100, PerceptionComplexity = 10, Timestamp = DateTime.UtcNow },
@@ -26,7 +28,7 @@ namespace Aetherium.Test.Agents.Telemetry
             };
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis, Is.Not.Null);
@@ -47,25 +49,26 @@ namespace Aetherium.Test.Agents.Telemetry
                 Width = 20,
                 Height = 20,
                 Levels = 1,
-                Template = GenerationTemplate.Dungeon
+                Template = WorldGenerationTemplate.Dungeon
             };
             var stage = new CurriculumStage
             {
                 StageId = "test-stage",
                 Name = "Test Stage",
                 Difficulty = 40,
-                Parameters = new Dictionary<string, object>
+                Parameters = new StageParameters
                 {
-                    ["width"] = "40",
-                    ["height"] = "40",
-                    ["levels"] = "2",
-                    ["trapDensity"] = "0.3",
-                    ["enemyCount"] = "5"
+                    Width = 40,
+                    Height = 40,
+                    Levels = 2,
+                    TrapDensity = 0.3,
+                    EnemyCount = 5
                 }
             };
 
             // Act
-            request.ApplyCurriculumStage(stage);
+            request.CurriculumStage = stage;
+            request.ApplyCurriculumStage();
 
             // Assert
             Assert.That(request.Width, Is.EqualTo(40));
@@ -82,12 +85,12 @@ namespace Aetherium.Test.Agents.Telemetry
         public void AutoCurriculumGenerator_Progression_AdjustsDifficultyBasedOnPerformance()
         {
             // Arrange
-            var generator = new AutoCurriculumGenerator();
+            // AutoCurriculumGenerator is static, no instance needed
             var stage1 = new CurriculumStage { StageId = "stage1", Difficulty = 30 };
             var analysis1 = new PerformanceAnalysis { TotalSteps = 25, SuccessRate = 0.85 }; // High success
 
             // Act - Generate stage 2 based on high success
-            var stage2 = generator.GenerateNextStage(analysis1, stage1);
+            var stage2 = AutoCurriculumGenerator.GenerateNextStage(analysis1, stage1, agentSkillLevel: 1);
 
             // Assert
             Assert.That(stage2, Is.Not.Null);
@@ -97,7 +100,7 @@ namespace Aetherium.Test.Agents.Telemetry
             var analysis2 = new PerformanceAnalysis { TotalSteps = 25, SuccessRate = 0.25 }; // Low success
 
             // Act - Generate stage 3 based on low success
-            var stage3 = generator.GenerateNextStage(analysis2, stage2);
+            var stage3 = AutoCurriculumGenerator.GenerateNextStage(analysis2, stage2, agentSkillLevel: 1);
 
             // Assert
             Assert.That(stage3, Is.Not.Null);
@@ -108,17 +111,17 @@ namespace Aetherium.Test.Agents.Telemetry
         public void BenchmarkGenerator_FromRecipe_CreatesValidWorldGenerationRequest()
         {
             // Arrange
-            var generator = new BenchmarkGenerator();
+            // BenchmarkGenerator is static, no instance needed
             var recipe = new BenchmarkRecipe
             {
                 Generator = "AdvancedDungeonGenerator",
-                Template = GenerationTemplate.Dungeon,
+                Template = "dungeon",
                 Seed = 12345,
                 GeneratorVersion = "1.0",
                 Width = 40,
                 Height = 40,
                 Levels = 1,
-                Parameters = new Dictionary<string, object>
+                Parameters = new Dictionary<string, string>
                 {
                     ["roomCount"] = "10",
                     ["trapDensity"] = "0.2",
@@ -127,14 +130,15 @@ namespace Aetherium.Test.Agents.Telemetry
             };
 
             // Act
-            var request = generator.GenerateRequest(recipe);
+            var request = BenchmarkGenerator.GenerateRequest(recipe);
 
             // Assert
             Assert.That(request, Is.Not.Null);
             Assert.That(request.Width, Is.EqualTo(40));
             Assert.That(request.Height, Is.EqualTo(40));
             Assert.That(request.Levels, Is.EqualTo(1));
-            Assert.That(request.Template, Is.EqualTo(GenerationTemplate.Dungeon));
+            Assert.That(request.Template, Is.EqualTo(WorldGenerationTemplate.Dungeon));
+            Assert.That(request.LayoutGenerator, Is.EqualTo("AdvancedDungeonGenerator"));
             Assert.That(request.IsTrainingMode, Is.True);
             Assert.That(request.Parameters.ContainsKey("roomCount"), Is.True);
             Assert.That(request.Parameters.ContainsKey("trapDensity"), Is.True);
@@ -145,7 +149,7 @@ namespace Aetherium.Test.Agents.Telemetry
         public void BenchmarkGenerator_Variations_HaveUniqueSeeds()
         {
             // Arrange
-            var generator = new BenchmarkGenerator();
+            // BenchmarkGenerator is static, no instance needed
             var baseBenchmark = new BenchmarkScenario
             {
                 BenchmarkId = "base",
@@ -158,7 +162,7 @@ namespace Aetherium.Test.Agents.Telemetry
             };
 
             // Act
-            var variations = generator.GenerateVariations(baseBenchmark, 5);
+            var variations = BenchmarkGenerator.GenerateVariations(baseBenchmark, 5);
 
             // Assert
             Assert.That(variations, Is.Not.Null);
@@ -187,7 +191,7 @@ namespace Aetherium.Test.Agents.Telemetry
                 BenchmarkName = "test-benchmark",
                 FailureReason = "Multiple consecutive failures",
                 TotalSteps = 5,
-                InitialWorldState = "{}",
+                InitialWorldState = null,
                 Steps = new List<ReplayStep>
                 {
                     new ReplayStep { StepNumber = 1, ActionType = "move", ActionSummary = "move forward", Succeeded = true, Timestamp = DateTime.UtcNow, PerceptionJson = "{}" },
@@ -211,7 +215,7 @@ namespace Aetherium.Test.Agents.Telemetry
         public void PerformanceAnalysis_WithTrendData_CalculatesCorrectly()
         {
             // Arrange
-            var analyzer = new PerformanceAnalyzer();
+            var agentId = "test-agent";
             var snapshots = new List<PerformanceSnapshot>();
             
             // First half: high success rate
@@ -219,6 +223,7 @@ namespace Aetherium.Test.Agents.Telemetry
             {
                 snapshots.Add(new PerformanceSnapshot
                 {
+                    AgentId = agentId,
                     ActionSucceeded = true,
                     ActionType = "move",
                     DecisionLatencyMs = 100,
@@ -232,6 +237,7 @@ namespace Aetherium.Test.Agents.Telemetry
             {
                 snapshots.Add(new PerformanceSnapshot
                 {
+                    AgentId = agentId,
                     ActionSucceeded = i < 3, // 30% success rate
                     ActionType = "move",
                     DecisionLatencyMs = 150, // Also increasing latency
@@ -241,12 +247,12 @@ namespace Aetherium.Test.Agents.Telemetry
             }
 
             // Act
-            var analysis = analyzer.Analyze(snapshots);
+            var analysis = PerformanceAnalyzer.Analyze(snapshots, agentId);
 
             // Assert
             Assert.That(analysis.TrendMetrics, Is.Not.Empty);
-            Assert.That(analysis.TrendMetrics.ContainsKey("SuccessRateTrend"), Is.True);
-            Assert.That(analysis.TrendMetrics["SuccessRateTrend"], Is.LessThan(0)); // Degrading trend
+            Assert.That(analysis.TrendMetrics.ContainsKey("success_rate_trend"), Is.True);
+            Assert.That(analysis.TrendMetrics["success_rate_trend"], Is.LessThan(0)); // Degrading trend
             
             // First half should have 100% success, second half 30%
             Assert.That(analysis.Recommendations, Is.Not.Empty);

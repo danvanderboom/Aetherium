@@ -11,7 +11,7 @@ namespace Aetherium.WorldGen.Training
     /// </summary>
     public static class BenchmarkLibrary
     {
-        private static readonly Dictionary<string, BenchmarkScenario> _benchmarks = new Dictionary<string, BenchmarkScenario>();
+        private static Dictionary<string, BenchmarkScenario> _benchmarks = new Dictionary<string, BenchmarkScenario>();
         private static readonly object _lock = new object();
         private static bool _initialized = false;
 

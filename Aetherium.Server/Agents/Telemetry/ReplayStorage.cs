@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using Orleans;
 using Aetherium.Core;
 
 namespace Aetherium.Server.Agents.Telemetry
@@ -11,19 +12,14 @@ namespace Aetherium.Server.Agents.Telemetry
     public sealed class ReplayData
     {
         public string ReplayId { get; set; } = Guid.NewGuid().ToString();
-
         public string AgentId { get; set; } = string.Empty;
-
         public string SessionId { get; set; } = string.Empty;
-
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
         public string BenchmarkName { get; set; } = string.Empty;
-
         public string FailureReason { get; set; } = string.Empty;
-
         public int TotalSteps { get; set; }
 
+        // Note: InitialWorldState is intentionally not serialized to avoid requiring Orleans serializers for World
         public World? InitialWorldState { get; set; }
 
         public List<ReplayStep> Steps { get; set; } = new List<ReplayStep>();
@@ -37,17 +33,12 @@ namespace Aetherium.Server.Agents.Telemetry
     public sealed class ReplayStep
     {
         public int StepNumber { get; set; }
-
         public string ActionType { get; set; } = string.Empty;
-
         public string ActionSummary { get; set; } = string.Empty;
 
         public Dictionary<string, object> ActionArgs { get; set; } = new Dictionary<string, object>();
-
         public bool Succeeded { get; set; }
-
         public string? PerceptionJson { get; set; }
-
         public DateTime Timestamp { get; set; }
     }
 
@@ -57,6 +48,7 @@ namespace Aetherium.Server.Agents.Telemetry
     public static class ReplayStorage
     {
         private static readonly Dictionary<string, ReplayData> _replays = new Dictionary<string, ReplayData>();
+        private static readonly Dictionary<string, string> _replaysJson = new Dictionary<string, string>();
         private static readonly object _lock = new object();
 
         public static string StoreReplay(ReplayData replay)
@@ -68,11 +60,29 @@ namespace Aetherium.Server.Agents.Telemetry
             }
         }
 
+        public static string StoreReplayJson(string replayJson)
+        {
+            lock (_lock)
+            {
+                var id = Guid.NewGuid().ToString();
+                _replaysJson[id] = replayJson;
+                return id;
+            }
+        }
+
         public static ReplayData? GetReplay(string replayId)
         {
             lock (_lock)
             {
                 return _replays.TryGetValue(replayId, out var replay) ? replay : null;
+            }
+        }
+
+        public static string? GetReplayJson(string replayId)
+        {
+            lock (_lock)
+            {
+                return _replaysJson.TryGetValue(replayId, out var json) ? json : null;
             }
         }
 

@@ -64,6 +64,16 @@ namespace Aetherium.Server.Narrative
         /// Deletes the entire narrative.
         /// </summary>
         Task DeleteAsync();
+
+        /// <summary>
+        /// Gets adaptive quests for an agent based on behavior.
+        /// </summary>
+        Task<List<QuestDefinition>> GetAdaptiveQuestsAsync(string agentId, int maxQuests = 5);
+
+        /// <summary>
+        /// Updates quest adaptively based on agent behavior.
+        /// </summary>
+        Task<QuestDefinition?> AdaptQuestForAgentAsync(string questId, string agentId);
     }
 }
 
