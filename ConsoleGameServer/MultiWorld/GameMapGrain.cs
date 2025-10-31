@@ -2,8 +2,10 @@ using Orleans;
 using Orleans.Runtime;
 using ConsoleGame.Core;
 using ConsoleGame.WorldGen;
+using Passes = ConsoleGame.WorldGen.Passes;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -42,23 +44,44 @@ namespace ConsoleGameServer.MultiWorld
         {
             var mapId = this.GetPrimaryKeyString();
             
-            // Create generation context
-            var context = new GeneratorContext(size.Width, size.Height)
+            parameters ??= new Dictionary<string, object>();
+
+            var seed = (int)(DateTime.UtcNow.Ticks & 0x7FFFFFFF);
+            var context = new GeneratorContext(size.Width, size.Height, seed)
             {
                 ZLevel = 0,
-                Seed = (int)DateTime.UtcNow.Ticks // Use deterministic seed in production
+                Levels = size.Depth
             };
 
-            // TODO: Copy parameters to context when GeneratorContext supports parameters dictionary
+            var parameterStrings = parameters?.ToDictionary(k => k.Key, v => v.Value?.ToString() ?? string.Empty)
+                ?? new Dictionary<string, string>();
 
-            // Generate the world
-            var generator = _generatorRegistry.GetGenerator(generatorType);
-            if (generator == null)
+            var request = new WorldGenerationRequest
             {
-                throw new InvalidOperationException($"Generator '{generatorType}' not found");
+                LayoutGenerator = generatorType,
+                Width = size.Width,
+                Height = size.Height,
+                Levels = size.Depth,
+                Seed = seed,
+                GeneratorVersion = parameters.TryGetValue("version", out var versionObj) ? versionObj?.ToString() ?? "1.0.0" : "1.0.0",
+                Template = ResolveTemplate(generatorType),
+                Parameters = parameterStrings
+            };
+
+            var passes = BuildPasses(request.Template);
+            var orchestrator = new WorldGenerationOrchestrator(_generatorRegistry, passes);
+            var result = orchestrator.Generate(request);
+
+            if (!result.Success || result.World == null)
+            {
+                var details = new List<string>();
+                details.AddRange(result.Errors);
+                if (result.Validation?.Errors != null)
+                    details.AddRange(result.Validation.Errors);
+                throw new InvalidOperationException($"Generation failed: {string.Join(", ", details)}");
             }
 
-            _world = generator.Generate(context);
+            _world = result.World;
 
             // Update state
             _mapState.State = new MapState
@@ -74,6 +97,37 @@ namespace ConsoleGameServer.MultiWorld
             };
 
             await _mapState.WriteStateAsync();
+        }
+
+        private static WorldGenerationTemplate ResolveTemplate(string generatorType)
+        {
+            var normalized = generatorType.ToLowerInvariant();
+            if (normalized.Contains("outdoor") || normalized.Contains("terrain"))
+                return WorldGenerationTemplate.Outdoor;
+            return WorldGenerationTemplate.Dungeon;
+        }
+
+        private static IWorldGenerationPass[] BuildPasses(WorldGenerationTemplate template)
+        {
+            return template switch
+            {
+                WorldGenerationTemplate.Outdoor => new IWorldGenerationPass[]
+                {
+                    new Passes.OutdoorLayoutPass(),
+                    new Passes.OutdoorThemingPass(),
+                    new Passes.OutdoorPopulationPass(),
+                    new Passes.OutdoorInteractionsPass(),
+                    new Passes.OutdoorValidationPass()
+                },
+                _ => new IWorldGenerationPass[]
+                {
+                    new Passes.DungeonLayoutPass(),
+                    new Passes.DungeonThemingPass(),
+                    new Passes.DungeonPopulationPass(),
+                    new Passes.DungeonInteractionsPass(),
+                    new Passes.DungeonValidationPass()
+                }
+            };
         }
 
         public Task<string?> GetWorldAsync()

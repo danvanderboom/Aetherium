@@ -44,7 +44,7 @@ namespace ConsoleGame.WorldGen.Generators.Outdoor
             double mountainThreshold = GetParameter(context, "mountainThreshold", 0.85);
 
             // Create noise generator
-            var noise = new PerlinNoise(context.Seed ?? context.Random.Next());
+            var noise = new PerlinNoise(context.EffectiveSeed);
 
             // Generate terrain
             for (int y = 0; y < context.Height; y++)
