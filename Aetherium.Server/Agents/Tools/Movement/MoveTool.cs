@@ -77,20 +77,20 @@ namespace Aetherium.Server.Agents.Tools.Movement
             if (context.Session != null)
             {
                 // Parse direction to RelativeDirection
-                RelativeDirection relDir;
+                Aetherium.Model.RelativeDirection relDir;
                 switch (direction)
                 {
                     case "F" or "FORWARD":
-                        relDir = RelativeDirection.Forward;
+                        relDir = Aetherium.Model.RelativeDirection.Forward;
                         break;
                     case "B" or "BACKWARD":
-                        relDir = RelativeDirection.Backward;
+                        relDir = Aetherium.Model.RelativeDirection.Backward;
                         break;
                     case "L" or "LEFT":
-                        relDir = RelativeDirection.Left;
+                        relDir = Aetherium.Model.RelativeDirection.Left;
                         break;
                     case "R" or "RIGHT":
-                        relDir = RelativeDirection.Right;
+                        relDir = Aetherium.Model.RelativeDirection.Right;
                         break;
                     case "N" or "NORTH":
                     case "E" or "EAST":

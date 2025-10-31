@@ -36,8 +36,9 @@ namespace Aetherium.Server.Agents
             // Get tool registry from service provider
             _toolRegistry = ServiceProvider.GetService(typeof(AgentToolRegistry)) as AgentToolRegistry;
             
-            // Default to explorer profile (can be changed later)
-            _toolProfile = AgentToolProfile.Explorer;
+            // Default to Player profile (for all game characters/NPCs)
+            // Can be changed to WorldBuilder/NarrativeDesigner for world-building agents
+            _toolProfile = AgentToolProfile.Player;
             
             return base.OnActivateAsync(cancellationToken);
         }

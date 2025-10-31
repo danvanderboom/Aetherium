@@ -6,6 +6,7 @@ using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Agents.Tools.Movement;
 using Aetherium.Server;
 using Aetherium.Model;
+using Aetherium.WorldBuilders;
 
 namespace Aetherium.Test.Agents.Tools
 {
@@ -65,7 +66,8 @@ namespace Aetherium.Test.Agents.Tools
         {
             var context = new ToolExecutionContext
             {
-                Session = null
+                Session = null,
+                GrantedCapabilities = new HashSet<string> { "basic_movement" } // Has capability but no session
             };
             var args = new Dictionary<string, object>
             {
@@ -76,19 +78,21 @@ namespace Aetherium.Test.Agents.Tools
             var result = await _tool.ExecuteAsync(context, args);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("No session"));
+            Assert.That(result.Message, Does.Contain("No execution context"));
         }
 
         [Test]
         public async Task ExecuteAsync_ShouldMoveForward()
         {
-            var session = new GameSession("test", null);
-            var startX = session.ViewportX;
-            var startY = session.ViewportY;
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
+            var startX = session.ViewLocation?.X ?? 0;
+            var startY = session.ViewLocation?.Y ?? 0;
             
             var context = new ToolExecutionContext
             {
-                Session = session
+                Session = session,
+                GrantedCapabilities = new HashSet<string> { "basic_movement" } // Need capability
             };
             var args = new Dictionary<string, object>
             {
@@ -100,16 +104,18 @@ namespace Aetherium.Test.Agents.Tools
 
             Assert.That(result.Success, Is.True);
             // Position should have changed based on direction
-            Assert.That(session.ViewportX != startX || session.ViewportY != startY, Is.True);
+            Assert.That(session.ViewLocation?.X != startX || session.ViewLocation?.Y != startY, Is.True);
         }
 
         [Test]
         public async Task ExecuteAsync_ShouldHandleInvalidDirection()
         {
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             var context = new ToolExecutionContext
             {
-                Session = session
+                Session = session,
+                GrantedCapabilities = new HashSet<string> { "basic_movement" } // Need capability
             };
             var args = new Dictionary<string, object>
             {

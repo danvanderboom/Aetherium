@@ -118,7 +118,8 @@ namespace Aetherium.Test.Agents.Tools
             // Arrange
             var profile = new AgentToolProfile
             {
-                AllowedCategories = new() { "movement" }
+                AllowedCategories = new() { "movement" },
+                GrantedCapabilities = new() { "basic_movement" } // Required for MoveTool
             };
             
             var moveTool = new MoveTool();
@@ -179,23 +180,23 @@ namespace Aetherium.Test.Agents.Tools
         [Test]
         public void GetPredefinedProfile_ShouldReturnFullAccess()
         {
-            // Act
+            // Act - FullAccess is now mapped to Player
             var profile1 = AgentToolProfile.GetPredefinedProfile("full");
             var profile2 = AgentToolProfile.GetPredefinedProfile("fullaccess");
 
-            // Assert
-            Assert.That(profile1.ProfileName, Is.EqualTo("full"));
-            Assert.That(profile2.ProfileName, Is.EqualTo("full"));
+            // Assert - both should return Player profile
+            Assert.That(profile1.ProfileName, Is.EqualTo("player"));
+            Assert.That(profile2.ProfileName, Is.EqualTo("player"));
         }
 
         [Test]
-        public void GetPredefinedProfile_ShouldDefaultToExplorer()
+        public void GetPredefinedProfile_ShouldDefaultToPlayer()
         {
             // Act
             var profile = AgentToolProfile.GetPredefinedProfile("nonexistent");
 
-            // Assert
-            Assert.That(profile.ProfileName, Is.EqualTo("explorer"));
+            // Assert - default profile is now Player
+            Assert.That(profile.ProfileName, Is.EqualTo("player"));
         }
     }
 }

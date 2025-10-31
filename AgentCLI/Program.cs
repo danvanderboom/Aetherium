@@ -1,6 +1,7 @@
 using System;
 using System.CommandLine;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Text.Json;
 using AgentCLI;
@@ -676,12 +677,12 @@ namespace AgentCLI
                         Console.WriteLine($"\n[{tool.ToolId}]");
                         Console.WriteLine($"  Description: {tool.Description}");
                         Console.WriteLine($"  Categories: {string.Join(", ", tool.Categories)}");
-                        if (tool.Parameters.Any())
+                        if (tool.ParameterSchema.Properties.Any())
                         {
                             Console.WriteLine($"  Parameters:");
-                            foreach (var param in tool.Parameters)
+                            foreach (var param in tool.ParameterSchema.Properties)
                             {
-                                var required = tool.RequiredParameters.Contains(param.Key) ? "*" : " ";
+                                var required = tool.ParameterSchema.Required.Contains(param.Key) ? "*" : " ";
                                 Console.WriteLine($"    {required} {param.Key}: {param.Value.Type} - {param.Value.Description}");
                             }
                         }
@@ -717,12 +718,12 @@ namespace AgentCLI
                     Console.WriteLine($"Description: {tool.Description}");
                     Console.WriteLine($"Categories: {string.Join(", ", tool.Categories)}");
                     
-                    if (tool.Parameters.Any())
+                    if (tool.ParameterSchema.Properties.Any())
                     {
                         Console.WriteLine("\nParameters:");
-                        foreach (var param in tool.Parameters)
+                        foreach (var param in tool.ParameterSchema.Properties)
                         {
-                            var required = tool.RequiredParameters.Contains(param.Key);
+                            var required = tool.ParameterSchema.Required.Contains(param.Key);
                             Console.WriteLine($"  • {param.Key} ({param.Value.Type}){(required ? " [REQUIRED]" : "")}");
                             Console.WriteLine($"    {param.Value.Description}");
                             if (param.Value.AllowedValues.Any())

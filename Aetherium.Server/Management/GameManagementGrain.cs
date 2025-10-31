@@ -751,7 +751,7 @@ namespace Aetherium.Server.Management
                 return Task.FromResult(new List<ToolInfoDto>());
 
             var profile = string.IsNullOrEmpty(profileName)
-                ? Aetherium.Server.Agents.Tools.AgentToolProfile.FullAccess
+                ? Aetherium.Server.Agents.Tools.AgentToolProfile.Player // Default to Player (for all game characters)
                 : Aetherium.Server.Agents.Tools.AgentToolProfile.GetPredefinedProfile(profileName);
 
             var tools = toolRegistry.GetToolsForProfile(profile)

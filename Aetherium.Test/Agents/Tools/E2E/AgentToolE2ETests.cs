@@ -7,6 +7,7 @@ using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Agents.Tools.Movement;
 using Aetherium.Server;
 using Aetherium.Model;
+using Aetherium.WorldBuilders;
 
 namespace Aetherium.Test.Agents.Tools.E2E
 {
@@ -32,7 +33,9 @@ namespace Aetherium.Test.Agents.Tools.E2E
             _registry = new AgentToolRegistry(_serviceProvider);
             _registry.DiscoverTools(typeof(MoveTool).Assembly);
             
-            _session = new GameSession("e2e-test", null);
+            // Create a minimal WorldBuilder for testing
+            var worldBuilder = new TorusWorldBuilder();
+            _session = new GameSession("e2e-test", worldBuilder);
             _interactionSystem = new InteractionSystem();
         }
 
@@ -57,9 +60,9 @@ namespace Aetherium.Test.Agents.Tools.E2E
                 ServiceProvider = _serviceProvider
             };
 
-            var startX = _session.ViewportX;
-            var startY = _session.ViewportY;
-            var startDirection = _session.Direction;
+            var startX = _session.ViewLocation?.X ?? 0;
+            var startY = _session.ViewLocation?.Y ?? 0;
+            var startDirection = _session.HeadingDegrees;
 
             // Act - Execute a series of movement commands
             var moveTool = _registry.GetTool("move");
@@ -80,7 +83,7 @@ namespace Aetherium.Test.Agents.Tools.E2E
             // Rotate
             var rotateResult = await rotateTool.ExecuteAsync(context, new System.Collections.Generic.Dictionary<string, object>
             {
-                ["direction"] = "right"
+                ["clockwise"] = true // Changed from direction to clockwise
             });
 
             // Move forward again
@@ -96,11 +99,11 @@ namespace Aetherium.Test.Agents.Tools.E2E
             Assert.That(moveResult2.Success, Is.True);
 
             // Agent should have moved from starting position
-            var moved = _session.ViewportX != startX || _session.ViewportY != startY;
+            var moved = _session.ViewLocation?.X != startX || _session.ViewLocation?.Y != startY;
             Assert.That(moved, Is.True, "Agent should have moved from start position");
 
             // Direction should have changed
-            Assert.That(_session.Direction, Is.Not.EqualTo(startDirection), "Agent should have rotated");
+            Assert.That(_session.HeadingDegrees, Is.Not.EqualTo(startDirection), "Agent should have rotated");
         }
 
         [Test]

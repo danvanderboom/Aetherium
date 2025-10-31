@@ -25,8 +25,8 @@ namespace Aetherium.Test
 
             public void Configure(ISiloBuilder siloBuilder)
             {
-                // Configure test grain storage
-
+                // Orleans 9 uses source generators for automatic grain discovery from referenced assemblies
+                
                 // Add in-memory grain storage for testing (names must match grain attributes)
                 siloBuilder.AddMemoryGrainStorage("worldStore");
                 siloBuilder.AddMemoryGrainStorage("mapStore");

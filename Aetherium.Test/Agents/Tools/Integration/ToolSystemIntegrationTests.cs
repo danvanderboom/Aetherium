@@ -9,6 +9,7 @@ using Aetherium.Server.Agents.Tools.Movement;
 using Aetherium.Server.Agents.Tools.Interaction;
 using Aetherium.Server.Agents.Tools.Vision;
 using Aetherium.Server;
+using Aetherium.WorldBuilders;
 
 namespace Aetherium.Test.Agents.Tools.Integration
 {
@@ -38,7 +39,8 @@ namespace Aetherium.Test.Agents.Tools.Integration
         public async Task FullWorkflow_AgentCanMoveAndPickupItems()
         {
             // Arrange
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             var interactionSystem = new InteractionSystem();
             var profile = AgentToolProfile.FullAccess;
             
@@ -122,7 +124,8 @@ namespace Aetherium.Test.Agents.Tools.Integration
         public async Task ErrorHandling_ToolReturnsErrorForInvalidArgs()
         {
             // Arrange
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             var context = new ToolExecutionContext
             {
                 Session = session,
@@ -146,11 +149,13 @@ namespace Aetherium.Test.Agents.Tools.Integration
         public async Task ToolChaining_MultipleToolsCanBeExecutedSequentially()
         {
             // Arrange
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             var context = new ToolExecutionContext
             {
                 Session = session,
-                ServiceProvider = _serviceProvider
+                ServiceProvider = _serviceProvider,
+                GrantedCapabilities = new HashSet<string> { "basic_movement" } // Need capability for movement tools
             };
 
             // Act - Chain move -> rotate -> move
@@ -165,7 +170,7 @@ namespace Aetherium.Test.Agents.Tools.Integration
             
             var result2 = await rotateTool.ExecuteAsync(context, new Dictionary<string, object>
             {
-                ["direction"] = "right"
+                ["clockwise"] = true // Changed from direction to clockwise
             });
             
             var result3 = await moveTool.ExecuteAsync(context, new Dictionary<string, object>
@@ -213,7 +218,8 @@ namespace Aetherium.Test.Agents.Tools.Integration
         public async Task DualAPISupport_ToolsWorkWithBothSessionAndGrain()
         {
             // Arrange
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             
             // Context 1: Direct session access (GameHub style)
             var hubContext = new ToolExecutionContext
@@ -222,7 +228,8 @@ namespace Aetherium.Test.Agents.Tools.Integration
                 ConnectionId = "conn1",
                 Session = session,
                 InteractionSystem = new InteractionSystem(),
-                ServiceProvider = _serviceProvider
+                ServiceProvider = _serviceProvider,
+                GrantedCapabilities = new HashSet<string> { "basic_movement" } // Need capability
             };
             
             // Context 2: Orleans grain style (would have ManagementGrain in real scenario)
@@ -231,7 +238,8 @@ namespace Aetherium.Test.Agents.Tools.Integration
                 SessionId = "test",
                 AgentId = "agent1",
                 Session = session,
-                ServiceProvider = _serviceProvider
+                ServiceProvider = _serviceProvider,
+                GrantedCapabilities = new HashSet<string> { "basic_movement" } // Need capability
             };
 
             var moveTool = _registry.GetTool("move");

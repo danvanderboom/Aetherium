@@ -7,6 +7,7 @@ using Aetherium.Components;
 using Aetherium.Core;
 using Aetherium.WorldBuilders;
 using Aetherium.Model;
+using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Management;
 using Aetherium.Server.MultiWorld;
 using Microsoft.AspNetCore.SignalR;
@@ -503,8 +504,8 @@ namespace Aetherium.Server
                 if (toolRegistry == null)
                     return new List<ToolInfoDto>();
                 
-                // Get default player profile (full access to player tools)
-                var profile = Aetherium.Server.Agents.Tools.AgentToolProfile.FullAccess;
+                // Use Player profile (for all game characters - NPCs and human players)
+                var profile = Aetherium.Server.Agents.Tools.AgentToolProfile.Player;
                 
                 var tools = toolRegistry.GetToolsForProfile(profile)
                     .Select(t => t.ToDto())

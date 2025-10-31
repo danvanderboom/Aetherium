@@ -5,6 +5,7 @@ using NUnit.Framework;
 using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Agents.Tools.Interaction;
 using Aetherium.Server;
+using Aetherium.WorldBuilders;
 
 namespace Aetherium.Test.Agents.Tools
 {
@@ -48,8 +49,8 @@ namespace Aetherium.Test.Agents.Tools
         public void GetParameterSchema_ShouldHaveTargetParameter()
         {
             var schema = _tool.GetParameterSchema();
-            Assert.That(schema.Properties, Contains.Key("target"));
-            Assert.That(schema.Required, Does.Contain("target"));
+            Assert.That(schema.Properties, Contains.Key("targetEntityId"));
+            Assert.That(schema.Required, Does.Contain("targetEntityId"));
         }
 
         [Test]
@@ -57,56 +58,61 @@ namespace Aetherium.Test.Agents.Tools
         {
             var context = new ToolExecutionContext
             {
-                Session = null
+                Session = null,
+                GrantedCapabilities = new HashSet<string> { "inventory_access" } // Has capability but no session
             };
             var args = new Dictionary<string, object>
             {
-                ["target"] = "item1"
+                ["targetEntityId"] = "item1"
             };
 
             var result = await _tool.ExecuteAsync(context, args);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("No session"));
+            Assert.That(result.Message, Does.Contain("No execution context"));
         }
 
         [Test]
         public async Task ExecuteAsync_ShouldFailWithoutInteractionSystem()
         {
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             var context = new ToolExecutionContext
             {
                 Session = session,
-                InteractionSystem = null
+                InteractionSystem = null,
+                GrantedCapabilities = new HashSet<string> { "inventory_access" } // Need capability
             };
             var args = new Dictionary<string, object>
             {
-                ["target"] = "item1"
+                ["targetEntityId"] = "item1" // Changed from "target"
             };
 
             var result = await _tool.ExecuteAsync(context, args);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("Interaction system"));
+            Assert.That(result.Message, Does.Contain("execution context")); // Changed expectation
         }
 
         [Test]
         public async Task ExecuteAsync_ShouldFailWithMissingTarget()
         {
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             var interactionSystem = new InteractionSystem();
             
             var context = new ToolExecutionContext
             {
                 Session = session,
-                InteractionSystem = interactionSystem
+                InteractionSystem = interactionSystem,
+                GrantedCapabilities = new HashSet<string> { "inventory_access" } // Need capability
             };
             var args = new Dictionary<string, object>();
 
             var result = await _tool.ExecuteAsync(context, args);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("target"));
+            Assert.That(result.Message, Does.Contain("targetEntityId")); // Changed to match actual parameter
         }
     }
 }

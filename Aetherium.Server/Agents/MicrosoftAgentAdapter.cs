@@ -115,7 +115,7 @@ namespace Aetherium.Server.Agents
                     max_tokens = 128
                 };
 
-                return await SendRequestAndParse(request, ct, isFunction Calling: true);
+                return await SendRequestAndParse(request, ct, isFunctionCalling: true);
             }
             finally
             {

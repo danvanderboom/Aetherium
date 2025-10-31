@@ -5,6 +5,7 @@ using NUnit.Framework;
 using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Agents.Tools.Vision;
 using Aetherium.Server;
+using Aetherium.WorldBuilders;
 
 namespace Aetherium.Test.Agents.Tools
 {
@@ -49,25 +50,28 @@ namespace Aetherium.Test.Agents.Tools
         {
             var context = new ToolExecutionContext
             {
-                Session = null
+                Session = null,
+                GrantedCapabilities = new HashSet<string> { "vision" } // Has capability but no session
             };
             var args = new Dictionary<string, object>();
 
             var result = await _tool.ExecuteAsync(context, args);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("No session"));
+            Assert.That(result.Message, Does.Contain("No execution context"));
         }
 
         [Test]
         public async Task ExecuteAsync_ShouldToggleVision()
         {
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             var initialState = session.DirectionalVisionMode;
             
             var context = new ToolExecutionContext
             {
-                Session = session
+                Session = session,
+                GrantedCapabilities = new HashSet<string> { "vision" } // Need capability
             };
             var args = new Dictionary<string, object>();
 
@@ -80,10 +84,12 @@ namespace Aetherium.Test.Agents.Tools
         [Test]
         public async Task ExecuteAsync_ShouldToggleBackAndForth()
         {
-            var session = new GameSession("test", null);
+            var worldBuilder = new TorusWorldBuilder();
+            var session = new GameSession("test", worldBuilder);
             var context = new ToolExecutionContext
             {
-                Session = session
+                Session = session,
+                GrantedCapabilities = new HashSet<string> { "vision" } // Need capability
             };
             var args = new Dictionary<string, object>();
 
