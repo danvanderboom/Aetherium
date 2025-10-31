@@ -12,6 +12,7 @@ Agents need rich, coherent spaces to explore with meaningful obstacles and choic
 
 ## Impact
 - Affected specs: pcg-core, pcg-dungeons, pcg-outdoor, pcg-interactives, pcg-narrative, pcg-validation, pcg-tooling
-- Affected code: ConsoleGameServer/WorldGen, WorldBuilders, MapGeneratorRegistry, Perception/Navigation, Entities/Components (locks, keys, traps), tests under ConsoleGame.Test
+- Affected code: Aetherium.Server/WorldGen, WorldBuilders, MapGeneratorRegistry, Perception/Navigation, Entities/Components (locks, keys, traps), tests under Aetherium.Test
+
 
 

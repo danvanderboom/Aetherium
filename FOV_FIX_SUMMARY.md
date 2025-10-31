@@ -15,7 +15,7 @@ The FOV system had a critical coordinate system mismatch:
 
 ## Fix Applied
 
-**File:** `ConsoleGame/Views/ConsoleMapView.cs`
+**File:** `Aetherium.Console/Views/ConsoleMapView.cs`
 
 **Change:**
 - Store unrotated location before rotation (line 131)
@@ -76,4 +76,5 @@ The fix addresses the coordinate mismatch. Additional potential improvements:
 - Order of operations in ray casting (mark visible then check opacity)
 
 But the main bug preventing visibility after rotation is now fixed.
+
 

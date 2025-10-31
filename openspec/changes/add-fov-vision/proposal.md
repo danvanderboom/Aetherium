@@ -10,6 +10,7 @@ Players should only see what their character can see. Movement obstructions (e.g
 
 ## Impact
 - Affected specs: `perception-vision`
-- Affected code: `ConsoleGame/Perception/*`, `ConsoleGame/Views/ConsoleMapView.cs`, world builders
+- Affected code: `Aetherium.Console/Perception/*`, `Aetherium.Console/Views/ConsoleMapView.cs`, world builders
+
 
 

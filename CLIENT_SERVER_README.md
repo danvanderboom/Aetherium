@@ -6,9 +6,9 @@ The console game has been split into a client-server architecture using SignalR 
 
 ## Architecture
 
-- **ConsoleGameModel**: Shared DTOs and data structures used by both client and server
-- **ConsoleGameServer**: ASP.NET Core server hosting the game engine
-- **ConsoleGameClient**: Console application client that connects to the server
+- **Aetherium.Model**: Shared DTOs and data structures used by both client and server
+- **Aetherium.Server**: ASP.NET Core server hosting the game engine
+- **Aetherium.Console**: Console application client that connects to the server
 
 ## Running the Application
 
@@ -17,7 +17,7 @@ The console game has been split into a client-server architecture using SignalR 
 Open a terminal in the project root and run:
 
 ```powershell
-cd ConsoleGameServer
+cd Aetherium.Server
 dotnet run
 ```
 
@@ -32,7 +32,7 @@ Waiting for client connections...
 Open a **second** terminal in the project root and run:
 
 ```powershell
-cd ConsoleGame
+cd Aetherium
 dotnet run
 ```
 
@@ -66,7 +66,7 @@ The unified interact command (E/I) displays a numbered menu of all available act
 
 **Inventory Display**: Your inventory appears below the map showing `[count/capacity]: item list`. Items with keys show their key ID (e.g., "Key(red)").
 
-Client API (`ConsoleGame/Client/GameClient.cs`) exposes `PickupAsync`, `DropAsync`, `UseAsync`, `OpenAsync`, `CloseAsync`. Each returns `InteractionResultDto { Success, Reason }` and triggers a perception update.
+Client API (`Aetherium.Console/Client/GameClient.cs`) exposes `PickupAsync`, `DropAsync`, `UseAsync`, `OpenAsync`, `CloseAsync`. Each returns `InteractionResultDto { Success, Reason }` and triggers a perception update.
 
 ## Key Features
 
@@ -86,13 +86,13 @@ Client API (`ConsoleGame/Client/GameClient.cs`) exposes `PickupAsync`, `DropAsyn
 ## Project Structure
 
 ```
-ConsoleGame/
-├── ConsoleGameModel/           # Shared DTOs
+Aetherium.Console/
+├── Aetherium.Model/           # Shared DTOs
 │   ├── PerceptionDto.cs
 │   ├── VisualDto.cs
 │   ├── WorldLocationDto.cs
 │   └── ...
-├── ConsoleGameServer/          # Server (game engine)
+├── Aetherium.Server/          # Server (game engine)
 │   ├── Core/                   # World, Entity, Component
 │   ├── Components/             # Game components
 │   ├── Entities/               # Character, Monster, etc.
@@ -101,7 +101,7 @@ ConsoleGame/
 │   ├── GameHub.cs              # SignalR hub
 │   ├── GameSession.cs          # Per-client game state
 │   └── Program.cs              # Server entry point
-└── ConsoleGame/                # Client (console UI)
+└── Aetherium.Console/                # Client (console UI)
     ├── Client/                 # SignalR client
     ├── Views/                  # Console rendering
     ├── Core/ClientConsoleDungeonGame.cs
@@ -114,19 +114,19 @@ ConsoleGame/
 
 ```powershell
 # Build all projects
-dotnet build ConsoleGame.sln
+dotnet build Aetherium.sln
 
 # Build individual projects
-dotnet build ConsoleGameModel/ConsoleGameModel.csproj
-dotnet build ConsoleGameServer/ConsoleGameServer.csproj
-dotnet build ConsoleGame/ConsoleGameClient.csproj
+dotnet build Aetherium.Model/Aetherium.Model.csproj
+dotnet build Aetherium.Server/Aetherium.Server.csproj
+dotnet build Aetherium.Console/Aetherium.Console.csproj
 ```
 
 ### Testing
 
 Run the test suite:
 ```powershell
-cd ConsoleGame.Test
+cd Aetherium.Test
 dotnet test
 ```
 
@@ -144,4 +144,5 @@ dotnet test
 ### Game rendering issues
 - Ensure terminal supports Unicode characters
 - Try a different terminal (Windows Terminal recommended)
+
 

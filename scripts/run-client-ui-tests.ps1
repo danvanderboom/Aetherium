@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 Write-Host "=== Client UI Self-Test ===" -ForegroundColor Cyan
 
 # Clean up any existing processes
-Get-Process -Name "ConsoleGameServer","ConsoleGameClient" -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name "Aetherium.Server","Aetherium.Console" -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 1
 
 # Build solution
@@ -23,7 +23,7 @@ Write-Host "Artifacts will be written to: $artifactsDir" -ForegroundColor Cyan
 
 # Start server
 Write-Host "Starting server..." -ForegroundColor Yellow
-$server = Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$PWD\ConsoleGameServer'; `$env:UI_SELFTEST_MODE='1'; dotnet run" -PassThru -WindowStyle Normal
+$server = Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$PWD\Aetherium.Server'; `$env:UI_SELFTEST_MODE='1'; dotnet run" -PassThru -WindowStyle Normal
 
 # Wait for server to be ready by checking if port 5000 is listening
 Write-Host "Waiting for server to be ready..." -ForegroundColor Yellow
@@ -57,7 +57,7 @@ if (-not $serverReady) {
 
 # Run client in self-test mode, passing artifacts directory as absolute path
 Write-Host "Running client self-test..." -ForegroundColor Yellow
-$client = Start-Process powershell -ArgumentList "-Command","cd '$PWD\ConsoleGame'; `$env:UI_SELFTEST_MODE='1'; dotnet run -- --ui-selftest $artifactsDir" -PassThru -WindowStyle Normal
+$client = Start-Process powershell -ArgumentList "-Command","cd '$PWD\Aetherium.Console'; `$env:UI_SELFTEST_MODE='1'; dotnet run -- --ui-selftest $artifactsDir" -PassThru -WindowStyle Normal
 
 Write-Host "Waiting up to $TimeoutSeconds seconds for completion..." -ForegroundColor Yellow
 $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -72,7 +72,7 @@ $code = if ($client.HasExited) { $client.ExitCode } else { 1 }
 
 Write-Host "Stopping server..." -ForegroundColor Yellow
 Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-Get-Process -Name "ConsoleGameServer","ConsoleGameClient" -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name "Aetherium.Server","Aetherium.Console" -ErrorAction SilentlyContinue | Stop-Process -Force
 
 popd
 
@@ -87,5 +87,6 @@ if ($code -eq 0) {
   if (Test-Path "$artifactsDir\result.txt") { Write-Host "  - result.txt exists" }
   exit 1
 }
+
 
 

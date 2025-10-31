@@ -1,7 +1,7 @@
 # Project Context
 
 ## Purpose
-ConsoleGame is a real-time multiplayer dungeon crawler game with a client-server architecture. The game features a console-based UI with ASCII graphics, real-time lighting, field-of-view calculations, and interactive gameplay elements. The project includes a monitoring system for debugging and automated testing.
+Aetherium is a real-time multiplayer dungeon crawler game with a client-server architecture. The game features a console-based UI with ASCII graphics, real-time lighting, field-of-view calculations, and interactive gameplay elements. The project includes a monitoring system for debugging and automated testing.
 
 ## Tech Stack
 - **Backend**: .NET 9.0, ASP.NET Core, SignalR
@@ -22,25 +22,25 @@ ConsoleGame is a real-time multiplayer dungeon crawler game with a client-server
 ### Namespace Conventions
 **CRITICAL**: The project has multiple assemblies with specific namespace patterns:
 
-- **ConsoleGameServer** (assembly) uses namespace `ConsoleGameServer.*` for server-specific code:
-  - `ConsoleGameServer.Agents` - Agent system
-  - `ConsoleGameServer.Management` - Orleans management grains
-  - `ConsoleGameServer.MultiWorld` - Multi-world hosting
-  - `ConsoleGameServer.Narrative` - Narrative system
-  - BUT inherits `ConsoleGame.*` namespaces from shared assemblies
+- **Aetherium.Server** (assembly) uses namespace `Aetherium.Server.*` for server-specific code:
+  - `Aetherium.Server.Agents` - Agent system
+  - `Aetherium.Server.Management` - Orleans management grains
+  - `Aetherium.Server.MultiWorld` - Multi-world hosting
+  - `Aetherium.Server.Narrative` - Narrative system
+  - BUT inherits `Aetherium.*` namespaces from shared assemblies
 
-- **ConsoleGameModel** (shared assembly) uses namespace `ConsoleGame.*`:
-  - `ConsoleGame.Core` - Core game logic (World, Entity, etc.)
-  - `ConsoleGame.WorldGen` - Procedural generation (generators, algorithms, prefabs)
-  - `ConsoleGame.WorldGen.Generators` - Specific generator implementations
-  - `ConsoleGame.WorldGen.Algorithms` - Reusable algorithms (Perlin, FloodFill, etc.)
-  - `ConsoleGame.WorldGen.Prefabs` - Prefab system
+- **Aetherium.Model** (shared assembly) uses namespace `Aetherium.*`:
+  - `Aetherium.Core` - Core game logic (World, Entity, etc.)
+  - `Aetherium.WorldGen` - Procedural generation (generators, algorithms, prefabs)
+  - `Aetherium.WorldGen.Generators` - Specific generator implementations
+  - `Aetherium.WorldGen.Algorithms` - Reusable algorithms (Perlin, FloodFill, etc.)
+  - `Aetherium.WorldGen.Prefabs` - Prefab system
 
-- **ConsoleGameClient** (assembly) uses namespace `ConsoleGame.*` for client code
+- **Aetherium.Console** (assembly) uses namespace `Aetherium.*` for client code
 
-**Common Mistake**: Using `ConsoleGameServer.WorldGen` when it should be `ConsoleGame.WorldGen`
-- WorldGen is in the **shared model** (ConsoleGameModel project)
-- Only server-specific logic goes in `ConsoleGameServer.*` namespaces
+**Common Mistake**: Using `Aetherium.Server.WorldGen` when it should be `Aetherium.WorldGen`
+- WorldGen is in the **shared model** (Aetherium.Model project)
+- Only server-specific logic goes in `Aetherium.Server.*` namespaces
 
 ### Architecture Patterns
 - **ECS (Entity-Component-System)**: Game entities are composed of components
@@ -155,7 +155,7 @@ The game includes a built-in monitoring system that allows real-time observation
 - PowerShell command chaining: use `;` instead of `&&` in this environment.
 
 ### Configuration
-Edit `ConsoleGame/Program.cs` to modify:
+Edit `Aetherium.Console/Program.cs` to modify:
 - Port (default: 5001)
 - File logging enabled/disabled
 - Output directory for logs
@@ -225,8 +225,8 @@ openspec archive [change-id] --yes
 
 ### "Type or namespace does not exist"
 1. **Check namespace conventions** (see above)
-   - Is it `ConsoleGame.WorldGen` or `ConsoleGameServer.WorldGen`?
-   - WorldGen is in ConsoleGameModel, so use `ConsoleGame.WorldGen`
+   - Is it `Aetherium.WorldGen` or `Aetherium.Server.WorldGen`?
+   - WorldGen is in Aetherium.Model, so use `Aetherium.WorldGen`
 2. **Verify project references** in `.csproj` files
 3. **Check assembly name** vs namespace - they can differ
 
@@ -243,3 +243,4 @@ openspec archive [change-id] --yes
 - Grains can't use constructor injection for host services directly
 - Use co-hosting pattern (see "Service Registration for Grains" above)
 - Register services in both host DI and Orleans silo DI
+

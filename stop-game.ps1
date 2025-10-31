@@ -1,4 +1,4 @@
-# Stop script to clean up running ConsoleGame server/client started by start-game-test.ps1
+# Stop script to clean up running Aetherium server/client started by start-game-test.ps1
 
 param(
     [switch]$All
@@ -17,9 +17,10 @@ if (Test-Path $pidFile) {
 }
 
 if ($All) {
-    Get-Process -Name "ConsoleGameServer","ConsoleGameClient" | Stop-Process -Force
+    Get-Process -Name "Aetherium.Server","Aetherium.Console" | Stop-Process -Force
 }
 
 Write-Host "Cleanup complete." -ForegroundColor Green
+
 
 

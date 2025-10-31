@@ -7,9 +7,9 @@ The console game has been successfully converted from a monolithic single-proces
 ## What Was Implemented
 
 ### 1. Project Structure
-- **ConsoleGameModel**: Shared DTO library for client-server communication
-- **ConsoleGameServer**: ASP.NET Core server hosting the authoritative game engine
-- **ConsoleGameClient**: Thin console client that connects to the server
+- **Aetherium.Model**: Shared DTO library for client-server communication
+- **Aetherium.Server**: ASP.NET Core server hosting the authoritative game engine
+- **Aetherium.Console**: Thin console client that connects to the server
 
 ### 2. Core Features
 - ✅ Server-authoritative game state management
@@ -39,13 +39,13 @@ Passed!  - Failed: 0, Passed: 108, Skipped: 1, Total: 109
 
 ### Server
 ```powershell
-cd ConsoleGameServer
+cd Aetherium.Server
 dotnet run
 ```
 
 ### Client
 ```powershell
-cd ConsoleGame
+cd Aetherium
 dotnet run
 ```
 
@@ -69,4 +69,5 @@ This change is ready for:
 - Proposal: `openspec/changes/add-client-server-architecture/proposal.md`
 - Tasks: `openspec/changes/add-client-server-architecture/tasks.md` (all complete)
 - Spec: `openspec/changes/add-client-server-architecture/specs/client-server-communication/spec.md`
+
 

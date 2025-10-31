@@ -3,16 +3,16 @@
 ## Status: ✅ All Systems Operational
 
 ### Build Results
-- **ConsoleGameModel**: ✅ Built successfully
-- **ConsoleGameServer**: ✅ Built successfully  
-- **ConsoleGameClient**: ✅ Built successfully
-- **ConsoleGame.Test**: ✅ All 91 tests passed
+- **Aetherium.Model**: ✅ Built successfully
+- **Aetherium.Server**: ✅ Built successfully  
+- **Aetherium.Console**: ✅ Built successfully
+- **Aetherium.Test**: ✅ All 91 tests passed
 
 ### How to Run
 
 #### Terminal 1 (Server)
 ```powershell
-cd ConsoleGameServer
+cd Aetherium.Server
 dotnet run
 ```
 
@@ -24,7 +24,7 @@ Waiting for client connections...
 
 #### Terminal 2 (Client)
 ```powershell
-cd ConsoleGame
+cd Aetherium
 dotnet run
 ```
 
@@ -49,6 +49,7 @@ The client will connect and you can play the game!
 2. **Perception-Based**: Client only knows what the player can see (FOV/lighting)
 3. **Real-Time**: SignalR provides low-latency bidirectional communication
 4. **Identical Gameplay**: Plays exactly like the original single-process version
+
 
 
 

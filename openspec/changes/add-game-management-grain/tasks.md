@@ -1,5 +1,5 @@
 ## 1. Core Infrastructure
-- [x] 1.1 Create `ConsoleGameServer/Management/` directory
+- [x] 1.1 Create `Aetherium.Server/Management/` directory
 - [x] 1.2 Create `IGameManagementGrain.cs` interface with all method signatures
 - [x] 1.3 Create `SessionInfo.cs` DTO class
 - [x] 1.4 Create `OperationResult.cs` DTO class with Ok() and Error() factory methods
@@ -62,4 +62,5 @@
 - [x] 7.9 Test with DISABLE_ORLEANS=1 - verify no crashes, graceful degradation
 - [x] 7.10 Test concurrent operations: multiple CLI commands while client is active
 - [x] 7.11 Run `openspec validate add-game-management-grain --strict` and confirm passes
+
 

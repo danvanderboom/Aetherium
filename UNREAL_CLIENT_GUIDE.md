@@ -13,7 +13,7 @@ The Console Game architecture is designed to support multiple client implementat
 - **Microsoft.AspNetCore.SignalR.Client**: Works in Unreal via C# scripting
 
 ### ✅ All Data Models
-All classes in `ConsoleGameModel` project:
+All classes in `Aetherium.Model` project:
 - `PerceptionDto`: Complete game state as seen by player
 - `NavigationDataDto`: Compass/navigation information
 - `InventoryDto`: Player inventory
@@ -102,8 +102,8 @@ Add these projects/DLLs to your Unreal project:
 ```
 YourUnrealProject/
   Managed/          # C# assemblies
-    ConsoleGameModel.dll
-    ConsoleGame.dll (just the client parts)
+    Aetherium.Model.dll
+    Aetherium.dll (just the client parts)
     Microsoft.AspNetCore.SignalR.Client.dll
     Spectre.Console.dll (optional, if using themes)
 ```
@@ -112,7 +112,7 @@ YourUnrealProject/
 
 ```csharp
 using UnrealEngine.Runtime;
-using ConsoleGame.Rendering;
+using Aetherium.Rendering;
 
 public class UnrealGameRenderer : IGameRenderer
 {
@@ -523,7 +523,7 @@ public class UnrealAudioSystem : IAudioSystem
 ## Next Steps
 
 1. ✅ Setup Unreal project with C# support
-2. ✅ Import ConsoleGame client libraries
+2. ✅ Import Aetherium client libraries
 3. ✅ Create UnrealGameRenderer
 4. ✅ Connect to server and receive perception
 5. ✅ Render basic 3D representation
@@ -533,14 +533,15 @@ public class UnrealAudioSystem : IAudioSystem
 
 ## Resources
 
-- **Console Game Rendering Docs**: `ConsoleGame/Rendering/README.md`
-- **Example Renderer**: `ConsoleGame/Rendering/SpectreConsoleRenderer.cs`
-- **Example Integration**: `ConsoleGame/Core/ClientConsoleDungeonGameNew.cs`
-- **Server API**: Check `ConsoleGameServer/GameHub.cs` for available commands
+- **Console Game Rendering Docs**: `Aetherium.Console/Rendering/README.md`
+- **Example Renderer**: `Aetherium.Console/Rendering/SpectreConsoleRenderer.cs`
+- **Example Integration**: `Aetherium.Console/Core/ClientConsoleDungeonGameNew.cs`
+- **Server API**: Check `Aetherium.Server/GameHub.cs` for available commands
 
 ## Questions?
 
 The architecture is designed to make this migration straightforward. The key insight: **the game client library is platform-agnostic**. You're just swapping out the renderer!
 
 Happy migrating! 🎮
+
 

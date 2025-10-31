@@ -1,5 +1,5 @@
 ## 1. Implementation
-- [x] 1.1 Introduce PCG pipeline orchestrator in ConsoleGameServer/WorldGen (phased execution, seed mgmt)
+- [x] 1.1 Introduce PCG pipeline orchestrator in Aetherium.Server/WorldGen (phased execution, seed mgmt)
 - [x] 1.2 Add deterministic RNG namespaces + versioning for stable replays across modules
 - [x] 1.3 Implement advanced dungeon generator (rooms/corridors/loops/secrets/vertical connectors)
 - [x] 1.4 Implement outdoor generator (heightmap/biomes/rivers/roads/cities/villages/POIs)
@@ -11,5 +11,6 @@
 - [x] 1.10 Extend tests: determinism, validation metrics, access proofs, multi-level navigation, narrative guarantees
 - [x] 1.11 Performance guardrails + timeouts + incremental fallback
 - [x] 1.12 Docs: quick start, seed recipes, debug workflow
+
 
 

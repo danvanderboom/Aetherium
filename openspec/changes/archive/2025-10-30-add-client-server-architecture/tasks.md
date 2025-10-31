@@ -1,5 +1,5 @@
 ## 1. Shared Model Implementation
-- [x] 1.1 Create ConsoleGameModel project with shared DTOs
+- [x] 1.1 Create Aetherium.Model project with shared DTOs
 - [x] 1.2 Define PerceptionDto with player location, heading, visuals
 - [x] 1.3 Define VisualDto with location, terrain, light level
 - [x] 1.4 Define WorldLocationDto, TileTypeDto, RectangleDto
@@ -7,7 +7,7 @@
 - [x] 1.6 Define GameStateDto for initial state
 
 ## 2. Server Implementation
-- [x] 2.1 Convert ConsoleGameServer to ASP.NET Core Web app
+- [x] 2.1 Convert Aetherium.Server to ASP.NET Core Web app
 - [x] 2.2 Add SignalR package reference
 - [x] 2.3 Copy game engine (World, Entities, Components, Systems) to server
 - [x] 2.4 Implement GameHub with command methods
@@ -18,7 +18,7 @@
 - [x] 2.9 Configure ASP.NET Core host with SignalR
 
 ## 3. Client Implementation
-- [x] 3.1 Add SignalR client package to ConsoleGameClient
+- [x] 3.1 Add SignalR client package to Aetherium.Console
 - [x] 3.2 Create GameClient for SignalR connection management
 - [x] 3.3 Create ClientConsoleDungeonGame for perception-based game loop
 - [x] 3.4 Create ClientConsoleMapView for rendering from PerceptionDto
@@ -50,4 +50,5 @@
 - [x] 6.2 Document how to run server and client
 - [x] 6.3 Document architecture overview
 - [x] 6.4 Update main README with architecture information
+
 

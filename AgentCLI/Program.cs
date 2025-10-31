@@ -4,9 +4,9 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Text.Json;
 using AgentCLI;
-using ConsoleGameServer.MultiWorld;
-using ConsoleGameServer.Narrative;
-using ConsoleGameServer.Agents;
+using Aetherium.Server.MultiWorld;
+using Aetherium.Server.Narrative;
+using Aetherium.Server.Agents;
 
 namespace AgentCLI
 {
@@ -259,6 +259,43 @@ namespace AgentCLI
             visionCommand.AddCommand(visionStatusCommand);
 
             rootCommand.AddCommand(visionCommand);
+
+            // Session management commands
+            var mgmtCommand = new Command("mgmt", "Game session management");
+            
+            var sessionsListCmd = new Command("sessions", "List all active game sessions");
+            sessionsListCmd.SetHandler(async () =>
+            {
+                try
+                {
+                    var mgmt = client.GetGameManagement();
+                    var sessions = await mgmt.ListSessionsAsync();
+                    
+                    if (sessions == null || sessions.Count == 0)
+                    {
+                        Console.WriteLine("No active sessions");
+                        return;
+                    }
+                    
+                    Console.WriteLine($"Active sessions ({sessions.Count}):");
+                    foreach (var session in sessions)
+                    {
+                        Console.WriteLine($"  Session ID: {session.SessionId}");
+                        Console.WriteLine($"    Connection ID: {session.ConnectionId}");
+                        Console.WriteLine($"    Directional Vision: {(session.DirectionalVisionMode ? "ON" : "OFF")}");
+                        Console.WriteLine($"    FOV: {session.FieldOfViewDegrees}°");
+                        Console.WriteLine($"    Connected at: {session.ConnectedAt:yyyy-MM-dd HH:mm:ss}");
+                        Console.WriteLine();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Failed to list sessions: {ex.Message}");
+                }
+            });
+            mgmtCommand.AddCommand(sessionsListCmd);
+
+            rootCommand.AddCommand(mgmtCommand);
 
             // World management commands
             var worldCommand = new Command("world", "Manage game worlds");
@@ -555,6 +592,57 @@ namespace AgentCLI
             }, statusRunnerArg);
             agentCmd.AddCommand(statusCmd);
 
+            // Policy commands (LLM vs heuristic)
+            var policyCmd = new Command("policy", "Configure agent decision policy");
+            
+            var policySetCmd = new Command("set", "Set agent policy (llm|heuristic)");
+            var policyValueArg = new Argument<string>("policy", "Policy type: 'llm' or 'heuristic'");
+            policySetCmd.AddArgument(policyValueArg);
+            policySetCmd.SetHandler((string policy) =>
+            {
+                try
+                {
+                    var value = policy.ToLowerInvariant();
+                    if (value != "llm" && value != "heuristic")
+                    {
+                        Console.WriteLine($"✗ Invalid policy: must be 'llm' or 'heuristic'");
+                        return;
+                    }
+                    
+                    var enabledValue = value == "llm" ? "1" : "0";
+                    Environment.SetEnvironmentVariable("AGENT_LLM_ENABLED", enabledValue);
+                    Console.WriteLine($"✓ Policy set to {value} (AGENT_LLM_ENABLED={enabledValue})");
+                    Console.WriteLine("Note: This affects new agent steps. Restart runners to apply immediately.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"✗ Policy set failed: {ex.Message}");
+                }
+            }, policyValueArg);
+            policyCmd.AddCommand(policySetCmd);
+
+            var policyGetCmd = new Command("get", "Get current agent policy");
+            policyGetCmd.SetHandler(() =>
+            {
+                var enabled = Environment.GetEnvironmentVariable("AGENT_LLM_ENABLED");
+                var policy = string.Equals(enabled, "1", StringComparison.OrdinalIgnoreCase) ? "llm" : "heuristic";
+                Console.WriteLine($"Current policy: {policy} (AGENT_LLM_ENABLED={enabled ?? "0"})");
+            });
+            policyCmd.AddCommand(policyGetCmd);
+
+            var debugCmd = new Command("debug", "Toggle debug output (on|off)");
+            var debugValueArg = new Argument<string>("value", "Debug state: 'on' or 'off'");
+            debugCmd.AddArgument(debugValueArg);
+            debugCmd.SetHandler((string value) =>
+            {
+                var on = value.ToLowerInvariant() == "on";
+                Environment.SetEnvironmentVariable("AGENT_DEBUG", on ? "1" : "0");
+                Console.WriteLine($"✓ Debug {(on ? "enabled" : "disabled")}");
+            }, debugValueArg);
+            policyCmd.AddCommand(debugCmd);
+
+            agentCmd.AddCommand(policyCmd);
+
             rootCommand.AddCommand(agentCmd);
 
 
@@ -711,4 +799,5 @@ namespace AgentCLI
         }
     }
 }
+
 

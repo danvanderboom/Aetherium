@@ -90,7 +90,7 @@ After deployment, create separate PR to:
 
 ### CLI Commands
 
-**Note:** When working in this project (ConsoleGame), call `openspec` via PowerShell rather than directly. This provides better integration and avoids approval prompts for each command.
+**Note:** When working in this project (Aetherium), call `openspec` via PowerShell rather than directly. This provides better integration and avoids approval prompts for each command.
 
 ```powershell
 # Essential commands
@@ -113,7 +113,7 @@ openspec show [change] --json --deltas-only
 openspec validate [change] --strict
 ```
 
-### Local Testing Recipes (ConsoleGame)
+### Local Testing Recipes (Aetherium)
 
 Use these scripts to reliably start/stop the game and validate UI output during development:
 
@@ -123,7 +123,7 @@ Use these scripts to reliably start/stop the game and validate UI output during 
 
 # If a run was interrupted, clean up remaining processes
 .\stop-game.ps1           # uses .game-run-pids.json if present
-.\stop-game.ps1 -All      # force-kill ConsoleGameServer/ConsoleGameClient
+.\stop-game.ps1 -All      # force-kill Aetherium.Server/Aetherium.Console
 
 # Minimal monitor to assert frames stream (no unicode borders dependency)
 .\scripts\monitor-lite.ps1  # optional: add -MaxFrames 5
@@ -484,3 +484,4 @@ openspec archive <change-id> [--yes|-y]  # Mark complete (add --yes for automati
 ```
 
 Remember: Specs are truth. Changes are proposals. Keep them in sync.
+

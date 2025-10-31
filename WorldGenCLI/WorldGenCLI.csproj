@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ConsoleGameServer\ConsoleGameServer.csproj" />
+    <ProjectReference Include="..\Aetherium.Server\Aetherium.Server.csproj" />
   </ItemGroup>
 
   <ItemGroup>

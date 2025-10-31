@@ -1,0 +1,16 @@
+using System.Collections.Generic;
+using Aetherium.Core;
+
+namespace Aetherium.Components
+{
+    public class Activatable : Component
+    {
+        public bool IsActivated { get; set; } = false;
+        public List<string> TargetEntityIds { get; set; } = new List<string>();
+        public bool ToggleBehavior { get; set; } = false; // false = one-time, true = toggle
+
+        public Activatable() : base() { }
+    }
+}
+
+

@@ -66,6 +66,6 @@ dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true
    at System.ThrowHelper.ThrowInvalidOperationException_InvalidOperation_EnumFailedVersion()
    at System.Collections.Generic.List`1.Enumerator.MoveNextRare()
    at System.Collections.Generic.List`1.Enumerator.MoveNext()
-   at ConsoleGame.Monster.GetValidDirections() in C:\Source\ConsoleGame\ConsoleGame\Entities\Monster.cs:line 70
-   at ConsoleGame.Monster.Heartbeat() in C:\Source\ConsoleGame\ConsoleGame\Entities\Monster.cs:line 34
-   at ConsoleGame.Core.ConsoleDungeonGame.<MonsterHeartbeat>d__20.MoveNext() in C:\Source\ConsoleGame\ConsoleGame\Core\ConsoleDungeonGame.cs:line 145
+   at Aetherium.Monster.GetValidDirections() in C:\Source\Aetherium\Aetherium\Entities\Monster.cs:line 70
+   at Aetherium.Monster.Heartbeat() in C:\Source\Aetherium\Aetherium\Entities\Monster.cs:line 34
+   at Aetherium.Core.ConsoleDungeonGame.<MonsterHeartbeat>d__20.MoveNext() in C:\Source\Aetherium\Aetherium\Core\ConsoleDungeonGame.cs:line 145

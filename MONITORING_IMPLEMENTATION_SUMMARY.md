@@ -8,20 +8,20 @@ Successfully implemented a WebSocket-based monitoring service for the console ga
 ### 1. Core Monitoring Infrastructure
 
 **Files Created:**
-- `ConsoleGame/Monitoring/MonitoringModels.cs` - Data models for monitoring system
+- `Aetherium.Console/Monitoring/MonitoringModels.cs` - Data models for monitoring system
   - `MonitoringConfig` - Configuration settings
   - `MapFrameUpdate` - Frame data structure
   - `AsciiMapData` - 2D ASCII map representation
   - `MonitoringMessage` - WebSocket message wrapper
 
-- `ConsoleGame/Monitoring/MapFrameMonitor.cs` - Main monitoring service
+- `Aetherium.Console/Monitoring/MapFrameMonitor.cs` - Main monitoring service
   - Singleton pattern for global access
   - Embedded HTTP server using `System.Net.HttpListener`
   - WebSocket support for real-time streaming
   - Concurrent client connection management
   - Non-blocking broadcast architecture
 
-- `ConsoleGame/Monitoring/MapFrameLogger.cs` - Optional file logging
+- `Aetherium.Console/Monitoring/MapFrameLogger.cs` - Optional file logging
   - Human-readable ASCII map output
   - Automatic file rotation (100 frames per file)
   - Timestamped frame headers
@@ -30,17 +30,17 @@ Successfully implemented a WebSocket-based monitoring service for the console ga
 ### 2. Integration Points
 
 **Modified Files:**
-- `ConsoleGame/Views/ClientConsoleMapView.cs`
+- `Aetherium.Console/Views/ClientConsoleMapView.cs`
   - Added `CaptureRenderedFrame()` method
   - Captures 2D array of ASCII tiles (2 characters per tile)
   - Mirrors the actual rendered output
 
-- `ConsoleGame/Core/ClientConsoleDungeonGame.cs`
+- `Aetherium.Console/Core/ClientConsoleDungeonGame.cs`
   - Integrated monitoring into perception pipeline
   - Broadcasts frame updates after each render
   - Non-blocking fire-and-forget pattern
 
-- `ConsoleGame/Program.cs`
+- `Aetherium.Console/Program.cs`
   - Monitoring service initialization
   - Configuration setup
   - Automatic startup on port 5001
@@ -58,7 +58,7 @@ Successfully implemented a WebSocket-based monitoring service for the console ga
 ### 4. Documentation
 
 **Files Created:**
-- `ConsoleGame/Monitoring/README.md` - Comprehensive documentation
+- `Aetherium.Console/Monitoring/README.md` - Comprehensive documentation
   - Quick start guide
   - PowerShell script usage examples
   - API endpoint documentation
@@ -219,4 +219,5 @@ The monitoring system is fully functional and ready to use. PowerShell scripts c
 - Monitor performance metrics
 
 The system uses only built-in .NET libraries and has zero dependencies, ensuring compatibility and minimal maintenance overhead.
+
 

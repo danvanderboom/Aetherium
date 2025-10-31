@@ -5,9 +5,9 @@ using System.CommandLine.Invocation;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using ConsoleGame.Core;
-using ConsoleGame.WorldGen;
-using ConsoleGame.WorldGen.Passes;
+using Aetherium.Core;
+using Aetherium.WorldGen;
+using Aetherium.WorldGen.Passes;
 
 namespace WorldGenCLI
 {
@@ -191,5 +191,6 @@ namespace WorldGenCLI
         }
     }
 }
+
 
 

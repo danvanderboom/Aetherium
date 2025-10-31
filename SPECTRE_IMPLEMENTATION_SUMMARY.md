@@ -8,25 +8,25 @@ Successfully implemented a comprehensive modular UI and audio system with clean 
 
 ### 1. Rendering Abstraction Layer
 **Files Created:**
-- `ConsoleGame/Rendering/IGameRenderer.cs` - Platform-agnostic rendering interface
-- `ConsoleGame/Rendering/GameViewState.cs` - UI state transport object
-- `ConsoleGame/Rendering/WidgetManager.cs` - Widget lifecycle management
-- `ConsoleGame/Rendering/Widgets/IWidget.cs` - Widget interface
-- `ConsoleGame/Rendering/Widgets/WidgetBase.cs` - Base widget implementation
+- `Aetherium.Console/Rendering/IGameRenderer.cs` - Platform-agnostic rendering interface
+- `Aetherium.Console/Rendering/GameViewState.cs` - UI state transport object
+- `Aetherium.Console/Rendering/WidgetManager.cs` - Widget lifecycle management
+- `Aetherium.Console/Rendering/Widgets/IWidget.cs` - Widget interface
+- `Aetherium.Console/Rendering/Widgets/WidgetBase.cs` - Base widget implementation
 
 **Key Achievement**: Clean separation allowing any presentation technology to implement `IGameRenderer`.
 
 ### 2. Spectre.Console Implementation
 **Files Created:**
-- `ConsoleGame/Rendering/SpectreConsoleRenderer.cs` - Spectre.Console renderer
+- `Aetherium.Console/Rendering/SpectreConsoleRenderer.cs` - Spectre.Console renderer
 - Hybrid approach: Spectre for UI chrome, direct console for high-performance map rendering
 
 **Package Added**: `Spectre.Console 0.49.1`
 
 ### 3. Theme System
 **Files Created:**
-- `ConsoleGame/Rendering/Themes/ThemeConfig.cs` - Theme configuration model
-- `ConsoleGame/Rendering/Themes/BuiltInThemes.cs` - 5 built-in themes
+- `Aetherium.Console/Rendering/Themes/ThemeConfig.cs` - Theme configuration model
+- `Aetherium.Console/Rendering/Themes/BuiltInThemes.cs` - 5 built-in themes
 
 **Built-in Themes:**
 1. **Zen**: Minimal ASCII, calm colors (default)
@@ -42,12 +42,12 @@ Successfully implemented a comprehensive modular UI and audio system with clean 
 
 ### 4. Compass Widget System
 **Server-Side:**
-- `ConsoleGameModel/NavigationDataDto.cs` - Navigation data model
-- `ConsoleGameServer/PerceptionService.cs` - Updated to detect compass and populate navigation data
+- `Aetherium.Model/NavigationDataDto.cs` - Navigation data model
+- `Aetherium.Server/PerceptionService.cs` - Updated to detect compass and populate navigation data
 
 **Client-Side:**
-- `ConsoleGame/Rendering/Widgets/CompassWidget.cs` - Compass widget with dual modes
-- `ConsoleGame/Rendering/Widgets/InventoryWidget.cs` - Inventory display widget
+- `Aetherium.Console/Rendering/Widgets/CompassWidget.cs` - Compass widget with dual modes
+- `Aetherium.Console/Rendering/Widgets/InventoryWidget.cs` - Inventory display widget
 
 **Compass Features:**
 - **Arrow Mode** (default): Unicode arrows (↑, →, ↓, ←) or theme-specific symbols
@@ -64,10 +64,10 @@ Successfully implemented a comprehensive modular UI and audio system with clean 
 
 ### 5. Audio System
 **Files Created:**
-- `ConsoleGame/Audio/IAudioSystem.cs` - Audio system interface
-- `ConsoleGame/Audio/AudioConfig.cs` - Audio configuration
-- `ConsoleGame/Audio/NAudioSystem.cs` - NAudio implementation
-- `ConsoleGame/Audio/NullAudioSystem.cs` - No-op implementation for fallback
+- `Aetherium.Console/Audio/IAudioSystem.cs` - Audio system interface
+- `Aetherium.Console/Audio/AudioConfig.cs` - Audio configuration
+- `Aetherium.Console/Audio/NAudioSystem.cs` - NAudio implementation
+- `Aetherium.Console/Audio/NullAudioSystem.cs` - No-op implementation for fallback
 
 **Package Added**: `NAudio 2.2.1`
 
@@ -92,14 +92,14 @@ Successfully implemented a comprehensive modular UI and audio system with clean 
 - Shift+M: Next track
 
 **Audio Assets:**
-- Directory structure created: `ConsoleGame/Assets/Audio/music/` and `effects/`
+- Directory structure created: `Aetherium.Console/Assets/Audio/music/` and `effects/`
 - README with instructions for acquiring open-source audio
 - Supports MP3, WAV, OGG formats
 - Graceful handling when files don't exist
 
 ### 6. Integrated Game Client
 **Files Created:**
-- `ConsoleGame/Core/ClientConsoleDungeonGameNew.cs` - New game client with full integration
+- `Aetherium.Console/Core/ClientConsoleDungeonGameNew.cs` - New game client with full integration
 
 **Features:**
 - Uses `IGameRenderer` abstraction
@@ -126,7 +126,7 @@ Successfully implemented a comprehensive modular UI and audio system with clean 
 ### 7. Testing
 **Test Status:**
 - ✅ All existing tests pass (168 passed, 1 skipped)
-- 📝 Client test templates documented in `ConsoleGame.Test/CLIENT_TESTS_README.md`
+- 📝 Client test templates documented in `Aetherium.Test/CLIENT_TESTS_README.md`
 - Test templates provided for future separate client test project
 
 **Test Coverage Designed:**
@@ -137,10 +137,10 @@ Successfully implemented a comprehensive modular UI and audio system with clean 
 
 ### 8. Documentation
 **Files Created:**
-- `ConsoleGame/Rendering/README.md` - Comprehensive rendering system guide
+- `Aetherium.Console/Rendering/README.md` - Comprehensive rendering system guide
 - `UNREAL_CLIENT_GUIDE.md` - Step-by-step Unreal Engine migration guide
-- `ConsoleGame/Assets/Audio/README.md` - Audio asset acquisition guide
-- `ConsoleGame.Test/CLIENT_TESTS_README.md` - Client testing guide
+- `Aetherium.Console/Assets/Audio/README.md` - Audio asset acquisition guide
+- `Aetherium.Test/CLIENT_TESTS_README.md` - Client testing guide
 
 **Documentation Includes:**
 - Architecture diagrams
@@ -211,10 +211,10 @@ Implementation (Spectre/Unreal/Web/etc)
 - Asset directories: 3 directories
 
 ### Modified Files: 4
-- `ConsoleGame/ConsoleGameClient.csproj` - Added packages
-- `ConsoleGameModel/PerceptionDto.cs` - Added NavigationData
-- `ConsoleGameServer/PerceptionService.cs` - Populate navigation data
-- `ConsoleGame.Test/ConsoleGame.Test.csproj` - Test dependencies
+- `Aetherium.Console/Aetherium.Console.csproj` - Added packages
+- `Aetherium.Model/PerceptionDto.cs` - Added NavigationData
+- `Aetherium.Server/PerceptionService.cs` - Populate navigation data
+- `Aetherium.Test/Aetherium.Test.csproj` - Test dependencies
 
 ## Next Steps for Usage
 
@@ -222,14 +222,14 @@ Implementation (Spectre/Unreal/Web/etc)
 
 1. **Run with existing client**: 
    ```bash
-   dotnet run --project ConsoleGameServer
-   dotnet run --project ConsoleGame
+   dotnet run --project Aetherium.Server
+   dotnet run --project Aetherium
    ```
    (Uses old ClientConsoleDungeonGame)
 
-2. **To use new system**: Update `ConsoleGame/Program.cs` to instantiate `ClientConsoleDungeonGameNew` instead
+2. **To use new system**: Update `Aetherium.Console/Program.cs` to instantiate `ClientConsoleDungeonGameNew` instead
 
-3. **Add audio files**: Follow `ConsoleGame/Assets/Audio/README.md` to add music and sound effects
+3. **Add audio files**: Follow `Aetherium.Console/Assets/Audio/README.md` to add music and sound effects
 
 4. **Customize themes**: Create custom `ThemeConfig` or modify existing themes in `BuiltInThemes.cs`
 
@@ -237,7 +237,7 @@ Implementation (Spectre/Unreal/Web/etc)
 
 1. **Follow** `UNREAL_CLIENT_GUIDE.md`
 2. **Setup** C# support in Unreal (UnrealCLR or .NET for Unreal)
-3. **Import** `ConsoleGameModel.dll` and network libraries
+3. **Import** `Aetherium.Model.dll` and network libraries
 4. **Implement** `UnrealGameRenderer`
 5. **Create** UMG widgets
 6. **Test** connection to existing server
@@ -299,4 +299,5 @@ The Console Game now has:
 - All existing functionality preserved and enhanced
 
 The architecture is elegant, the separation clean, and the path to Unreal Engine clear and well-documented.
+
 

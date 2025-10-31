@@ -28,6 +28,17 @@ As new clients are developed, their documentation will be added here:
 
 Documentation for developers working on the codebase.
 
+### Agents & AI
+📁 **[agents/](agents/)** - AI agent system documentation
+
+The game supports LLM-driven agents powered by LM Studio (phi-4) or heuristic-based NPCs:
+- LLM-driven agents using OpenAI-compatible APIs
+- Heuristic fallback agents
+- CLI tools for agent management
+- Rate limiting and error handling
+
+**Start here:** [Agent System Guide](agents/README.md)
+
 ### Architecture & Design
 - Coming soon: System architecture overview
 - Coming soon: Entity-Component-System (ECS) guide
@@ -53,13 +64,14 @@ Documentation for developers working on the codebase.
 
 ### For Developers
 - **Planning a change?** → [OpenSpec Agents Guide](../openspec/AGENTS.md)
-- **Exploring the code?** → Start with `ConsoleGameServer/` and `ConsoleGame/`
-- **Running tests?** → See `ConsoleGame.Test/`
+- **Working with agents?** → [Agent System Guide](agents/README.md)
+- **Exploring the code?** → Start with `Aetherium.Server/` and `Aetherium.Console/`
+- **Running tests?** → See `Aetherium.Test/`
 
 ## Project Structure
 
 ```
-ConsoleGame/
+Aetherium.Console/
 ├── docs/                          # Documentation (you are here)
 │   ├── README.md                  # This file
 │   ├── console/                   # Console client docs
@@ -68,12 +80,14 @@ ConsoleGame/
 │   │       ├── quick-reference.md # Fast lookup
 │   │       ├── controls.md        # Key bindings
 │   │       └── gameplay.md        # Mechanics & strategy
+│   ├── agents/                    # Agent system docs
+│   │   └── README.md              # Agent system guide
 │   └── [future client docs]/
 │
-├── ConsoleGameServer/             # Server-side game logic
-├── ConsoleGame/                   # Console client
-├── ConsoleGameModel/              # Shared DTOs
-├── ConsoleGame.Test/              # Tests
+├── Aetherium.Server/             # Server-side game logic
+├── Aetherium.Console/                   # Console client
+├── Aetherium.Model/              # Shared DTOs
+├── Aetherium.Test/              # Tests
 ├── openspec/                      # Specifications
 └── README.md                      # Project README
 ```
@@ -142,4 +156,5 @@ ConsoleGame/
 **Last Updated:** October 2025  
 **Documentation Version:** 1.0  
 **Game Version:** Compatible with current master branch
+
 

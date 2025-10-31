@@ -14,13 +14,14 @@ AgentCLI needs programmatic session control for game management and vision mode 
 ## Impact
 - Affected specs: NEW `game-management-grain`
 - Affected code:
-  - `ConsoleGameServer/GameHub.cs` - Add grain injection and registration hooks
+  - `Aetherium.Server/GameHub.cs` - Add grain injection and registration hooks
   - `AgentCLI/Program.cs` - Implement vision commands (lines 138-191)
   - `AgentCLI/AgentClient.cs` - Add GetGameManagement() method
 - New files:
-  - `ConsoleGameServer/Management/IGameManagementGrain.cs`
-  - `ConsoleGameServer/Management/GameManagementGrain.cs`
-  - `ConsoleGameServer/Management/SessionInfo.cs`
-  - `ConsoleGameServer/Management/OperationResult.cs`
-  - `ConsoleGameServer/Management/VisionStatus.cs`
+  - `Aetherium.Server/Management/IGameManagementGrain.cs`
+  - `Aetherium.Server/Management/GameManagementGrain.cs`
+  - `Aetherium.Server/Management/SessionInfo.cs`
+  - `Aetherium.Server/Management/OperationResult.cs`
+  - `Aetherium.Server/Management/VisionStatus.cs`
+
 

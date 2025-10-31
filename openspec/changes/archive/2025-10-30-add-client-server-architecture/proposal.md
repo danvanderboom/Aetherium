@@ -15,9 +15,10 @@ The monolithic console game architecture coupled UI rendering with game logic, m
 
 - Affected specs: New capability `client-server-communication`
 - Affected code:
-  - New project: `ConsoleGameModel` (shared DTOs)
-  - New project: `ConsoleGameServer` (ASP.NET Core with game engine)
-  - Modified project: `ConsoleGameClient` (thin client with SignalR)
+  - New project: `Aetherium.Model` (shared DTOs)
+  - New project: `Aetherium.Server` (ASP.NET Core with game engine)
+  - Modified project: `Aetherium.Console` (thin client with SignalR)
   - New files: GameHub, GameSession, PerceptionService, GameClient
   - Modified files: Program.cs, ConsoleMapView → ClientConsoleMapView
+
 

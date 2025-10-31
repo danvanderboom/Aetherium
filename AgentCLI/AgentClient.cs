@@ -4,10 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Orleans;
 using Orleans.Hosting;
-using ConsoleGameServer.Agents;
-using ConsoleGameServer.Management;
-using ConsoleGameServer.Narrative;
-using ConsoleGameServer.MultiWorld;
+using Aetherium.Server.Agents;
+using Aetherium.Server.Management;
+using Aetherium.Server.Narrative;
+using Aetherium.Server.MultiWorld;
 
 namespace AgentCLI
 {
@@ -42,13 +42,13 @@ namespace AgentCLI
             return _client.GetGrain<IAgentGrain>(agentId);
         }
 
-        public ConsoleGameServer.Agents.IPromptRegistryGrain GetPromptRegistry()
+        public Aetherium.Server.Agents.IPromptRegistryGrain GetPromptRegistry()
         {
             if (_client == null)
                 throw new InvalidOperationException("Client not connected. Call ConnectAsync first.");
 
             // Use a singleton key for the registry
-            return _client.GetGrain<ConsoleGameServer.Agents.IPromptRegistryGrain>("registry");
+            return _client.GetGrain<Aetherium.Server.Agents.IPromptRegistryGrain>("registry");
         }
 
         public IGameManagementGrain GetGameManagement()
@@ -94,3 +94,4 @@ namespace AgentCLI
         }
     }
 }
+

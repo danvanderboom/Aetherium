@@ -9,5 +9,6 @@ Players and AI agents need to pick up, carry, use, and drop items. Doors and oth
 
 ## Impact
 - Affected specs: client-server-communication, world-entities, perception, rendering
-- Affected code: ConsoleGameServer (components/entities/systems, hub), ConsoleGameModel (DTOs), ConsoleGame (views, client)
+- Affected code: Aetherium.Server (components/entities/systems, hub), Aetherium.Model (DTOs), Aetherium (views, client)
+
 

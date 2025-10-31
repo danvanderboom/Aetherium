@@ -4,13 +4,13 @@
 
 1. **Start the game server** (if not already running):
    ```powershell
-   cd ConsoleGameServer
+   cd Aetherium.Server
    dotnet run
    ```
 
 2. **Start the game client with monitoring**:
    ```powershell
-   cd ConsoleGame
+   cd Aetherium
    dotnet run
    ```
    
@@ -54,7 +54,7 @@ cd scripts
 
 ## Configuration
 
-To enable file logging, edit `ConsoleGame/Program.cs`:
+To enable file logging, edit `Aetherium.Console/Program.cs`:
 
 ```csharp
 var monitoringConfig = new MonitoringConfig
@@ -88,7 +88,7 @@ var monitoringConfig = new MonitoringConfig
 - Try the health check: `Invoke-RestMethod http://localhost:5001/health`
 
 ### Port already in use
-Change the port in `ConsoleGame/Program.cs`:
+Change the port in `Aetherium.Console/Program.cs`:
 ```csharp
 Port = 5002  // or any other available port
 ```
@@ -138,6 +138,7 @@ Frame #42 - 2025-10-30T12:34:56.789Z
 ## For More Details
 
 See:
-- `ConsoleGame/Monitoring/README.md` - Full documentation
+- `Aetherium.Console/Monitoring/README.md` - Full documentation
 - `MONITORING_IMPLEMENTATION_SUMMARY.md` - Technical details
+
 
