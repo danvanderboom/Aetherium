@@ -22,6 +22,8 @@ namespace Aetherium.Core
 
         public Guid CharacterMoveTimestamp { get; protected set; } = Guid.NewGuid();
 
+        public event Action<WorldEvent>? WorldEvents;
+
         Random rand = new Random();
 
         public World()
@@ -173,13 +175,12 @@ namespace Aetherium.Core
                     if (character != null && !Characters.TryAdd(entity.EntityId, character))
                         throw new Exception("Couldn't add to Character index");
 
-                    //if (dict.TryAdd(entity.EntityId, entity))
-                    //    WorldEvents?.Invoke(new WorldEvent
-                    //    {
-                    //        EventType = WorldEventType.EntityAdded,
-                    //        Location = entity.Get<WorldLocation>(),
-                    //        Entity = entity
-                    //    });
+                    WorldEvents?.Invoke(new WorldEvent
+                    {
+                        EventType = WorldEventType.EntityAdded,
+                        Location = entity.Get<WorldLocation>(),
+                        Entity = entity
+                    });
                 }
                 else
                 {
@@ -212,12 +213,12 @@ namespace Aetherium.Core
                     EntitiesByLocation.TryRemove(entity.Get<WorldLocation>(), out var _);
                 }
 
-                //WorldEvents?.Invoke(new WorldEvent
-                //{
-                //    EventType = WorldEventType.EntityRemoved,
-                //    Location = entity.Get<WorldLocation>(),
-                //    Entity = entity
-                //});
+                WorldEvents?.Invoke(new WorldEvent
+                {
+                    EventType = WorldEventType.EntityRemoved,
+                    Location = entity.Get<WorldLocation>(),
+                    Entity = entity
+                });
             }
         }
 
@@ -238,12 +239,12 @@ namespace Aetherium.Core
                     if (EntitiesByLocation.TryGetValue(destination, out var entitiesAtDestination)
                         && entitiesAtDestination.TryAdd(Id, entity))
                     {
-                        //WorldEvents?.Invoke(new WorldEvent
-                        //{
-                        //    EventType = WorldEventType.EntityMoved,
-                        //    Location = entity.Get<WorldLocation>(),
-                        //    Entity = entity
-                        //});
+                        WorldEvents?.Invoke(new WorldEvent
+                        {
+                            EventType = WorldEventType.EntityMoved,
+                            Location = entity.Get<WorldLocation>(),
+                            Entity = entity
+                        });
                     }
                 }
             }
@@ -379,6 +380,14 @@ namespace Aetherium.Core
                 default:
                     return false;
             }
+        }
+
+        /// <summary>
+        /// Emits a world event. This method allows external classes to emit events through the World instance.
+        /// </summary>
+        public void EmitEvent(WorldEvent worldEvent)
+        {
+            WorldEvents?.Invoke(worldEvent);
         }
     }
 }

@@ -38,6 +38,15 @@ namespace Aetherium.Server
                 return InteractionResult.Fail("Inventory full");
 
             world.RemoveEntity(target.EntityId);
+            
+            // Emit world event for item pickup
+            world.EmitEvent(new WorldEvent
+            {
+                EventType = WorldEventType.ItemPickedUp,
+                Location = session.ViewLocation,
+                Entity = target
+            });
+            
             return InteractionResult.Ok();
         }
 
@@ -98,6 +107,15 @@ namespace Aetherium.Server
                 if (!string.IsNullOrEmpty(door.KeyShape) && door.KeyShape == key.KeyId)
                 {
                     door.IsLocked = false;
+                    
+                    // Emit world event for door unlocked
+                    session.World.EmitEvent(new WorldEvent
+                    {
+                        EventType = WorldEventType.DoorUnlocked,
+                        Location = target.Get<WorldLocation>(),
+                        Entity = target
+                    });
+                    
                     return InteractionResult.Ok();
                 }
                 return InteractionResult.Fail("Key does not match");
@@ -127,6 +145,14 @@ namespace Aetherium.Server
                 var tile = target.Get<Tile>();
                 if (tile != null && world.TileTypes.ContainsKey("Indoors"))
                     tile.Type = world.TileTypes["Indoors"];
+                
+                // Emit world event for door opened
+                world.EmitEvent(new WorldEvent
+                {
+                    EventType = WorldEventType.DoorOpened,
+                    Location = target.Get<WorldLocation>(),
+                    Entity = target
+                });
             }
             else
             {
@@ -135,6 +161,14 @@ namespace Aetherium.Server
                 var tile = target.Get<Tile>();
                 if (tile != null && world.TileTypes.ContainsKey("Wall"))
                     tile.Type = world.TileTypes["Wall"];
+                
+                // Emit world event for door closed
+                world.EmitEvent(new WorldEvent
+                {
+                    EventType = WorldEventType.DoorClosed,
+                    Location = target.Get<WorldLocation>(),
+                    Entity = target
+                });
             }
             return InteractionResult.Ok();
         }
