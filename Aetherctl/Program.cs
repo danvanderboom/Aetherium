@@ -1,0 +1,69 @@
+using System;
+using System.CommandLine;
+using System.Threading.Tasks;
+using Aetherctl.Orleans;
+
+namespace Aetherctl
+{
+    internal static class Program
+    {
+        private static async Task<int> Main(string[] args)
+        {
+            var rootCommand = new RootCommand("Aetherctl - unified cross-platform CLI for Aetherium");
+
+            // Global options
+            var jsonOpt = new Option<bool>("--json", "Output results as JSON");
+            var verboseOpt = new Option<bool>("--verbose", "Enable verbose output");
+            var quietOpt = new Option<bool>("--quiet", "Suppress non-error output");
+
+            // Orleans connectivity options
+            var gatewayOpt = new Option<string?>(
+                "--gateway",
+                () => Environment.GetEnvironmentVariable("ORLEANS_GATEWAY"),
+                "Orleans gateway address (default: localhost)")
+            {
+                IsHidden = true // For now, localhost only
+            };
+            var clusterOpt = new Option<string?>(
+                "--cluster-id",
+                () => Environment.GetEnvironmentVariable("ORLEANS_CLUSTER_ID") ?? "dev",
+                "Orleans cluster ID")
+            {
+                IsHidden = true
+            };
+            var serviceOpt = new Option<string?>(
+                "--service-id",
+                () => Environment.GetEnvironmentVariable("ORLEANS_SERVICE_ID") ?? "Aetherium",
+                "Orleans service ID")
+            {
+                IsHidden = true
+            };
+
+            rootCommand.AddGlobalOption(jsonOpt);
+            rootCommand.AddGlobalOption(verboseOpt);
+            rootCommand.AddGlobalOption(quietOpt);
+            rootCommand.AddGlobalOption(gatewayOpt);
+            rootCommand.AddGlobalOption(clusterOpt);
+            rootCommand.AddGlobalOption(serviceOpt);
+
+            // Set global options in Common for access by command handlers
+            Commands.Common.JsonOption = jsonOpt;
+            Commands.Common.VerboseOption = verboseOpt;
+            Commands.Common.QuietOption = quietOpt;
+
+            // Add subcommands (will be implemented in next steps)
+            Commands.SessionCommands.AddToRoot(rootCommand);
+            Commands.AgentCommands.AddToRoot(rootCommand);
+            Commands.ToolsCommands.AddToRoot(rootCommand);
+            Commands.VisionCommands.AddToRoot(rootCommand);
+            Commands.WorldCommands.AddToRoot(rootCommand);
+            Commands.NarrativeCommands.AddToRoot(rootCommand);
+            Commands.PromptsCommands.AddToRoot(rootCommand);
+            Commands.WorldGenCommands.AddToRoot(rootCommand);
+            Commands.MonitorCommands.AddToRoot(rootCommand);
+
+            return await rootCommand.InvokeAsync(args);
+        }
+    }
+}
+

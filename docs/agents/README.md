@@ -20,6 +20,45 @@ The agent system now features a fully extensible tool architecture with:
 
 **📖 For detailed architecture and usage, see: [Tool System Documentation](TOOLS.md)**
 
+### New: Unified CLI (`aetherctl`)
+
+`aetherctl` is the new cross‑platform CLI that unifies AgentCLI and WorldGenCLI (both are now deprecated). It supports consistent flags, JSON output via `--json`, and Orleans connectivity options.
+
+Quick examples:
+
+```powershell
+# Sessions
+aetherctl session list --json
+
+# Tools
+aetherctl tools list
+aetherctl tools describe move --json
+aetherctl tools test move --session-id <id> --args '{"direction":"forward"}'
+
+# Agent runner
+aetherctl agent attach <sessionId> --agent agent-1 --runner runner-1
+aetherctl agent run runner-1 --max-steps 50 --delay 200
+aetherctl agent status runner-1 --json
+
+# Vision
+aetherctl vision directional <sessionId>
+aetherctl vision fov <sessionId> 90
+
+# Worlds
+aetherctl world create "My World" "Demo" --generator rooms-and-corridors --width 80 --height 60
+aetherctl world list --json
+
+# Worldgen
+aetherctl worldgen generate --template dungeon --width 80 --height 60 --json
+aetherctl worldgen render --template dungeon --width 80 --height 60 --ascii
+
+# Monitor frames
+aetherctl monitor --server-url ws://localhost:5001/monitor --ascii --save .\frames
+```
+
+Migration tip:
+- Replace `agentcli ...` and `worldgencli ...` with `aetherctl ...` equivalents above.
+
 ## Quick Start
 
 ### 1. Start the Game Server

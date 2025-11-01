@@ -91,9 +91,16 @@
 - [ ] OpenAI function calling format fully integrated
 - [ ] Dynamic format detection based on model
 
-### Phase 9: CLI & Management (Not Started)
-- [ ] Tool management commands (`tools list`, `tools describe`, `tools test`)
-- [ ] Profile management commands
+### Phase 9: CLI & Management (Unified CLI complete)
+- [x] Unified CLI `aetherctl` (dotnet global tool)
+- [x] Tool management commands (`tools list`, `tools describe`, `tools test`)
+- [x] Profile exploration (`tools profile list|show`)
+- [x] Session/Agent controls (`session list`, `agent attach|step|run|stop|status`)
+- [x] Vision controls (`vision directional|omnidirectional|fov|status`)
+- [x] World management (`world create|list|info|pause|resume|shutdown`)
+- [x] Worldgen (`worldgen generate|serve|render --ascii`)
+- [x] Monitor (WebSocket frames: `monitor --ascii|--json|--save`)
+- [x] Prompts (`prompts add|list|edit`) — delete pending server API
 - [ ] Delegation commands
 
 ### Phase 10: Documentation (Not Started)
@@ -147,6 +154,7 @@
 7. Implement hierarchical delegation system
 8. Create comprehensive documentation
 9. Add migration guide
+10. Add prompt delete API and wire to `aetherctl prompts delete`
 
 ## ✨ Summary
 
@@ -159,4 +167,7 @@ The remaining work focuses on:
 - Test infrastructure improvements
 
 **The system is ready for production use for agent and player actions.**
+
+### Note on CLIs
+- `AgentCLI` and `WorldGenCLI` are now deprecated in favor of `aetherctl`. Use `aetherctl --help` for the unified surface area and JSON-friendly automation via `--json`.
 
