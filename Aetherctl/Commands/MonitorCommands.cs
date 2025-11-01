@@ -77,12 +77,12 @@ namespace Aetherctl.Commands
                                             if (!Common.IsQuiet(parseResult))
                                             {
                                                 Console.WriteLine($"────────────────────────────────────────────────────────────");
-                                                Console.WriteLine($"Frame #{data.TryGetProperty("frameNumber", out var fn) ? fn.GetInt32() : frameCount}");
+                                                Console.WriteLine($"Frame #{(data.TryGetProperty("frameNumber", out var fn) ? fn.GetInt32() : frameCount)}");
 
                                                 if (data.TryGetProperty("rawPerception", out var perception))
                                                 {
                                                     if (perception.TryGetProperty("playerLocation", out var loc))
-                                                        Console.WriteLine($"  Player Location: ({loc.TryGetProperty("x", out var x) ? x.GetInt32() : 0}, {loc.TryGetProperty("y", out var y) ? y.GetInt32() : 0}, {loc.TryGetProperty("z", out var z) ? z.GetInt32() : 0})");
+                                                        Console.WriteLine($"  Player Location: ({(loc.TryGetProperty("x", out var x) ? x.GetInt32() : 0)}, {(loc.TryGetProperty("y", out var y) ? y.GetInt32() : 0)}, {(loc.TryGetProperty("z", out var z) ? z.GetInt32() : 0)})");
                                                 }
 
                                                 if (displayAscii && data.TryGetProperty("asciiMap", out var asciiMap))

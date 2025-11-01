@@ -369,6 +369,161 @@ namespace Aetherium.Server
             return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
         }
 
+        public async Task<InteractionResultDto> UsePortal(string portalEntityId)
+        {
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return new InteractionResultDto { Success = false, Reason = "No session" };
+
+            if (session.Player == null || session.ViewLocation == null)
+                return new InteractionResultDto { Success = false, Reason = "No player or view location" };
+
+            if (!session.World.Entities.TryGetValue(portalEntityId, out var portalEntityObj))
+                return new InteractionResultDto { Success = false, Reason = "Portal not found" };
+
+            var portalComponent = portalEntityObj.Get<PortalComponent>();
+            if (portalComponent == null)
+                return new InteractionResultDto { Success = false, Reason = "Not a portal" };
+
+            // Check if portal is active
+            if (!portalComponent.IsActive)
+                return new InteractionResultDto { Success = false, Reason = "Portal is not active" };
+
+            // Check if player is at portal location
+            var portalLoc = portalEntityObj.Get<WorldLocation>();
+            if (portalLoc == null || portalLoc != session.ViewLocation)
+                return new InteractionResultDto { Success = false, Reason = "Not at portal location" };
+
+            // Check activation requirements (simplified - full implementation would query meta-progression grain)
+            if (!string.IsNullOrEmpty(portalComponent.Activation))
+            {
+                // TODO: Check activation requirements via meta-progression grain
+                // For now, only allow portals with no activation requirements or "unlocked"
+                if (!portalComponent.Activation.Equals("unlocked", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new InteractionResultDto { Success = false, Reason = "Portal activation requirement not met" };
+                }
+            }
+
+            // Resolve portal target if needed
+            string? targetWorldId = portalComponent.TargetWorldId;
+            string? targetMapId = portalComponent.TargetMapId;
+
+            if (string.IsNullOrEmpty(targetWorldId) || string.IsNullOrEmpty(targetMapId))
+            {
+                // Need to resolve via cluster grain
+                if (clusterClient == null || session.WorldId == null)
+                    return new InteractionResultDto { Success = false, Reason = "Cluster resolution not available" };
+
+                var worldGrain = clusterClient.GetGrain<IWorldGrain>(session.WorldId);
+                var worldInfo = await worldGrain.GetInfoAsync();
+                
+                if (worldInfo == null || string.IsNullOrEmpty(worldInfo.ClusterId))
+                    return new InteractionResultDto { Success = false, Reason = "World not part of a cluster" };
+
+                var clusterGrain = clusterClient.GetGrain<IClusterGrain>(worldInfo.ClusterId);
+                var (resolvedWorldId, resolvedMapId) = await clusterGrain.ResolvePortalTargetAsync(portalComponent.PortalId, portalComponent.TargetTag);
+                
+                if (string.IsNullOrEmpty(resolvedWorldId) || string.IsNullOrEmpty(resolvedMapId))
+                    return new InteractionResultDto { Success = false, Reason = "Could not resolve portal target" };
+
+                targetWorldId = resolvedWorldId;
+                targetMapId = resolvedMapId;
+            }
+
+            // Transport player to target location
+            if (clusterClient == null || session.WorldId == null)
+                return new InteractionResultDto { Success = false, Reason = "Orleans not available for world transport" };
+
+            try
+            {
+                // For now, if target is in same world, move player between maps
+                if (targetWorldId == session.WorldId)
+                {
+                    var worldGrain = clusterClient.GetGrain<IWorldGrain>(targetWorldId);
+                    var moved = await worldGrain.MovePlayerToMapAsync(session.SessionId, targetMapId);
+                    
+                    if (!moved)
+                        return new InteractionResultDto { Success = false, Reason = "Failed to move player to target map" };
+                }
+                else
+                {
+                    // Cross-world transport - remove from current world, add to target world
+                    var currentWorldGrain = clusterClient.GetGrain<IWorldGrain>(session.WorldId);
+                    await currentWorldGrain.RemovePlayerAsync(session.SessionId);
+                    
+                    var targetWorldGrain = clusterClient.GetGrain<IWorldGrain>(targetWorldId);
+                    var added = await targetWorldGrain.AddPlayerAsync(session.SessionId, targetMapId);
+                    
+                    if (!added)
+                        return new InteractionResultDto { Success = false, Reason = "Failed to add player to target world" };
+                    
+                    // Update session world ID
+                    session.WorldId = targetWorldId;
+                    // TODO: Load new world/map into session
+                }
+
+            // Emit arrival event for narrative system
+            if (clusterClient != null && session.WorldId != null)
+            {
+                var eventData = new Dictionary<string, object>
+                {
+                    ["worldId"] = targetWorldId ?? "",
+                    ["mapId"] = targetMapId ?? "",
+                    ["playerId"] = session.SessionId
+                };
+                
+                await ProcessNarrativeEventAsync(session, "player_arrived", eventData);
+                
+                // Record discovery in meta-progression
+                if (!string.IsNullOrEmpty(targetWorldId) && !string.IsNullOrEmpty(targetMapId))
+                {
+                    try
+                    {
+                        // Get world and map info for discovery metadata
+                        var worldGrain = clusterClient.GetGrain<IWorldGrain>(targetWorldId);
+                        var worldInfo = await worldGrain.GetInfoAsync();
+                        
+                        string? worldTemplate = null;
+                        List<string>? tags = null;
+                        
+                        if (worldInfo?.Metadata != null)
+                        {
+                            if (worldInfo.Metadata.TryGetValue("generatorType", out var genType))
+                            {
+                                worldTemplate = genType?.ToString();
+                            }
+                            
+                            if (worldInfo.Metadata.TryGetValue("tags", out var tagsObj) && tagsObj is List<string> tagList)
+                            {
+                                tags = tagList;
+                            }
+                        }
+                        
+                        // Record discovery (use session ID as player ID for now)
+                        var metaProgGrain = clusterClient.GetGrain<MetaProgression.IMetaProgressionGrain>(session.SessionId);
+                        await metaProgGrain.RecordDiscoveryAsync(targetWorldId, targetMapId, worldTemplate, tags);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Non-breaking: log but don't fail portal transport
+                        Console.WriteLine($"[GameHub] Failed to record discovery: {ex.Message}");
+                    }
+                }
+            }
+
+                // Send updated perception to client
+                var perception = session.GetPerception();
+                await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+                
+                return new InteractionResultDto { Success = true, Reason = $"Transported to {targetWorldId}:{targetMapId}" };
+            }
+            catch (Exception ex)
+            {
+                return new InteractionResultDto { Success = false, Reason = $"Portal transport failed: {ex.Message}" };
+            }
+        }
+
         [Obsolete("Use ExecuteTool(\"setlightingmode\", args) instead. This method will be removed in a future version.")]
         public async Task SetLightingMode(LightingMode mode)
         {

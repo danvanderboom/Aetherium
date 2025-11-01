@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
@@ -116,7 +117,7 @@ namespace Aetherctl.Commands
                                 success = false,
                                 error = "Generation failed",
                                 errors = result.Errors,
-                                validationErrors = result.Validation?.Errors ?? Array.Empty<string>()
+                                validationErrors = result.Validation?.Errors ?? new List<string>()
                             });
                         }
                         else

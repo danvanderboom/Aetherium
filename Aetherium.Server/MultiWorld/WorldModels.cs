@@ -22,6 +22,7 @@ namespace Aetherium.Server.MultiWorld
         [Id(9)] public string CreatedBy { get; set; } = "system";
         [Id(10)] public string NarrativeStateScope { get; set; } = "shared"; // "shared" or "per-world"
         [Id(11)] public int? NarrativeSeed { get; set; } // Optional seed for deterministic narrative generation
+        [Id(12)] public string? ClusterId { get; set; } // Optional cluster ID for multi-world ecosystems
     }
 
     /// <summary>
@@ -65,6 +66,7 @@ namespace Aetherium.Server.MultiWorld
         [Id(8)] public string? NarrativeId { get; set; }
         [Id(9)] public List<string> MapIds { get; set; } = new List<string>(); // IDs of GameMapGrains
         [Id(10)] public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
+        [Id(11)] public string? ClusterId { get; set; } // Cluster ID for multi-world ecosystems
     }
 
     /// <summary>

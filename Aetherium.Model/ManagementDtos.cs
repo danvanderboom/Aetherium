@@ -82,6 +82,9 @@ namespace Aetherium.Model
         
         [Id(10)]
         public List<string> SessionIds { get; set; } = new List<string>(); // Active sessions in this world
+        
+        [Id(11)]
+        public string? ClusterId { get; set; } // Cluster ID for multi-world ecosystems
     }
 
     /// <summary>

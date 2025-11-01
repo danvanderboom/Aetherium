@@ -78,10 +78,18 @@ namespace Aetherium.Server.MultiWorld
                 MaxPlayers = config.MaxPlayers,
                 CreatedAt = config.CreatedAt,
                 NarrativeId = config.NarrativeId,
-                MapIds = new List<string>()
+                MapIds = new List<string>(),
+                ClusterId = config.ClusterId
             };
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
+
+            // Register with cluster if ClusterId is set
+            if (!string.IsNullOrEmpty(config.ClusterId))
+            {
+                var clusterGrain = _grainFactory.GetGrain<IClusterGrain>(config.ClusterId);
+                await clusterGrain.RegisterWorldAsync(config.WorldId);
+            }
 
             // Create initial map
             var initialMapId = await AddMapAsync(

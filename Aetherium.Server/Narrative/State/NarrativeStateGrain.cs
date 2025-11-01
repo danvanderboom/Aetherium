@@ -6,6 +6,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Aetherium.Server.Narrative;
+using Aetherium.Server.Narrative.CrossWorld;
+using Aetherium.Server.MultiWorld;
+using Aetherium.Server.MetaProgression;
 
 namespace Aetherium.Server.Narrative.State
 {
@@ -52,6 +55,44 @@ namespace Aetherium.Server.Narrative.State
             _state.State.ActiveQuestIds.Remove(questId);
 
             await _state.WriteStateAsync();
+
+            // Record quest completion in meta-progression
+            try
+            {
+                // Determine if this is a cross-world quest by checking objectives
+                var narrativeGrain = GrainFactory.GetGrain<INarrativeGrain>(_state.State.NarrativeId);
+                var narrative = await narrativeGrain.GetNarrativeAsync();
+                
+                bool isCrossWorld = false;
+                QuestDefinition? quest = null;
+                
+                if (narrative != null)
+                {
+                    quest = narrative.Quests.FirstOrDefault(q => q.QuestId == questId);
+                }
+                
+                if (quest == null)
+                {
+                    quest = _state.State.GeneratedQuests.FirstOrDefault(q => q.QuestId == questId);
+                }
+
+                if (quest != null && quest.Objectives != null)
+                {
+                    // Check if quest has any travel_to objectives
+                    isCrossWorld = quest.Objectives.Any(obj => obj.Type == "travel_to");
+                }
+
+                // Get player ID from state (use world ID as a fallback)
+                // Note: In a full implementation, you'd get the player ID from context
+                var playerId = _state.State.WorldId ?? _state.State.StateId;
+                var metaProgGrain = GrainFactory.GetGrain<IMetaProgressionGrain>(playerId);
+                await metaProgGrain.RecordQuestCompletionAsync(questId, isCrossWorld);
+            }
+            catch (Exception ex)
+            {
+                // Non-breaking: log but don't fail quest completion
+                Console.WriteLine($"[NarrativeStateGrain] Failed to record quest completion: {ex.Message}");
+            }
         }
 
         public async Task RecordEventAsync(string eventType, Dictionary<string, object> eventData)
@@ -73,7 +114,185 @@ namespace Aetherium.Server.Narrative.State
                 _state.State.Events.RemoveAt(0);
             }
 
+            // Handle player_arrived events for travel_to objectives
+            if (eventType == "player_arrived" && eventData != null)
+            {
+                await HandlePlayerArrivedEventAsync(eventData);
+            }
+
             await _state.WriteStateAsync();
+        }
+
+        /// <summary>
+        /// Handles player_arrived events by checking if any travel_to objectives are complete.
+        /// </summary>
+        private async Task HandlePlayerArrivedEventAsync(Dictionary<string, object> eventData)
+        {
+            if (_state.State == null)
+                return;
+
+            // Extract arrival location from event
+            if (!eventData.TryGetValue("worldId", out var worldIdObj) ||
+                !eventData.TryGetValue("mapId", out var mapIdObj))
+                return;
+
+            var arrivedWorldId = worldIdObj?.ToString();
+            var arrivedMapId = mapIdObj?.ToString();
+
+            if (string.IsNullOrEmpty(arrivedWorldId) || string.IsNullOrEmpty(arrivedMapId))
+                return;
+
+            // Get all active quests and check for travel_to objectives
+            var activeQuestIds = _state.State.ActiveQuestIds.ToList();
+            
+            foreach (var questId in activeQuestIds)
+            {
+                // Get quest definition
+                var narrativeGrain = GrainFactory.GetGrain<INarrativeGrain>(_state.State.NarrativeId);
+                var narrative = await narrativeGrain.GetNarrativeAsync();
+                
+                QuestDefinition? quest = null;
+                if (narrative != null)
+                {
+                    quest = narrative.Quests.FirstOrDefault(q => q.QuestId == questId);
+                }
+                
+                if (quest == null)
+                {
+                    quest = _state.State.GeneratedQuests.FirstOrDefault(q => q.QuestId == questId);
+                }
+
+                if (quest == null || quest.Objectives == null)
+                    continue;
+
+                // Check each objective for travel_to type
+                foreach (var objective in quest.Objectives)
+                {
+                    if (objective.Type != "travel_to")
+                        continue;
+
+                    // Check if this objective is already completed
+                    if (_state.State.CompletedObjectives.TryGetValue(questId, out var completed) &&
+                        completed.Contains(objective.ObjectiveId))
+                        continue;
+
+                    // Check if arrival matches this objective's target
+                    if (await IsTravelToObjectiveCompleteAsync(objective, arrivedWorldId, arrivedMapId))
+                    {
+                        // Mark objective as complete
+                        if (!_state.State.CompletedObjectives.ContainsKey(questId))
+                        {
+                            _state.State.CompletedObjectives[questId] = new HashSet<string>();
+                        }
+                        
+                        _state.State.CompletedObjectives[questId].Add(objective.ObjectiveId);
+
+                        // Check if all objectives are complete
+                        if (AreAllObjectivesComplete(quest))
+                        {
+                            await MarkQuestCompletedAsync(questId);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if a travel_to objective matches the arrival location.
+        /// </summary>
+        private async Task<bool> IsTravelToObjectiveCompleteAsync(
+            QuestObjective objective,
+            string arrivedWorldId,
+            string arrivedMapId)
+        {
+            if (objective.Parameters == null || objective.Parameters.Count == 0)
+                return false;
+
+            // Extract constraint from objective parameters
+            var constraint = ExtractCrossWorldConstraintFromObjective(objective);
+            if (constraint == null)
+                return false;
+
+            // Get cluster ID from world
+            var worldGrain = GrainFactory.GetGrain<IWorldGrain>(arrivedWorldId);
+            var worldInfo = await worldGrain.GetInfoAsync();
+
+            if (worldInfo == null || string.IsNullOrEmpty(worldInfo.ClusterId))
+                return false;
+
+            // Resolve constraint to target location
+            var (targetWorldId, targetMapId) = await CrossWorldConstraintResolver.ResolveTargetAsync(
+                constraint,
+                worldInfo.ClusterId,
+                GrainFactory);
+
+            // Check if arrival matches target
+            return targetWorldId == arrivedWorldId && targetMapId == arrivedMapId;
+        }
+
+        /// <summary>
+        /// Extracts a CrossWorldConstraint from a quest objective's parameters.
+        /// </summary>
+        private static CrossWorldConstraint? ExtractCrossWorldConstraintFromObjective(QuestObjective objective)
+        {
+            if (objective.Parameters == null)
+                return null;
+
+            var constraint = new CrossWorldConstraint();
+
+            // Extract world selector
+            if (objective.Parameters.TryGetValue("worldSelector", out var worldSelObj) &&
+                worldSelObj is Dictionary<string, object> worldSelDict)
+            {
+                constraint.WorldSelector = new WorldSelector
+                {
+                    WorldId = worldSelDict.TryGetValue("worldId", out var wid) ? wid?.ToString() : null,
+                    WorldTag = worldSelDict.TryGetValue("worldTag", out var wtag) ? wtag?.ToString() : null,
+                    WorldTemplate = worldSelDict.TryGetValue("worldTemplate", out var wtmpl) ? wtmpl?.ToString() : null
+                };
+
+                if (worldSelDict.TryGetValue("excludeWorldIds", out var exclObj) &&
+                    exclObj is List<string> excludeList)
+                {
+                    constraint.WorldSelector.ExcludeWorldIds = excludeList;
+                }
+            }
+
+            // Extract map selector
+            if (objective.Parameters.TryGetValue("mapSelector", out var mapSelObj) &&
+                mapSelObj is Dictionary<string, object> mapSelDict)
+            {
+                constraint.MapSelector = new MapSelector
+                {
+                    MapId = mapSelDict.TryGetValue("mapId", out var mid) ? mid?.ToString() : null,
+                    MapTag = mapSelDict.TryGetValue("mapTag", out var mtag) ? mtag?.ToString() : null,
+                    MapName = mapSelDict.TryGetValue("mapName", out var mname) ? mname?.ToString() : null
+                };
+            }
+
+            // Extract requires unlock
+            if (objective.Parameters.TryGetValue("requiresUnlock", out var reqUnlockObj))
+            {
+                constraint.RequiresUnlock = reqUnlockObj is bool reqUnlock ? reqUnlock :
+                                             bool.TryParse(reqUnlockObj?.ToString(), out var parsed) && parsed;
+            }
+
+            // Return constraint if we have at least a world or map selector
+            return (constraint.WorldSelector != null || constraint.MapSelector != null) ? constraint : null;
+        }
+
+        /// <summary>
+        /// Checks if all objectives for a quest are complete.
+        /// </summary>
+        private bool AreAllObjectivesComplete(QuestDefinition quest)
+        {
+            if (_state.State == null || quest.Objectives == null || quest.Objectives.Count == 0)
+                return false;
+
+            if (!_state.State.CompletedObjectives.TryGetValue(quest.QuestId, out var completed))
+                return false;
+
+            return quest.Objectives.All(obj => completed.Contains(obj.ObjectiveId));
         }
 
         public async Task AddGeneratedQuestAsync(QuestDefinition quest)

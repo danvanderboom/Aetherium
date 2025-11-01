@@ -129,26 +129,98 @@ namespace Aetherium.Server.MultiWorld
             return (null, null);
         }
 
-        private Task<(string? worldId, string? mapId)> ResolveTargetByTagAsync(string tag)
+        private async Task<(string? worldId, string? mapId)> ResolveTargetByTagAsync(string tag)
         {
             if (_state.State == null)
-                return Task.FromResult<(string?, string?)>((null, null));
+                return (null, null);
 
-            // Simple resolution: find first map in a world matching the tag
-            // In a full implementation, this could query world metadata or use more sophisticated matching
+            if (string.IsNullOrEmpty(tag))
+                return (null, null);
+
+            var tagLower = tag.ToLowerInvariant();
+
+            // Query worlds and maps to find matches by tag
             foreach (var worldId in _state.State.Info.WorldIds)
             {
-                // Try to find a matching market (which implies a map exists)
-                var matchingMarket = _state.State.Economy.Markets.Values
-                    .FirstOrDefault(m => m.WorldId == worldId);
+                var worldGrain = GrainFactory.GetGrain<IWorldGrain>(worldId);
+                var worldInfo = await worldGrain.GetInfoAsync();
+                
+                if (worldInfo == null)
+                    continue;
 
-                if (matchingMarket != null)
+                // Check world metadata for tags
+                if (worldInfo.Metadata != null)
                 {
-                    return Task.FromResult<(string?, string?)>((matchingMarket.WorldId, matchingMarket.MapId));
+                    if (worldInfo.Metadata.TryGetValue("tags", out var tagsObj) && tagsObj is List<string> tags)
+                    {
+                        if (tags.Any(t => t.ToLowerInvariant() == tagLower))
+                        {
+                            // Found matching world, return first map
+                            if (worldInfo.MapIds != null && worldInfo.MapIds.Count > 0)
+                            {
+                                return (worldId, worldInfo.MapIds[0]);
+                            }
+                        }
+                    }
+
+                    // Check if tag matches generator type hint in metadata
+                    if (worldInfo.Metadata.TryGetValue("generatorType", out var genTypeObj))
+                    {
+                        var genType = genTypeObj?.ToString() ?? "";
+                        if (genType.ToLowerInvariant().Contains(tagLower))
+                        {
+                            if (worldInfo.MapIds != null && worldInfo.MapIds.Count > 0)
+                            {
+                                return (worldId, worldInfo.MapIds[0]);
+                            }
+                        }
+                    }
+                }
+
+                // Query maps in this world for tag matches
+                if (worldInfo.MapIds != null)
+                {
+                    foreach (var mapId in worldInfo.MapIds)
+                    {
+                        var mapGrain = GrainFactory.GetGrain<IGameMapGrain>(mapId);
+                        var mapMetadata = await mapGrain.GetMetadataAsync();
+                        
+                        if (mapMetadata != null)
+                        {
+                            // Check if generator type matches tag (e.g., "hub" in generator type)
+                            if (mapMetadata.GeneratorType != null && 
+                                mapMetadata.GeneratorType.ToLowerInvariant().Contains(tagLower))
+                            {
+                                return (worldId, mapId);
+                            }
+
+                            // Check map name for tag matches
+                            if (mapMetadata.MapName != null && 
+                                mapMetadata.MapName.ToLowerInvariant().Contains(tagLower))
+                            {
+                                return (worldId, mapId);
+                            }
+                        }
+                    }
                 }
             }
 
-            return Task.FromResult<(string?, string?)>((null, null));
+            // Fallback: return first available world/map if tag is generic
+            if (tagLower == "any" || tagLower == "random")
+            {
+                var firstWorldId = _state.State.Info.WorldIds.FirstOrDefault();
+                if (firstWorldId != null)
+                {
+                    var worldGrain = GrainFactory.GetGrain<IWorldGrain>(firstWorldId);
+                    var worldInfo = await worldGrain.GetInfoAsync();
+                    if (worldInfo?.MapIds != null && worldInfo.MapIds.Count > 0)
+                    {
+                        return (firstWorldId, worldInfo.MapIds[0]);
+                    }
+                }
+            }
+
+            return (null, null);
         }
 
         public Task<List<PortalLink>> GetPortalsAsync()
@@ -224,19 +296,44 @@ namespace Aetherium.Server.MultiWorld
             var now = DateTime.UtcNow;
             var economy = _state.State.Economy;
 
-            // Process transports
+            // Process existing transports
             foreach (var transport in economy.TransportSchedules.ToList())
             {
                 if (transport.Status == TransportStatus.Scheduled && transport.DepartureTime <= now)
                 {
+                    // Depart - remove resources from source market
                     transport.Status = TransportStatus.InTransit;
+                    
+                    var route = economy.TradeRoutes.FirstOrDefault(r => r.RouteId == transport.RouteId);
+                    if (route != null)
+                    {
+                        var sourceMarket = economy.Markets.Values.FirstOrDefault(m => m.MarketId == route.SourceMarketId);
+                        if (sourceMarket != null)
+                        {
+                            // Remove cargo from source market
+                            foreach (var cargoItem in transport.Cargo)
+                            {
+                                if (sourceMarket.ResourceAvailability.ContainsKey(cargoItem.Key))
+                                {
+                                    sourceMarket.ResourceAvailability[cargoItem.Key] = 
+                                        Math.Max(0, sourceMarket.ResourceAvailability[cargoItem.Key] - cargoItem.Value);
+                                    
+                                    // Update supply in pricing
+                                    if (sourceMarket.ResourcePrices.ContainsKey(cargoItem.Key))
+                                    {
+                                        sourceMarket.ResourcePrices[cargoItem.Key].Supply = 
+                                            Math.Max(0, sourceMarket.ResourcePrices[cargoItem.Key].Supply - cargoItem.Value);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 else if (transport.Status == TransportStatus.InTransit && transport.ArrivalTime <= now)
                 {
-                    // Arrive at destination
+                    // Arrive at destination - add resources to destination market
                     transport.Status = TransportStatus.Arrived;
                     
-                    // Find route and update destination market
                     var route = economy.TradeRoutes.FirstOrDefault(r => r.RouteId == transport.RouteId);
                     if (route != null)
                     {
@@ -245,6 +342,7 @@ namespace Aetherium.Server.MultiWorld
                         {
                             foreach (var cargoItem in transport.Cargo)
                             {
+                                // Add to availability
                                 if (!destMarket.ResourceAvailability.ContainsKey(cargoItem.Key))
                                     destMarket.ResourceAvailability[cargoItem.Key] = 0;
                                 destMarket.ResourceAvailability[cargoItem.Key] += cargoItem.Value;
@@ -269,6 +367,7 @@ namespace Aetherium.Server.MultiWorld
                         }
                     }
 
+                    // Mark as completed after a short delay (resources have been delivered)
                     transport.Status = TransportStatus.Completed;
                 }
             }
@@ -278,14 +377,75 @@ namespace Aetherium.Server.MultiWorld
                 t.Status == TransportStatus.Completed && 
                 t.ArrivalTime.AddHours(1) < now);
 
+            // Create new transports for trade routes that don't have pending transports
+            foreach (var route in economy.TradeRoutes)
+            {
+                // Check if there are any pending transports for this route
+                var hasPendingTransport = economy.TransportSchedules.Any(t => 
+                    t.RouteId == route.RouteId && 
+                    (t.Status == TransportStatus.Scheduled || t.Status == TransportStatus.InTransit));
+
+                if (!hasPendingTransport)
+                {
+                    // Try to create a new transport if source market has available resources
+                    var sourceMarket = economy.Markets.Values.FirstOrDefault(m => m.MarketId == route.SourceMarketId);
+                    if (sourceMarket != null)
+                    {
+                        var cargo = new Dictionary<string, int>();
+                        
+                        // Load available resources up to capacity
+                        var remainingCapacity = route.Capacity;
+                        foreach (var resourceType in route.ResourceTypes)
+                        {
+                            if (remainingCapacity <= 0)
+                                break;
+                                
+                            if (sourceMarket.ResourceAvailability.TryGetValue(resourceType, out var available) && available > 0)
+                            {
+                                var quantity = Math.Min(available, remainingCapacity);
+                                cargo[resourceType] = quantity;
+                                remainingCapacity -= quantity;
+                            }
+                        }
+
+                        // Only schedule if there's cargo to transport
+                        if (cargo.Count > 0)
+                        {
+                            var nextDeparture = now.AddMinutes(5); // Schedule departure in 5 minutes
+                            var schedule = new TransportSchedule
+                            {
+                                ScheduleId = $"transport-{Guid.NewGuid():N}",
+                                RouteId = route.RouteId,
+                                DepartureTime = nextDeparture,
+                                ArrivalTime = nextDeparture.Add(route.TravelTime),
+                                Cargo = cargo,
+                                Status = TransportStatus.Scheduled
+                            };
+
+                            economy.TransportSchedules.Add(schedule);
+                        }
+                    }
+                }
+            }
+
             // Update prices based on supply/demand
             foreach (var market in economy.Markets.Values)
             {
                 foreach (var pricing in market.ResourcePrices.Values)
                 {
-                    // Simple price adjustment: high supply -> lower price, high demand -> higher price
-                    var supplyRatio = pricing.Supply > 0 ? pricing.Demand / pricing.Supply : 1.0;
-                    pricing.CurrentPrice = pricing.BasePrice * (1.0 + (supplyRatio - 1.0) * 0.5); // Max 50% price variation
+                    // Calculate price based on supply/demand ratio
+                    // High supply -> lower price, high demand -> higher price
+                    var supplyDemandRatio = pricing.Supply > 0 ? pricing.Demand / pricing.Supply : 1.0;
+                    
+                    // Price adjustment: 50% variation based on ratio
+                    // If supply >> demand (ratio < 1), price decreases
+                    // If demand >> supply (ratio > 1), price increases
+                    var priceMultiplier = 1.0 + (supplyDemandRatio - 1.0) * 0.5;
+                    
+                    // Clamp price variation to reasonable bounds (0.5x to 2x base price)
+                    priceMultiplier = Math.Max(0.5, Math.Min(2.0, priceMultiplier));
+                    
+                    pricing.CurrentPrice = pricing.BasePrice * priceMultiplier;
                 }
             }
 

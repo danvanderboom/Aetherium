@@ -51,7 +51,8 @@ namespace Aetherctl
             Commands.Common.VerboseOption = verboseOpt;
             Commands.Common.QuietOption = quietOpt;
 
-            // Add subcommands (will be implemented in next steps)
+            // Add subcommands
+            Commands.ServerCommands.AddToRoot(rootCommand);
             Commands.SessionCommands.AddToRoot(rootCommand);
             Commands.AgentCommands.AddToRoot(rootCommand);
             Commands.ToolsCommands.AddToRoot(rootCommand);

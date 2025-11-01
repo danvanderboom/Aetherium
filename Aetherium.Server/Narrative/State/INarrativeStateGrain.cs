@@ -70,6 +70,8 @@ namespace Aetherium.Server.Narrative.State
         [Id(5)] public List<QuestDefinition> GeneratedQuests { get; set; } = new List<QuestDefinition>();
         [Id(6)] public List<NarrativeEvent> Events { get; set; } = new List<NarrativeEvent>();
         [Id(7)] public Dictionary<string, Dictionary<string, float>> Relationships { get; set; } = new Dictionary<string, Dictionary<string, float>>(); // NPC ID -> (NPC ID -> relationship value)
+        [Id(8)] public Dictionary<string, List<string>> ActiveQuestObjectives { get; set; } = new Dictionary<string, List<string>>(); // QuestId -> List of ObjectiveIds
+        [Id(9)] public Dictionary<string, HashSet<string>> CompletedObjectives { get; set; } = new Dictionary<string, HashSet<string>>(); // QuestId -> Set of completed ObjectiveIds
     }
 
     /// <summary>

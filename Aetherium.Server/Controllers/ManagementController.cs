@@ -53,7 +53,8 @@ namespace Aetherium.Server.Controllers
                     CreatedAt = w.CreatedAt,
                     LastActivityAt = w.LastActivityAt,
                     NarrativeId = w.NarrativeId,
-                    MapIds = w.MapIds ?? new List<string>()
+                    MapIds = w.MapIds ?? new List<string>(),
+                    ClusterId = w.ClusterId
                 }).ToList();
 
                 return Ok(dtos);
@@ -89,7 +90,8 @@ namespace Aetherium.Server.Controllers
                     CreatedAt = world.CreatedAt,
                     LastActivityAt = world.LastActivityAt,
                     NarrativeId = world.NarrativeId,
-                    MapIds = world.MapIds ?? new List<string>()
+                    MapIds = world.MapIds ?? new List<string>(),
+                    ClusterId = world.ClusterId
                 };
 
                 return Ok(dto);
@@ -143,7 +145,8 @@ namespace Aetherium.Server.Controllers
                     CreatedAt = world.CreatedAt,
                     LastActivityAt = world.LastActivityAt,
                     NarrativeId = world.NarrativeId,
-                    MapIds = world.MapIds ?? new List<string>()
+                    MapIds = world.MapIds ?? new List<string>(),
+                    ClusterId = world.ClusterId
                 };
 
                 return CreatedAtAction(nameof(GetWorld), new { worldId = worldId }, dto);

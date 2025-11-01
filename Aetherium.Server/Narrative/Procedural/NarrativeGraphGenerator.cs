@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Aetherium.Server.Narrative;
+using Aetherium.Server.Narrative.CrossWorld;
 
 namespace Aetherium.Server.Narrative.Procedural
 {
@@ -232,15 +233,31 @@ namespace Aetherium.Server.Narrative.Procedural
                 Rewards = new Dictionary<string, string>()
             };
 
-            // Convert goal objectives to quest objectives
+            // Convert goal objectives to quest objectives, checking for cross-world constraints
             foreach (var goalObjective in goal.Objectives)
             {
-                quest.Objectives.Add(new QuestObjective
+                // Check if this objective has a cross-world constraint
+                var crossWorldConstraint = ExtractCrossWorldConstraint(goalObjective.Parameters);
+                
+                if (crossWorldConstraint != null)
                 {
-                    ObjectiveId = goalObjective.ObjectiveId,
-                    Type = goalObjective.Type,
-                    Parameters = goalObjective.Parameters ?? new Dictionary<string, object>()
-                });
+                    // Emit travel_to objective for cross-world travel
+                    var travelObjective = CreateTravelToObjective(goalObjective.ObjectiveId, crossWorldConstraint);
+                    if (travelObjective != null)
+                    {
+                        quest.Objectives.Add(travelObjective);
+                    }
+                }
+                else
+                {
+                    // Regular objective
+                    quest.Objectives.Add(new QuestObjective
+                    {
+                        ObjectiveId = goalObjective.ObjectiveId,
+                        Type = goalObjective.Type,
+                        Parameters = goalObjective.Parameters ?? new Dictionary<string, object>()
+                    });
+                }
             }
 
             // Add rewards
@@ -248,6 +265,126 @@ namespace Aetherium.Server.Narrative.Procedural
             quest.Rewards["Gold"] = "50";
 
             return quest;
+        }
+
+        /// <summary>
+        /// Extracts a CrossWorldConstraint from goal objective parameters.
+        /// </summary>
+        private static CrossWorldConstraint? ExtractCrossWorldConstraint(Dictionary<string, object>? parameters)
+        {
+            if (parameters == null)
+                return null;
+
+            // Check for cross-world constraint in parameters
+            // Format: { "crossWorld": { "worldSelector": {...}, "mapSelector": {...} } }
+            if (parameters.TryGetValue("crossWorld", out var crossWorldObj))
+            {
+                if (crossWorldObj is Dictionary<string, object> crossWorldDict)
+                {
+                    var constraint = new CrossWorldConstraint();
+
+                    // Extract world selector
+                    if (crossWorldDict.TryGetValue("worldSelector", out var worldSelObj) && 
+                        worldSelObj is Dictionary<string, object> worldSelDict)
+                    {
+                        constraint.WorldSelector = new WorldSelector
+                        {
+                            WorldId = worldSelDict.TryGetValue("worldId", out var wid) ? wid?.ToString() : null,
+                            WorldTag = worldSelDict.TryGetValue("worldTag", out var wtag) ? wtag?.ToString() : null,
+                            WorldTemplate = worldSelDict.TryGetValue("worldTemplate", out var wtmpl) ? wtmpl?.ToString() : null
+                        };
+
+                        if (worldSelDict.TryGetValue("excludeWorldIds", out var exclObj) && 
+                            exclObj is List<string> excludeList)
+                        {
+                            constraint.WorldSelector.ExcludeWorldIds = excludeList;
+                        }
+                    }
+
+                    // Extract map selector
+                    if (crossWorldDict.TryGetValue("mapSelector", out var mapSelObj) && 
+                        mapSelObj is Dictionary<string, object> mapSelDict)
+                    {
+                        constraint.MapSelector = new MapSelector
+                        {
+                            MapId = mapSelDict.TryGetValue("mapId", out var mid) ? mid?.ToString() : null,
+                            MapTag = mapSelDict.TryGetValue("mapTag", out var mtag) ? mtag?.ToString() : null,
+                            MapName = mapSelDict.TryGetValue("mapName", out var mname) ? mname?.ToString() : null
+                        };
+                    }
+
+                    // Extract requires unlock flag
+                    if (crossWorldDict.TryGetValue("requiresUnlock", out var reqUnlockObj))
+                    {
+                        constraint.RequiresUnlock = reqUnlockObj is bool reqUnlock ? reqUnlock : 
+                                                     bool.TryParse(reqUnlockObj?.ToString(), out var parsed) && parsed;
+                    }
+
+                    // Only return if we have at least a world or map selector
+                    if (constraint.WorldSelector != null || constraint.MapSelector != null)
+                    {
+                        return constraint;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Creates a travel_to quest objective from a cross-world constraint.
+        /// </summary>
+        private static QuestObjective? CreateTravelToObjective(
+            string baseObjectiveId,
+            CrossWorldConstraint constraint)
+        {
+            if (constraint == null)
+                return null;
+
+            var parameters = new Dictionary<string, object>();
+
+            // Add world selector parameters
+            if (constraint.WorldSelector != null)
+            {
+                var worldSelDict = new Dictionary<string, object>();
+                if (!string.IsNullOrEmpty(constraint.WorldSelector.WorldId))
+                    worldSelDict["worldId"] = constraint.WorldSelector.WorldId;
+                if (!string.IsNullOrEmpty(constraint.WorldSelector.WorldTag))
+                    worldSelDict["worldTag"] = constraint.WorldSelector.WorldTag;
+                if (!string.IsNullOrEmpty(constraint.WorldSelector.WorldTemplate))
+                    worldSelDict["worldTemplate"] = constraint.WorldSelector.WorldTemplate;
+                if (constraint.WorldSelector.ExcludeWorldIds != null && constraint.WorldSelector.ExcludeWorldIds.Count > 0)
+                    worldSelDict["excludeWorldIds"] = constraint.WorldSelector.ExcludeWorldIds;
+
+                parameters["worldSelector"] = worldSelDict;
+            }
+
+            // Add map selector parameters
+            if (constraint.MapSelector != null)
+            {
+                var mapSelDict = new Dictionary<string, object>();
+                if (!string.IsNullOrEmpty(constraint.MapSelector.MapId))
+                    mapSelDict["mapId"] = constraint.MapSelector.MapId;
+                if (!string.IsNullOrEmpty(constraint.MapSelector.MapTag))
+                    mapSelDict["mapTag"] = constraint.MapSelector.MapTag;
+                if (!string.IsNullOrEmpty(constraint.MapSelector.MapName))
+                    mapSelDict["mapName"] = constraint.MapSelector.MapName;
+
+                parameters["mapSelector"] = mapSelDict;
+            }
+
+            // Add requires unlock flag
+            if (constraint.RequiresUnlock)
+            {
+                parameters["requiresUnlock"] = true;
+            }
+
+            return new QuestObjective
+            {
+                ObjectiveId = $"{baseObjectiveId}-travel",
+                Type = "travel_to",
+                Parameters = parameters
+            };
         }
 
         /// <summary>

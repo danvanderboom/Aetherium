@@ -99,6 +99,54 @@ namespace Aetherium.Server.MultiWorld
             // Partition map into regions and initialize region grains
             await PartitionIntoRegionsAsync();
 
+            // Get world info to check for cluster registration
+            var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+            var worldInfo = await worldGrain.GetInfoAsync();
+
+            // Register map and portals with cluster if world is part of a cluster
+            if (worldInfo != null && !string.IsNullOrEmpty(worldInfo.ClusterId))
+            {
+                var clusterGrain = _grainFactory.GetGrain<IClusterGrain>(worldInfo.ClusterId);
+                
+                // Register map with cluster (creates market automatically)
+                await clusterGrain.RegisterMapAsync(worldId, mapId);
+
+                // Extract and register portals from world entities
+                if (_world != null && _world.EntitiesByLocation != null)
+                {
+                    foreach (var locationKvp in _world.EntitiesByLocation)
+                    {
+                        var entitiesAtLocation = locationKvp.Value;
+                        if (entitiesAtLocation != null)
+                        {
+                            foreach (var entityKvp in entitiesAtLocation)
+                            {
+                                var entity = entityKvp.Value;
+                                if (entity != null)
+                                {
+                                    var portalComponent = entity.Get<PortalComponent>();
+                                    if (portalComponent != null)
+                                    {
+                                        var portalLink = new PortalLink
+                                        {
+                                            PortalId = portalComponent.PortalId,
+                                            SourceWorldId = worldId,
+                                            SourceMapId = mapId,
+                                            TargetWorldId = portalComponent.TargetWorldId,
+                                            TargetMapId = portalComponent.TargetMapId,
+                                            TargetTag = portalComponent.TargetTag,
+                                            IsResolved = !string.IsNullOrEmpty(portalComponent.TargetWorldId)
+                                        };
+
+                                        await clusterGrain.RegisterPortalAsync(portalLink);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Update state
             _mapState.State = new MapState
             {
