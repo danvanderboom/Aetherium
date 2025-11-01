@@ -6,7 +6,7 @@
 - **Aetherium.Model**: ✅ Built successfully
 - **Aetherium.Server**: ✅ Built successfully  
 - **Aetherium.Console**: ✅ Built successfully
-- **Aetherium.Test**: ✅ All 91 tests passed
+- **Aetherium.Test**: ✅ All 597 tests passed (2 skipped)
 
 ### How to Run
 

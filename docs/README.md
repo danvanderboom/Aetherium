@@ -46,6 +46,7 @@ The game features a comprehensive extensible agent tool system:
 ### Architecture & Design
 - ✅ [Agent Tool System](agents/TOOLS.md) - Extensible tool architecture
 - ✅ [Narrative Systems](narrative-systems.md) - Procedural storytelling and emergent narratives
+- ✅ [Development Guide](development.md) - Developer setup, testing, and workflow
 - Coming soon: System architecture overview
 - Coming soon: Entity-Component-System (ECS) guide
 - Coming soon: Client-Server communication protocol
@@ -69,10 +70,11 @@ The game features a comprehensive extensible agent tool system:
 - **Looking for a key?** → [Controls Guide](console/user/controls.md)
 
 ### For Developers
+- **Getting started?** → [Development Guide](development.md)
 - **Planning a change?** → [OpenSpec Agents Guide](../openspec/AGENTS.md)
 - **Working with agents?** → [Agent System Guide](agents/README.md)
 - **Exploring the code?** → Start with `Aetherium.Server/` and `Aetherium.Console/`
-- **Running tests?** → See `Aetherium.Test/`
+- **Running tests?** → [Development Guide - Testing](development.md#testing)
 
 ## Project Structure
 
@@ -146,12 +148,12 @@ Aetherium.Console/
 ### Planned Developer Documentation
 - [x] Agent tool system architecture
 - [x] Narrative systems guide
+- [x] Development guide (testing, workflow, best practices)
 - [ ] System architecture overview
 - [ ] ECS system guide
 - [ ] Perception system deep dive
 - [ ] Network protocol specification
 - [ ] Performance optimization guide
-- [ ] Testing strategy guide
 
 ## Getting Help
 

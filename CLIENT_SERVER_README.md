@@ -126,9 +126,20 @@ dotnet build Aetherium.Console/Aetherium.Console.csproj
 
 Run the test suite:
 ```powershell
+# Run all tests
+dotnet test Aetherium.sln
+
+# Run tests in Release configuration
+dotnet test Aetherium.sln -c Release
+
+# Run specific test project
 cd Aetherium.Test
 dotnet test
 ```
+
+**Current Test Status**: 597 passed, 0 failed, 2 skipped
+
+For detailed testing information, see [Development Guide - Testing](../docs/development.md#testing).
 
 ## Troubleshooting
 
