@@ -28,8 +28,7 @@ Aetherium.sln
 ├── Aetherium.Test/           # Test suite
 ├── Aetherium.Dashboard/      # Web dashboard for game management
 ├── Aetherctl/                # Unified CLI tool (see a.plan.md)
-├── AgentCLI/                 # Legacy agent CLI (deprecated)
-└── WorldGenCLI/              # Legacy world generation CLI (deprecated)
+└── WorldGenCLI/              # Library for world generation API/services/rendering (used by aetherctl, dashboard, tests)
 ```
 
 ### Building
