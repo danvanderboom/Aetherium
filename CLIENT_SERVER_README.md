@@ -75,6 +75,43 @@ Client API (`Aetherium.Console/Client/GameClient.cs`) exposes `PickupAsync`, `Dr
 - Client only receives what the player can perceive (FOV-based)
 - Lighting and vision systems computed server-side
 - Automatic reconnection if connection drops
+- Orleans SignalR backplane for distributed scaling
+- Azure AD B2C authentication for management operations
+
+## SignalR Configuration
+
+### Orleans SignalR Backplane
+
+The server uses `UFX.Orleans.SignalRBackplane` for distributed SignalR scaling. The backplane is automatically configured when Orleans is enabled - no explicit configuration needed.
+
+**How it works:**
+- SignalR connections, users, and groups are represented as Orleans grains
+- Messages are distributed across silos using Orleans infrastructure
+- No external dependencies (Redis, Azure SignalR Service) required
+- Scales horizontally with Orleans cluster
+
+**Configuration:**
+- Automatically enabled when `UFX.Orleans.SignalRBackplane` package is referenced
+- Orleans must be enabled (not disabled via `DISABLE_ORLEANS=1`)
+- Configured in `Aetherium.Server/Program.cs` during service setup
+
+### SignalR Hubs
+
+#### GameHub (`/gamehub`)
+- **Purpose**: Gameplay communication (client-server game state)
+- **Authentication**: Optional (can be configured for authenticated gameplay)
+- **Features**: Player actions, perception updates, game state synchronization
+
+#### ManagementHub (`/managementHub`)
+- **Purpose**: World management operations
+- **Authentication**: Required (Azure AD B2C with Admin role for write operations)
+- **Features**: World creation, pause/resume, shutdown, status queries
+- **Client**: Use `Aetherctl.SignalR.ManagementClient` from `aetherctl` CLI
+
+#### AgentDashboardHub (`/agentDashboardHub`)
+- **Purpose**: Agent telemetry and monitoring
+- **Authentication**: Optional
+- **Features**: Agent status, activity monitoring, telemetry streaming
 
 ## DTO Additions
 

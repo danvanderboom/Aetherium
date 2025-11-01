@@ -154,11 +154,61 @@ Added API key authentication middleware for control-plane endpoints. Requires `D
 - `Aetherium.Server/Controllers/ManagementController.cs` - Management API endpoints
 - `Aetherium.Dashboard/` - Web dashboard for game management
 
-### Unified CLI (a.plan.md)
+### Unified CLI (`aetherctl`)
 
-Planned unified CLI tool (`aetherctl`) to consolidate operator tooling. See `a.plan.md` in the project root for the complete specification.
+The unified CLI tool (`aetherctl`) provides world management and server administration. It supports both SignalR (with Azure AD B2C authentication) and Orleans direct connections.
 
-**Status:** Planning phase - see `a.plan.md` for details
+**Status:** Implemented and functional
+
+#### World Management Commands
+
+All world commands support both SignalR and Orleans connections:
+
+```powershell
+# List all worlds
+aetherctl world list
+
+# Create a new world
+aetherctl world create "My World" "A test world" --width 200 --height 200
+
+# Get world information
+aetherctl world info <worldId>
+
+# Pause a world
+aetherctl world pause <worldId>
+
+# Resume a world
+aetherctl world resume <worldId>
+
+# Shutdown a world
+aetherctl world shutdown <worldId>
+```
+
+#### Server Configuration (SignalR with B2C)
+
+When Azure AD B2C is configured, world commands use SignalR for authenticated access:
+
+```powershell
+# Add a server configuration
+aetherctl server add my-server --url http://localhost:5000 \
+  --tenant mytenant.onmicrosoft.com \
+  --policy B2C_1_SignUpSignIn \
+  --client-id <client-id> \
+  --scope api://<client-id>/.default
+
+# Connect to a server
+aetherctl server connect my-server
+
+# Authenticate with B2C
+aetherctl login
+
+# Now world commands use SignalR
+aetherctl world list
+```
+
+If B2C is not configured or SignalR fails, commands automatically fall back to Orleans direct connection.
+
+For more details, see [a.plan.md](../a.plan.md).
 
 ## Development Workflow
 
@@ -238,6 +288,26 @@ When debugging Orleans grains in tests:
 - **Client**: Receives only perception data (what player can see)
 - **Communication**: SignalR for real-time bidirectional communication
 - **Protocol**: Server-authoritative; client sends inputs, receives updates
+- **SignalR Backplane**: Orleans-based backplane for distributed SignalR scaling (auto-configured by `UFX.Orleans.SignalRBackplane` package)
+
+#### SignalR Hubs
+
+- **GameHub** (`/gamehub`): Gameplay communication between clients and server
+- **ManagementHub** (`/managementHub`): World management operations (requires Azure AD B2C authentication)
+- **AgentDashboardHub** (`/agentDashboardHub`): Agent telemetry and monitoring
+
+#### ManagementHub API
+
+The ManagementHub provides authenticated world management via SignalR:
+
+- `Ping()`: Test connection
+- `GetServerInfo()`: Get server status and world counts
+- `ListWorlds()`: List all worlds
+- `GetWorldInfo(string worldId)`: Get detailed world information
+- `CreateWorld(CreateWorldRequest)`: Create a new world (requires Admin role)
+- `PauseWorld(string worldId)`: Pause a world (requires Admin role)
+- `ResumeWorld(string worldId)`: Resume a world (requires Admin role)
+- `Shutdown(string worldId)`: Shutdown a world (requires Admin role)
 
 See [CLIENT_SERVER_README.md](../CLIENT_SERVER_README.md) for detailed architecture information.
 

@@ -47,14 +47,51 @@ The game features a comprehensive extensible agent tool system:
 - ✅ [Agent Tool System](agents/TOOLS.md) - Extensible tool architecture
 - ✅ [Narrative Systems](narrative-systems.md) - Procedural storytelling and emergent narratives
 - ✅ [Development Guide](development.md) - Developer setup, testing, and workflow
+- ✅ [Client-Server Architecture](../CLIENT_SERVER_README.md) - SignalR, Orleans, and communication protocol
 - Coming soon: System architecture overview
 - Coming soon: Entity-Component-System (ECS) guide
-- Coming soon: Client-Server communication protocol
+
+### SignalR Hubs
+
+#### ManagementHub (`/managementHub`)
+World management operations with Azure AD B2C authentication.
+
+**Available Methods:**
+- `Ping()`: Test connection
+- `GetServerInfo()`: Get server status and world counts
+- `ListWorlds()`: List all worlds
+- `GetWorldInfo(string worldId)`: Get detailed world information
+- `CreateWorld(CreateWorldRequest)`: Create a new world (Admin role required)
+- `PauseWorld(string worldId)`: Pause a world (Admin role required)
+- `ResumeWorld(string worldId)`: Resume a world (Admin role required)
+- `Shutdown(string worldId)`: Shutdown a world (Admin role required)
+
+**Client Usage:**
+```csharp
+using Aetherctl.SignalR;
+using Aetherctl.Auth;
+
+// Configure authentication
+var authService = new AuthService(tenant, policy, clientId, scopes);
+var token = await authService.AcquireTokenDeviceCodeAsync();
+
+// Create client
+await using var client = new ManagementClient(baseUrl, async () => token);
+await client.ConnectAsync();
+
+// Use methods
+var worlds = await client.ListWorldsAsync();
+var info = await client.GetWorldInfoAsync(worldId);
+```
+
+See [Development Guide - Unified CLI](development.md#unified-cli-aetherctl) for CLI usage examples.
 
 ### API Reference
-- Coming soon: Server API documentation
-- Coming soon: SignalR hub reference
-- Coming soon: Game state DTOs
+- [SignalR Hubs](#signalr-hubs) - SignalR hub reference and usage
+- **ManagementHub**: World management operations with B2C authentication
+- **GameHub**: Gameplay communication between clients and server
+- **AgentDashboardHub**: Agent telemetry and monitoring
+- Coming soon: Game state DTOs reference
 
 ### Contributing
 - See: [OpenSpec workflow](../openspec/AGENTS.md) for change proposals
