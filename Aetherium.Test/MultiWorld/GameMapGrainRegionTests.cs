@@ -103,8 +103,10 @@ namespace Aetherium.Test.MultiWorld
             
             var size = new WorldSize { Width = 128, Height = 128, Depth = 1 }; // 2x2 regions (64x64 each)
 
+            // Use a fixed seed for test reproducibility
+            var parameters = new System.Collections.Generic.Dictionary<string, object> { { "seed", 54321 } };
             // Act
-            await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", new System.Collections.Generic.Dictionary<string, object>());
+            await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", parameters);
 
             // Note: We can't directly access regions from IGameMapGrain,
             // but we can verify the map was initialized by checking metadata
@@ -127,7 +129,9 @@ namespace Aetherium.Test.MultiWorld
             
             var size = new WorldSize { Width = 128, Height = 128, Depth = 1 };
 
-            await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", new System.Collections.Generic.Dictionary<string, object>());
+            // Use a fixed seed for test reproducibility
+            var parameters = new System.Collections.Generic.Dictionary<string, object> { { "seed", 67890 } };
+            await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", parameters);
 
             // Get a region grain directly to verify it's ticking
             var regionKey = $"{mapId}:region:0,0,0";
@@ -159,7 +163,9 @@ namespace Aetherium.Test.MultiWorld
             
             var size = new WorldSize { Width = 64, Height = 64, Depth = 1 }; // Single region
 
-            await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", new System.Collections.Generic.Dictionary<string, object>());
+            // Use a fixed seed for test reproducibility
+            var parameters = new System.Collections.Generic.Dictionary<string, object> { { "seed", 11111 } };
+            await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", parameters);
 
             // Act
             await mapGrain.SaveMapAsync();
@@ -179,7 +185,9 @@ namespace Aetherium.Test.MultiWorld
             
             var size = new WorldSize { Width = 64, Height = 64, Depth = 1 };
 
-            await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", new System.Collections.Generic.Dictionary<string, object>());
+            // Use a fixed seed for test reproducibility
+            var parameters = new System.Collections.Generic.Dictionary<string, object> { { "seed", 12345 } };
+            await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", parameters);
             await mapGrain.SaveMapAsync();
 
             // Act

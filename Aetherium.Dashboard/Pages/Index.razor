@@ -1,5 +1,8 @@
 @page "/"
+@using Aetherium.Dashboard.Services
 @inject AgentTelemetryService TelemetryService
+@inject ManagementApiClient ManagementApi
+@implements IAsyncDisposable
 
 <PageTitle>Overview</PageTitle>
 
@@ -10,6 +13,7 @@
         <h2>Active Agents</h2>
         <p>Monitor active agents and their training progress.</p>
         <a href="/agent-monitor" class="btn btn-primary">View Agent Monitor</a>
+        <a href="/worlds" class="btn btn-secondary ms-2">Manage Worlds & Sessions</a>
     </div>
 </div>
 
@@ -20,25 +24,25 @@
             <div class="col-md-3">
                 <div class="metrics-card">
                     <h3>Active Agents</h3>
-                    <div class="value">0</div>
+                    <div class="value">@(stats?.ActiveAgents ?? 0)</div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="metrics-card">
-                    <h3>Running Benchmarks</h3>
-                    <div class="value">0</div>
+                    <h3>Active Sessions</h3>
+                    <div class="value">@(stats?.ActiveSessions ?? 0)</div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="metrics-card">
-                    <h3>Completed Training Runs</h3>
-                    <div class="value">0</div>
+                    <h3>Active Worlds</h3>
+                    <div class="value">@(stats?.ActiveWorlds ?? 0)</div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="metrics-card">
-                    <h3>Failed Runs</h3>
-                    <div class="value">0</div>
+                    <h3>Total Worlds</h3>
+                    <div class="value">@(stats?.TotalWorlds ?? 0)</div>
                 </div>
             </div>
         </div>
@@ -46,9 +50,49 @@
 </div>
 
 @code {
-    protected override void OnInitialized()
+    private ManagementStats? stats;
+    private System.Threading.Timer? refreshTimer;
+    private bool disposed = false;
+
+    protected override async Task OnInitializedAsync()
     {
-        // Initialize dashboard
+        await LoadStats();
+        
+        // Refresh stats every 5 seconds
+        refreshTimer = new System.Threading.Timer(async _ => await RefreshStats(), null, 
+            TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task LoadStats()
+    {
+        try
+        {
+            stats = await ManagementApi.GetStatsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading stats: {ex.Message}");
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task RefreshStats()
+    {
+        if (!disposed)
+        {
+            await LoadStats();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!disposed)
+        {
+            disposed = true;
+            refreshTimer?.Dispose();
+        }
+        await Task.CompletedTask;
     }
 }
 

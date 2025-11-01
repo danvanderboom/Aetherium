@@ -2,6 +2,7 @@ using Aetherium.Dashboard.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.Configuration;
 using Orleans;
 using Orleans.Configuration;
 
@@ -36,6 +37,17 @@ builder.Services.AddHttpClient<PcgApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://localhost:5000/api/");
     client.Timeout = TimeSpan.FromMinutes(5); // Long timeout for generation
+});
+
+// Add Management API client
+builder.Services.AddHttpClient<ManagementApiClient>((sp, client) =>
+{
+    client.BaseAddress = new Uri("http://localhost:5000/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+}).AddTypedClient((client, sp) =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    return new ManagementApiClient(client, config);
 });
 
 // Add CORS for SignalR

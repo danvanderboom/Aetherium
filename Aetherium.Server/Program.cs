@@ -10,6 +10,7 @@ using Orleans.Hosting;
 using Aetherium.Server.Agents;
 using Aetherium.Server.Events;
 using Aetherium.Server.Management;
+using Aetherium.Server.Middleware;
 using Aetherium.Server.Persistence;
 using Aetherium.Server.Simulation;
 using Aetherium.WorldGen;
@@ -231,6 +232,7 @@ namespace Aetherium.Server
             var app = builder.Build();
 
             // Configure middleware
+            app.UseMiddleware<ApiKeyMiddleware>();
             app.UseRouting();
             app.MapHub<GameHub>("/gamehub");
             app.MapHub<Hubs.AgentDashboardHub>("/agentDashboardHub"); // Map dashboard hub

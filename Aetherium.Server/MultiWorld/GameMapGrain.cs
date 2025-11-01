@@ -57,7 +57,9 @@ namespace Aetherium.Server.MultiWorld
             
             parameters ??= new Dictionary<string, object>();
 
-            var seed = (int)(DateTime.UtcNow.Ticks & 0x7FFFFFFF);
+            var seed = parameters.TryGetValue("seed", out var seedObj) && seedObj is int seedInt
+                ? seedInt
+                : (int)(DateTime.UtcNow.Ticks & 0x7FFFFFFF);
             var context = new GeneratorContext(size.Width, size.Height, seed)
             {
                 ZLevel = 0,

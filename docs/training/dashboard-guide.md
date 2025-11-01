@@ -19,9 +19,11 @@ dotnet run
 
 The home page shows:
 - Active agents count
-- Running benchmarks
-- Completed training runs
-- Failed runs
+- Active sessions count
+- Active worlds count
+- Total worlds count
+
+Stats auto-refresh every 5 seconds.
 
 ### Agent Monitor
 
@@ -78,6 +80,27 @@ View failed agent runs:
 3. Select a replay ID to view
 4. Step through the replay sequence
 
+### Worlds & Sessions
+
+Manage game worlds, sessions, and agent attachments:
+
+#### Worlds Tab
+- View all worlds with status, player count, and creation time
+- Create new worlds (requires API key)
+- Shutdown worlds (requires API key)
+
+#### Sessions Tab
+- View all active sessions with connection info and attached agents
+- Stop sessions (requires API key)
+- Attach agents to sessions (requires API key)
+
+#### Agents Tab
+- View all agents with their current status
+- See agent runner assignments and session attachments
+- Monitor agent activity (steps, last action, running status)
+
+**Note:** Control actions (create, stop, attach/detach) require an API key to be configured. See Configuration section below.
+
 ## Real-Time Updates
 
 The dashboard uses SignalR for real-time telemetry updates. When you subscribe to an agent:
@@ -94,6 +117,40 @@ The dashboard uses REST API endpoints:
 - `/api/agenttelemetry/{agentId}/snapshots` - Historical snapshots
 - `/api/benchmark` - Benchmark scenarios
 - `/api/curriculum` - Training curricula
+- `/api/management/worlds` - World management
+- `/api/management/sessions` - Session management
+- `/api/management/agents` - Agent management
+- `/api/management/stats` - Summary statistics
+
+## Configuration
+
+### API Key Authentication
+
+To enable control actions (create worlds, stop sessions, attach agents), configure an API key:
+
+**Server Configuration** (`appsettings.json`):
+```json
+{
+  "Dashboard": {
+    "ApiKey": "your-secret-api-key-here"
+  }
+}
+```
+
+**Dashboard Configuration** (`appsettings.json`):
+```json
+{
+  "ManagementApi": {
+    "ApiKey": "your-secret-api-key-here",
+    "BaseUrl": "api/management"
+  }
+}
+```
+
+**Note:** 
+- In development mode, control actions are allowed without an API key
+- In production, control actions require a valid API key
+- Read-only operations (viewing worlds, sessions, agents) work without an API key
 
 ## Troubleshooting
 
@@ -114,4 +171,13 @@ The dashboard uses REST API endpoints:
 - Limit the number of subscribed agents
 - Use snapshot limits when loading history
 - Consider pagination for large datasets
+
+### Control Actions Disabled
+
+If you see "Control Actions Disabled" warnings:
+
+- Verify API key is configured in `appsettings.json`
+- Ensure the API key matches between server and dashboard configurations
+- In development mode, control actions work without an API key
+- Check that the API key header (`X-Dashboard-ApiKey`) is being sent correctly
 

@@ -1,0 +1,525 @@
+@page "/worlds"
+@using Aetherium.Model
+@using Aetherium.Dashboard.Services
+@inject ManagementApiClient ManagementApi
+@implements IAsyncDisposable
+
+<PageTitle>Worlds & Sessions</PageTitle>
+
+<h1>Worlds & Sessions Management</h1>
+
+@if (!ManagementApi.HasApiKey)
+{
+    <div class="alert alert-warning">
+        <strong>Control Actions Disabled:</strong> API key not configured. Only read-only operations are available.
+    </div>
+}
+
+<ul class="nav nav-tabs mt-4" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(activeTab == "worlds" ? "active" : "")" @onclick="() => SetActiveTab(\"worlds\")">Worlds</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(activeTab == "sessions" ? "active" : "")" @onclick="() => SetActiveTab(\"sessions\")">Sessions</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(activeTab == "agents" ? "active" : "")" @onclick="() => SetActiveTab(\"agents\")">Agents</button>
+    </li>
+</ul>
+
+<div class="tab-content mt-3">
+    @if (activeTab == "worlds")
+    {
+        <div class="tab-pane active">
+            <div class="d-flex justify-content-between mb-3">
+                <h3>Worlds</h3>
+                @if (ManagementApi.HasApiKey)
+                {
+                    <button class="btn btn-primary" @onclick="ShowCreateWorldModal">Create World</button>
+                }
+            </div>
+            
+            @if (loading)
+            {
+                <p>Loading worlds...</p>
+            }
+            else if (worlds != null && worlds.Count > 0)
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>World ID</th>
+                            <th>Name</th>
+                            <th>State</th>
+                            <th>Players</th>
+                            <th>Created</th>
+                            @if (ManagementApi.HasApiKey)
+                            {
+                                <th>Actions</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var world in worlds)
+                        {
+                            <tr>
+                                <td><code>@world.WorldId</code></td>
+                                <td>@world.Name</td>
+                                <td><span class="badge bg-secondary">@world.State</span></td>
+                                <td>@world.PlayerCount / @world.MaxPlayers</td>
+                                <td>@world.CreatedAt.ToString("g")</td>
+                                @if (ManagementApi.HasApiKey)
+                                {
+                                    <td>
+                                        <button class="btn btn-sm btn-danger" @onclick="() => ShutdownWorld(world.WorldId)" disabled="@shuttingDownWorld">Shutdown</button>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="text-muted">No worlds found.</p>
+            }
+        </div>
+    }
+    
+    @if (activeTab == "sessions")
+    {
+        <div class="tab-pane active">
+            <div class="d-flex justify-content-between mb-3">
+                <h3>Sessions</h3>
+                <button class="btn btn-secondary" @onclick="RefreshSessions">Refresh</button>
+            </div>
+            
+            @if (loading)
+            {
+                <p>Loading sessions...</p>
+            }
+            else if (sessions != null && sessions.Count > 0)
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Session ID</th>
+                            <th>Connection ID</th>
+                            <th>Agents</th>
+                            <th>Vision Mode</th>
+                            <th>Connected</th>
+                            @if (ManagementApi.HasApiKey)
+                            {
+                                <th>Actions</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var session in sessions)
+                        {
+                            <tr>
+                                <td><code>@session.SessionId</code></td>
+                                <td><code>@session.ConnectionId</code></td>
+                                <td>@(session.AttachedAgentIds?.Count ?? 0)</td>
+                                <td>@session.VisionMode</td>
+                                <td>@session.ConnectedAt.ToString("g")</td>
+                                @if (ManagementApi.HasApiKey)
+                                {
+                                    <td>
+                                        <button class="btn btn-sm btn-danger" @onclick="() => StopSession(session.SessionId)" disabled="@stoppingSession">Stop</button>
+                                        <button class="btn btn-sm btn-primary ms-1" @onclick="() => ShowAttachAgentModal(session.SessionId)">Attach Agent</button>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="text-muted">No sessions found.</p>
+            }
+        </div>
+    }
+    
+    @if (activeTab == "agents")
+    {
+        <div class="tab-pane active">
+            <div class="d-flex justify-content-between mb-3">
+                <h3>Agents</h3>
+                <button class="btn btn-secondary" @onclick="RefreshAgents">Refresh</button>
+            </div>
+            
+            @if (loading)
+            {
+                <p>Loading agents...</p>
+            }
+            else if (agents != null && agents.Count > 0)
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Agent ID</th>
+                            <th>Runner ID</th>
+                            <th>Session ID</th>
+                            <th>Running</th>
+                            <th>Steps</th>
+                            <th>Last Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var agent in agents)
+                        {
+                            <tr>
+                                <td><code>@agent.AgentId</code></td>
+                                <td><code>@agent.RunnerId</code></td>
+                                <td><code>@(agent.SessionId ?? "None")</code></td>
+                                <td><span class="badge @(agent.IsRunning ? "bg-success" : "bg-secondary")">@(agent.IsRunning ? "Running" : "Stopped")</span></td>
+                                <td>@agent.Steps</td>
+                                <td>@agent.LastAction</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="text-muted">No agents found.</p>
+            }
+        </div>
+    }
+</div>
+
+<!-- Create World Modal -->
+@if (showCreateWorldModal)
+{
+    <div class="modal show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create World</h5>
+                    <button type="button" class="btn-close" @onclick="HideCreateWorldModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" @bind="newWorld.Name" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" @bind="newWorld.Description"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Generator Type</label>
+                        <select class="form-select" @bind="newWorld.GeneratorType">
+                            <option value="rooms-and-corridors">Rooms and Corridors</option>
+                            <option value="cave">Cave</option>
+                            <option value="outdoor">Outdoor</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Max Players</label>
+                        <input type="number" class="form-control" @bind="newWorld.MaxPlayers" min="1" max="1000" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HideCreateWorldModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="CreateWorld" disabled="@creatingWorld">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+<!-- Attach Agent Modal -->
+@if (showAttachAgentModal && attachSessionId != null)
+{
+    <div class="modal show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Attach Agent to Session</h5>
+                    <button type="button" class="btn-close" @onclick="HideAttachAgentModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Agent ID</label>
+                        <input type="text" class="form-control" @bind="attachRequest.AgentId" placeholder="agent-1" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Runner ID</label>
+                        <input type="text" class="form-control" @bind="attachRequest.RunnerId" placeholder="runner-1" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HideAttachAgentModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="AttachAgent" disabled="@attachingAgent">Attach</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    private string activeTab = "worlds";
+    private bool loading = false;
+    private List<WorldInfoDto>? worlds;
+    private List<SessionInfoDto>? sessions;
+    private List<AgentInfoDto>? agents;
+    private System.Threading.Timer? refreshTimer;
+    private bool disposed = false;
+
+    // Create World Modal
+    private bool showCreateWorldModal = false;
+    private CreateWorldRequestDto newWorld = new CreateWorldRequestDto();
+    private bool creatingWorld = false;
+    private bool shuttingDownWorld = false;
+
+    // Attach Agent Modal
+    private bool showAttachAgentModal = false;
+    private string? attachSessionId;
+    private AttachAgentRequestDto attachRequest = new AttachAgentRequestDto();
+    private bool attachingAgent = false;
+    private bool stoppingSession = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        
+        // Refresh data every 5 seconds
+        refreshTimer = new System.Threading.Timer(async _ => await RefreshData(), null, 
+            TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+        if (tab == "worlds" && worlds == null)
+            LoadData();
+        else if (tab == "sessions" && sessions == null)
+            LoadSessions();
+        else if (tab == "agents" && agents == null)
+            LoadAgents();
+    }
+
+    private async Task LoadData()
+    {
+        if (activeTab == "worlds")
+            await LoadWorlds();
+        else if (activeTab == "sessions")
+            await LoadSessions();
+        else if (activeTab == "agents")
+            await LoadAgents();
+    }
+
+    private async Task RefreshData()
+    {
+        if (!disposed)
+        {
+            await LoadData();
+        }
+    }
+
+    private async Task LoadWorlds()
+    {
+        loading = true;
+        try
+        {
+            worlds = await ManagementApi.GetWorldsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading worlds: {ex.Message}");
+            worlds = new List<WorldInfoDto>();
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadSessions()
+    {
+        loading = true;
+        try
+        {
+            sessions = await ManagementApi.GetSessionsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading sessions: {ex.Message}");
+            sessions = new List<SessionInfoDto>();
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshSessions()
+    {
+        await LoadSessions();
+    }
+
+    private async Task LoadAgents()
+    {
+        loading = true;
+        try
+        {
+            agents = await ManagementApi.GetAgentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading agents: {ex.Message}");
+            agents = new List<AgentInfoDto>();
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshAgents()
+    {
+        await LoadAgents();
+    }
+
+    private void ShowCreateWorldModal()
+    {
+        newWorld = new CreateWorldRequestDto { MaxPlayers = 100 };
+        showCreateWorldModal = true;
+    }
+
+    private void HideCreateWorldModal()
+    {
+        showCreateWorldModal = false;
+    }
+
+    private async Task CreateWorld()
+    {
+        creatingWorld = true;
+        try
+        {
+            await ManagementApi.CreateWorldAsync(newWorld);
+            await LoadWorlds();
+            HideCreateWorldModal();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating world: {ex.Message}");
+            // TODO: Show error message to user
+        }
+        finally
+        {
+            creatingWorld = false;
+        }
+    }
+
+    private async Task ShutdownWorld(string worldId)
+    {
+        if (!await ConfirmAction("Are you sure you want to shutdown this world?"))
+            return;
+
+        shuttingDownWorld = true;
+        try
+        {
+            await ManagementApi.ShutdownWorldAsync(worldId);
+            await LoadWorlds();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error shutting down world: {ex.Message}");
+            // TODO: Show error message to user
+        }
+        finally
+        {
+            shuttingDownWorld = false;
+        }
+    }
+
+    private async Task StopSession(string sessionId)
+    {
+        if (!await ConfirmAction("Are you sure you want to stop this session?"))
+            return;
+
+        stoppingSession = true;
+        try
+        {
+            await ManagementApi.StopSessionAsync(sessionId);
+            await LoadSessions();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error stopping session: {ex.Message}");
+            // TODO: Show error message to user
+        }
+        finally
+        {
+            stoppingSession = false;
+        }
+    }
+
+    private void ShowAttachAgentModal(string sessionId)
+    {
+        attachSessionId = sessionId;
+        attachRequest = new AttachAgentRequestDto { RunnerId = "runner-1" };
+        showAttachAgentModal = true;
+    }
+
+    private void HideAttachAgentModal()
+    {
+        showAttachAgentModal = false;
+        attachSessionId = null;
+    }
+
+    private async Task AttachAgent()
+    {
+        if (attachSessionId == null)
+            return;
+
+        attachingAgent = true;
+        try
+        {
+            await ManagementApi.AttachAgentAsync(attachSessionId, attachRequest);
+            await LoadSessions();
+            HideAttachAgentModal();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error attaching agent: {ex.Message}");
+            // TODO: Show error message to user
+        }
+        finally
+        {
+            attachingAgent = false;
+        }
+    }
+
+    private Task<bool> ConfirmAction(string message)
+    {
+        // Simple confirmation - in production, use a proper modal component
+        return Task.FromResult(confirm(message));
+    }
+
+    private bool confirm(string message)
+    {
+        // Browser confirm dialog
+        return true; // For now, always confirm
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!disposed)
+        {
+            disposed = true;
+            refreshTimer?.Dispose();
+        }
+        await Task.CompletedTask;
+    }
+}
+
