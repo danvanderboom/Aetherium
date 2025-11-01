@@ -201,79 +201,72 @@ Invoke-RestMethod -Method Post `
     -Headers @{ Authorization = "Bearer lm-studio" }
 ```
 
-## AgentCLI Commands
+## aetherctl Commands
 
 ### Session Management
 
 ```powershell
 # List all active game sessions
-agentcli mgmt sessions
+aetherctl session list
+aetherctl session list --json
 ```
 
 ### Tool Management Commands
 
 ```powershell
 # List all available tools
-agentcli tools list
+aetherctl tools list
 
 # Filter tools by profile
-agentcli tools list --profile explorer
-agentcli tools list --profile worldbuilder
+aetherctl tools list --profile explorer
+aetherctl tools list --profile worldbuilder
 
 # Filter tools by category
-agentcli tools list --category movement
-agentcli tools list --category interaction
+aetherctl tools list --category movement
+aetherctl tools list --category interaction
 
 # Get detailed information about a specific tool
-agentcli tools describe move
-agentcli tools describe pickup
+aetherctl tools describe move
+aetherctl tools describe pickup
 
 # List all tool categories
-agentcli tools categories
+aetherctl tools categories
 
 # Test tool execution (requires active session)
-agentcli tools test move --session-id <sessionId> --args '{"direction":"forward"}'
-agentcli tools test pickup --session-id <sessionId> --args '{"targetEntityId":"entity-123"}'
+aetherctl tools test move --session-id <sessionId> --args '{"direction":"forward"}'
+aetherctl tools test pickup --session-id <sessionId> --args '{"targetEntityId":"entity-123"}'
 ```
 
 ### Profile Management Commands
 
 ```powershell
 # List all predefined agent profiles
-agentcli tools profile list
+aetherctl tools profile list
 
 # Show details of a specific profile
-agentcli tools profile show explorer
-agentcli tools profile show worldbuilder
-agentcli tools profile show admin
+aetherctl tools profile show explorer
+aetherctl tools profile show worldbuilder
+aetherctl tools profile show admin
 ```
 
 ### Agent Runner Commands
 
 ```powershell
 # Attach agent to a game session
-agentcli agent attach <sessionId> [--agent <agentId>] [--runner <runnerId>]
+aetherctl agent attach <sessionId> [--agent <agentId>] [--runner <runnerId>]
 
 # Execute a single step
-agentcli agent step <runnerId>
+aetherctl agent step <runnerId>
 
 # Run continuously (with optional limits)
-agentcli agent run <runnerId> [--max-steps <N>] [--delay <ms>]
+aetherctl agent run <runnerId> [--max-steps <N>] [--delay <ms>]
 
 # Stop continuous execution
-agentcli agent stop <runnerId>
+aetherctl agent stop <runnerId> 
 
 # Get agent status
-agentcli agent status <runnerId>
-
-# Set agent policy (llm|heuristic)
-agentcli agent policy set <policy>
-
-# Get current policy
-agentcli agent policy get
-
-# Enable/disable debug output
-agentcli agent debug <on|off>
+aetherctl agent status <runnerId>
+aetherctl agent status <runnerId> --json
 ```
 
 ## Agent Behavior
@@ -298,7 +291,7 @@ When `AGENT_LLM_ENABLED=1`, agents:
 - **Vision** (4 tools): toggledirectionalvision, setfov, setlightingmode, setvisionmode
 - **World-Building** (13 tools): Entity/terrain/map/narrative management (for WorldBuilder agents)
 
-**Note:** Tool availability depends on the agent's profile. Use `agentcli tools list --profile <profile>` to see which tools are available for each profile.
+**Note:** Tool availability depends on the agent's profile. Use `aetherctl tools list --profile <profile>` to see which tools are available for each profile.
 
 ### Heuristic Agents
 

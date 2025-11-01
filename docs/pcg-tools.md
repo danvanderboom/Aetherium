@@ -1,17 +1,21 @@
 # Procedural Generation Tooling
 
-Use the `WorldGenCLI` application to reproduce deterministic worlds and export metrics, or start an HTTP API server for remote generation requests.
+Use the `aetherctl` CLI tool to reproduce deterministic worlds and export metrics, or start an HTTP API server for remote generation requests.
 
 ## CLI Usage
 
 ```bash
-dotnet run --project WorldGenCLI -- \
+# Generate a world map
+aetherctl worldgen generate \
   --generator AdvancedDungeon \
   --template dungeon \
   --width 60 --height 60 --levels 2 \
   --seed 12345 --version 2.0.0 \
   --param minLoopRatio=0.12 \
   --output artifacts/dungeon-12345.json
+
+# Or with JSON output
+aetherctl worldgen generate --generator AdvancedDungeon --json
 ```
 
 Key options:
@@ -29,7 +33,7 @@ The JSON export contains branching factor, loop ratio, room counts, biome covera
 Start the API server for remote generation requests:
 
 ```bash
-dotnet run --project WorldGenCLI -- --serve --port 5000
+aetherctl worldgen serve --port 5000
 ```
 
 The server exposes the following endpoints:
