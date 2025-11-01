@@ -452,6 +452,22 @@ namespace Aetherium.Server.MultiWorld
             economy.LastTickAt = now;
             await _state.WriteStateAsync();
         }
+
+        public Task<ClusterEconomyState?> GetEconomyStateAsync()
+        {
+            if (_state.State == null)
+                return Task.FromResult<ClusterEconomyState?>(null);
+
+            return Task.FromResult<ClusterEconomyState?>(_state.State.Economy);
+        }
+
+        public Task<List<TransportSchedule>> GetTransportSchedulesAsync()
+        {
+            if (_state.State == null)
+                return Task.FromResult(new List<TransportSchedule>());
+
+            return Task.FromResult(_state.State.Economy.TransportSchedules.ToList());
+        }
     }
 
     /// <summary>

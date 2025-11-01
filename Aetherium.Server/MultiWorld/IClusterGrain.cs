@@ -64,6 +64,16 @@ namespace Aetherium.Server.MultiWorld
         /// Tick the economy (update prices, process transports).
         /// </summary>
         Task TickEconomyAsync();
+
+        /// <summary>
+        /// Get economy state (markets, trade routes, transport schedules).
+        /// </summary>
+        Task<ClusterEconomyState?> GetEconomyStateAsync();
+
+        /// <summary>
+        /// Get all transport schedules in the cluster.
+        /// </summary>
+        Task<List<TransportSchedule>> GetTransportSchedulesAsync();
     }
 }
 

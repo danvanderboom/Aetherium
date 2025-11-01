@@ -75,15 +75,16 @@ root.AddGlobalOption(serviceOpt);
 
 - [x] Create `Aetherctl` project and wire System.CommandLine root
 - [x] Add global flags and Orleans connectivity/env fallbacks
-- [ ] Port agent/session/tools/vision/world commands to `aetherctl`
-- [ ] Implement prompts edit/delete; add narrative list
-- [ ] Port worldgen generate/serve; add --json and render --ascii
-- [ ] Implement monitor subcommand (WebSocket) with ascii/json/save
-- [ ] Standardize JSON output and non-zero exits on errors
-- [ ] Package/publish as .NET global tool (ToolCommandName=aetherctl)
-- [ ] Update TOOL_SYSTEM_STATUS and write CLI usage docs
-- [ ] Mark AgentCLI/WorldGenCLI deprecated; update help pointers
-- [ ] Add agent/session list/create/close once server APIs exist
-- [ ] Add PNG render (SkiaSharp) under worldgen render --png
+- [x] Port agent/session/tools/vision/world commands to `aetherctl`
+- [x] Implement prompts edit/delete; add narrative list
+- [x] Port worldgen generate/serve; add --json and render --ascii
+- [x] Implement monitor subcommand (WebSocket) with ascii/json/save
+- [x] Standardize JSON output and non-zero exits on errors
+- [x] Package/publish as .NET global tool (ToolCommandName=aetherctl)
+- [x] Create test project and write tests (18 tests passing)
+- [x] Update TOOL_SYSTEM_STATUS and write CLI usage docs
+- [x] Mark AgentCLI/WorldGenCLI deprecated; update help pointers
+- [ ] Add agent/session list/create/close once server APIs exist (pending server-side support)
+- [ ] Add PNG render (SkiaSharp) under worldgen render --png (Phase 2)
 
 
