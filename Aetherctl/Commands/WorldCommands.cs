@@ -1,16 +1,36 @@
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 using System.Linq;
 using System.Threading.Tasks;
 using Aetherctl.Orleans;
+using Aetherctl.Auth;
+using Aetherctl.Config;
+using Aetherctl.SignalR;
 using Aetherium.Server.MultiWorld;
+using Aetherium.Server.Management;
 
 namespace Aetherctl.Commands
 {
     public static class WorldCommands
     {
+        /// <summary>
+        /// Tries to use SignalR if B2C is configured, otherwise falls back to Orleans.
+        /// </summary>
+        private static async Task<(bool useSignalR, ServerConfig? server)> TryGetSignalRConfigAsync()
+        {
+            var server = ConfigManager.GetCurrentServer();
+            if (server != null && server.B2C != null && 
+                !string.IsNullOrEmpty(server.B2C.Tenant) && 
+                !string.IsNullOrEmpty(server.B2C.ClientId))
+            {
+                return (true, server);
+            }
+            return (false, null);
+        }
+
         public static void AddToRoot(RootCommand root)
         {
             var worldCmd = new Command("world", "Manage game worlds");
@@ -40,9 +60,6 @@ namespace Aetherctl.Commands
                     var height = parseResult.GetValueForOption(heightOpt);
                     var narrativeId = parseResult.GetValueForOption(narrativeOpt);
 
-                    await using var factory = new OrleansClientFactory();
-                    await factory.ConnectAsync();
-                    var mgmt = factory.GetGameManagement();
                     var request = new CreateWorldRequest
                     {
                         Name = name,
@@ -57,7 +74,39 @@ namespace Aetherctl.Commands
                         Size = new WorldSize { Width = width, Height = height, Depth = 1 }
                     };
 
-                    var worldId = await mgmt.CreateWorldAsync(request);
+                    string worldId;
+                    var (useSignalR, server) = await TryGetSignalRConfigAsync();
+                    if (useSignalR && server != null)
+                    {
+                        try
+                        {
+                            await using var authService = new AuthService(
+                                server.B2C.Tenant,
+                                server.B2C.Policy,
+                                server.B2C.ClientId,
+                                server.B2C.Scopes);
+                            var token = await authService.AcquireTokenDeviceCodeAsync();
+                            await using var client = new ManagementClient(server.BaseUrl, async () => token);
+                            await client.ConnectAsync();
+                            worldId = await client.CreateWorldAsync(request);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Fallback to Orleans if SignalR fails
+                            await using var factory = new OrleansClientFactory();
+                            await factory.ConnectAsync();
+                            var mgmt = factory.GetGameManagement();
+                            worldId = await mgmt.CreateWorldAsync(request);
+                        }
+                    }
+                    else
+                    {
+                        // Use Orleans directly
+                        await using var factory = new OrleansClientFactory();
+                        await factory.ConnectAsync();
+                        var mgmt = factory.GetGameManagement();
+                        worldId = await mgmt.CreateWorldAsync(request);
+                    }
 
                     if (Common.IsJsonOutput(parseResult))
                     {
@@ -93,10 +142,39 @@ namespace Aetherctl.Commands
                 try
                 {
                     var parseResult = ctx.ParseResult;
-                    await using var factory = new OrleansClientFactory();
-                    await factory.ConnectAsync();
-                    var mgmt = factory.GetGameManagement();
-                    var worlds = await mgmt.ListWorldsAsync();
+                    List<WorldInfo> worlds;
+                    var (useSignalR, server) = await TryGetSignalRConfigAsync();
+                    if (useSignalR && server != null)
+                    {
+                        try
+                        {
+                            await using var authService = new AuthService(
+                                server.B2C.Tenant,
+                                server.B2C.Policy,
+                                server.B2C.ClientId,
+                                server.B2C.Scopes);
+                            var token = await authService.AcquireTokenDeviceCodeAsync();
+                            await using var client = new ManagementClient(server.BaseUrl, async () => token);
+                            await client.ConnectAsync();
+                            worlds = await client.ListWorldsAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            // Fallback to Orleans if SignalR fails
+                            await using var factory = new OrleansClientFactory();
+                            await factory.ConnectAsync();
+                            var mgmt = factory.GetGameManagement();
+                            worlds = await mgmt.ListWorldsAsync();
+                        }
+                    }
+                    else
+                    {
+                        // Use Orleans directly
+                        await using var factory = new OrleansClientFactory();
+                        await factory.ConnectAsync();
+                        var mgmt = factory.GetGameManagement();
+                        worlds = await mgmt.ListWorldsAsync();
+                    }
 
                     if (Common.IsJsonOutput(parseResult))
                     {
@@ -154,10 +232,39 @@ namespace Aetherctl.Commands
                 {
                     var parseResult = ctx.ParseResult;
                     var worldId = parseResult.GetValueForArgument(worldIdArg);
-                    await using var factory = new OrleansClientFactory();
-                    await factory.ConnectAsync();
-                    var mgmt = factory.GetGameManagement();
-                    var world = await mgmt.GetWorldInfoAsync(worldId);
+                    WorldInfo? world;
+                    var (useSignalR, server) = await TryGetSignalRConfigAsync();
+                    if (useSignalR && server != null)
+                    {
+                        try
+                        {
+                            await using var authService = new AuthService(
+                                server.B2C.Tenant,
+                                server.B2C.Policy,
+                                server.B2C.ClientId,
+                                server.B2C.Scopes);
+                            var token = await authService.AcquireTokenDeviceCodeAsync();
+                            await using var client = new ManagementClient(server.BaseUrl, async () => token);
+                            await client.ConnectAsync();
+                            world = await client.GetWorldInfoAsync(worldId);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Fallback to Orleans if SignalR fails
+                            await using var factory = new OrleansClientFactory();
+                            await factory.ConnectAsync();
+                            var mgmt = factory.GetGameManagement();
+                            world = await mgmt.GetWorldInfoAsync(worldId);
+                        }
+                    }
+                    else
+                    {
+                        // Use Orleans directly
+                        await using var factory = new OrleansClientFactory();
+                        await factory.ConnectAsync();
+                        var mgmt = factory.GetGameManagement();
+                        world = await mgmt.GetWorldInfoAsync(worldId);
+                    }
 
                     if (world == null)
                     {
@@ -211,10 +318,39 @@ namespace Aetherctl.Commands
                 {
                     var parseResult = ctx.ParseResult;
                     var worldId = parseResult.GetValueForArgument(pauseWorldIdArg);
-                    await using var factory = new OrleansClientFactory();
-                    await factory.ConnectAsync();
-                    var mgmt = factory.GetGameManagement();
-                    var result = await mgmt.PauseWorldAsync(worldId);
+                    OperationResult result;
+                    var (useSignalR, server) = await TryGetSignalRConfigAsync();
+                    if (useSignalR && server != null)
+                    {
+                        try
+                        {
+                            await using var authService = new AuthService(
+                                server.B2C.Tenant,
+                                server.B2C.Policy,
+                                server.B2C.ClientId,
+                                server.B2C.Scopes);
+                            var token = await authService.AcquireTokenDeviceCodeAsync();
+                            await using var client = new ManagementClient(server.BaseUrl, async () => token);
+                            await client.ConnectAsync();
+                            result = await client.PauseWorldAsync(worldId);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Fallback to Orleans if SignalR fails
+                            await using var factory = new OrleansClientFactory();
+                            await factory.ConnectAsync();
+                            var mgmt = factory.GetGameManagement();
+                            result = await mgmt.PauseWorldAsync(worldId);
+                        }
+                    }
+                    else
+                    {
+                        // Use Orleans directly
+                        await using var factory = new OrleansClientFactory();
+                        await factory.ConnectAsync();
+                        var mgmt = factory.GetGameManagement();
+                        result = await mgmt.PauseWorldAsync(worldId);
+                    }
 
                     if (result.Success)
                     {
@@ -243,10 +379,39 @@ namespace Aetherctl.Commands
                 {
                     var parseResult = ctx.ParseResult;
                     var worldId = parseResult.GetValueForArgument(resumeWorldIdArg);
-                    await using var factory = new OrleansClientFactory();
-                    await factory.ConnectAsync();
-                    var mgmt = factory.GetGameManagement();
-                    var result = await mgmt.ResumeWorldAsync(worldId);
+                    OperationResult result;
+                    var (useSignalR, server) = await TryGetSignalRConfigAsync();
+                    if (useSignalR && server != null)
+                    {
+                        try
+                        {
+                            await using var authService = new AuthService(
+                                server.B2C.Tenant,
+                                server.B2C.Policy,
+                                server.B2C.ClientId,
+                                server.B2C.Scopes);
+                            var token = await authService.AcquireTokenDeviceCodeAsync();
+                            await using var client = new ManagementClient(server.BaseUrl, async () => token);
+                            await client.ConnectAsync();
+                            result = await client.ResumeWorldAsync(worldId);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Fallback to Orleans if SignalR fails
+                            await using var factory = new OrleansClientFactory();
+                            await factory.ConnectAsync();
+                            var mgmt = factory.GetGameManagement();
+                            result = await mgmt.ResumeWorldAsync(worldId);
+                        }
+                    }
+                    else
+                    {
+                        // Use Orleans directly
+                        await using var factory = new OrleansClientFactory();
+                        await factory.ConnectAsync();
+                        var mgmt = factory.GetGameManagement();
+                        result = await mgmt.ResumeWorldAsync(worldId);
+                    }
 
                     if (result.Success)
                     {
@@ -275,10 +440,39 @@ namespace Aetherctl.Commands
                 {
                     var parseResult = ctx.ParseResult;
                     var worldId = parseResult.GetValueForArgument(shutdownWorldIdArg);
-                    await using var factory = new OrleansClientFactory();
-                    await factory.ConnectAsync();
-                    var mgmt = factory.GetGameManagement();
-                    var result = await mgmt.ShutdownWorldAsync(worldId);
+                    OperationResult result;
+                    var (useSignalR, server) = await TryGetSignalRConfigAsync();
+                    if (useSignalR && server != null)
+                    {
+                        try
+                        {
+                            await using var authService = new AuthService(
+                                server.B2C.Tenant,
+                                server.B2C.Policy,
+                                server.B2C.ClientId,
+                                server.B2C.Scopes);
+                            var token = await authService.AcquireTokenDeviceCodeAsync();
+                            await using var client = new ManagementClient(server.BaseUrl, async () => token);
+                            await client.ConnectAsync();
+                            result = await client.ShutdownAsync(worldId);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Fallback to Orleans if SignalR fails
+                            await using var factory = new OrleansClientFactory();
+                            await factory.ConnectAsync();
+                            var mgmt = factory.GetGameManagement();
+                            result = await mgmt.ShutdownWorldAsync(worldId);
+                        }
+                    }
+                    else
+                    {
+                        // Use Orleans directly
+                        await using var factory = new OrleansClientFactory();
+                        await factory.ConnectAsync();
+                        var mgmt = factory.GetGameManagement();
+                        result = await mgmt.ShutdownWorldAsync(worldId);
+                    }
 
                     if (result.Success)
                     {

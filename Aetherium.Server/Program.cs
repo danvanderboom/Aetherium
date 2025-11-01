@@ -1,10 +1,13 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Identity.Web;
 using Orleans;
 using Orleans.Hosting;
 using Aetherium.Server.Agents;
@@ -17,6 +20,7 @@ using Aetherium.WorldGen;
 using Aetherium.WorldGen.Prefabs;
 using Aetherium.WorldBuilders.Validation;
 using Microsoft.AspNetCore.SignalR;
+using UFX.Orleans.SignalRBackplane;
 
 namespace Aetherium.Server
 {
@@ -27,7 +31,53 @@ namespace Aetherium.Server
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services
-            builder.Services.AddSignalR();
+            // Configure SignalR (with Orleans backplane if Orleans is enabled)
+            var disableOrleans = Environment.GetEnvironmentVariable("DISABLE_ORLEANS") == "1";
+            var signalRBuilder = builder.Services.AddSignalR(options =>
+            {
+                options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+            });
+            
+            // Add Orleans backplane if Orleans is enabled
+            // UFX.Orleans.SignalRBackplane automatically configures when Orleans is co-hosted
+            // No explicit configuration needed - the package will detect Orleans and configure SignalR hubs
+
+            // Add Azure AD B2C authentication
+            var azureAdSection = builder.Configuration.GetSection("AzureAdB2C");
+            var instance = azureAdSection["Instance"];
+            var domain = azureAdSection["Domain"];
+            var tenantId = azureAdSection["TenantId"];
+            var clientId = azureAdSection["ClientId"];
+            var signUpSignInPolicyId = azureAdSection["SignUpSignInPolicyId"];
+            var scopes = azureAdSection["Scopes"];
+
+            // Only add authentication if B2C is configured
+            if (!string.IsNullOrEmpty(domain) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tenantId))
+            {
+                builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAdB2C"));
+                
+                // Configure additional options
+                builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                {
+                    options.TokenValidationParameters.NameClaimType = "name";
+                });
+
+                builder.Services.AddAuthorization(options =>
+                {
+                    options.AddPolicy("Admin", policy => policy.RequireClaim("roles", "Admin"));
+                    options.DefaultPolicy = new AuthorizationPolicyBuilder()
+                        .RequireAuthenticatedUser()
+                        .Build();
+                });
+
+                Console.WriteLine("Azure AD B2C authentication enabled");
+            }
+            else
+            {
+                Console.WriteLine("Azure AD B2C not configured - authentication disabled");
+            }
+
             builder.Services.AddControllers(); // Add API controllers
             builder.Services.AddSingleton<GameSessionManager>();
             
@@ -82,8 +132,8 @@ namespace Aetherium.Server
             builder.Services.AddSingleton<IEventScheduler, EventScheduler>();
             
             // Add Orleans co-hosting (can be disabled for tests via env var)
-            var disableOrleans = Environment.GetEnvironmentVariable("DISABLE_ORLEANS") == "1";
-            
+            // Note: disableOrleans already checked above
+
             // Add world tick service (background service to drive world ticks)
             builder.Services.AddSingleton<WorldTickService>(sp =>
             {
@@ -223,6 +273,15 @@ namespace Aetherium.Server
                     {
                         return sp.GetRequiredService<IGrainFactory>();
                     });
+
+                    // Register IClusterClient for ManagementHub
+                    siloBuilder.Services.AddSingleton<IClusterClient>(sp =>
+                    {
+                        var host = sp.GetRequiredService<IHost>();
+                        return host.Services.GetRequiredService<IClusterClient>();
+                    });
+                    
+                    // SignalR backplane with Orleans is configured via AddOrleans() on signalRBuilder above
                 });
             }
 
@@ -234,8 +293,32 @@ namespace Aetherium.Server
             // Configure middleware
             app.UseMiddleware<ApiKeyMiddleware>();
             app.UseRouting();
+            
+            // Add authentication/authorization middleware (only if B2C is configured)
+            var appAzureAdSection = app.Configuration.GetSection("AzureAdB2C");
+            if (!string.IsNullOrEmpty(appAzureAdSection["Domain"]))
+            {
+                app.UseAuthentication();
+                app.UseAuthorization();
+            }
+            
+            // Get IClusterClient for hubs that need it
+            IClusterClient? clusterClient = null;
+            if (!disableOrleans)
+            {
+                clusterClient = app.Services.GetService<Orleans.IClusterClient>();
+                // If not available yet, try getting from host
+                if (clusterClient == null)
+                {
+                    var host = app.Services.GetRequiredService<IHost>();
+                    clusterClient = host.Services.GetService<Orleans.IClusterClient>();
+                }
+            }
+            
             app.MapHub<GameHub>("/gamehub");
             app.MapHub<Hubs.AgentDashboardHub>("/agentDashboardHub"); // Map dashboard hub
+            app.MapHub<Hubs.ManagementHub>("/managementHub"); // Map management hub for CLI
+            
             app.MapControllers(); // Map API controllers
             
             // Dashboard endpoint for viewing active agents
