@@ -16,6 +16,12 @@ builder.Services.AddSignalR();
 builder.Host.UseOrleansClient(client =>
 {
     client.UseLocalhostClustering();
+    // Configure cluster options to match server configuration
+    client.Configure<ClusterOptions>(opts =>
+    {
+        opts.ClusterId = "dev";
+        opts.ServiceId = "Aetherium";
+    });
 });
 
 // Add telemetry service - will get Orleans client from DI

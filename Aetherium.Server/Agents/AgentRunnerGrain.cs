@@ -45,6 +45,10 @@ namespace Aetherium.Server.Agents
             
             // Get dashboard hub context from service provider
             _dashboardHub = ServiceProvider.GetService(typeof(IHubContext<Hubs.AgentDashboardHub>)) as IHubContext<Hubs.AgentDashboardHub>;
+            if (_dashboardHub == null)
+            {
+                Console.WriteLine($"[AgentRunner {key}] Warning: Dashboard hub context not available - SignalR broadcasting disabled");
+            }
             
             // Default to Player profile (for all game characters/NPCs)
             // Can be changed to WorldBuilder/NarrativeDesigner for world-building agents
@@ -64,10 +68,22 @@ namespace Aetherium.Server.Agents
 
             // Verify session exists
             var status = await _mgmt.GetVisionStatusAsync(sessionId);
-            return status != null;
+            var attached = status != null;
+            
+            // Broadcast initial telemetry state to dashboard if attached
+            if (attached && _telemetryGrain != null && _dashboardHub != null && _agentId != null)
+            {
+                var analysis = await _telemetryGrain.GetAnalysisAsync();
+                if (analysis != null)
+                {
+                    await _dashboardHub.Clients.Group($"agent:{_agentId}").SendAsync("TelemetryUpdate", analysis);
+                }
+            }
+            
+            return attached;
         }
 
-        public Task DetachAsync()
+        public async Task DetachAsync()
         {
             // Store current replay if it exists and was a failure
             if (_currentReplay != null && _currentReplay.Steps.Any())
@@ -83,11 +99,20 @@ namespace Aetherium.Server.Agents
                 _currentReplay = null;
             }
 
+            // Broadcast final telemetry state before detaching
+            if (_telemetryGrain != null && _dashboardHub != null && _agentId != null)
+            {
+                var analysis = await _telemetryGrain.GetAnalysisAsync();
+                if (analysis != null)
+                {
+                    await _dashboardHub.Clients.Group($"agent:{_agentId}").SendAsync("TelemetryUpdate", analysis);
+                }
+            }
+
             _sessionId = null;
             _agentId = null;
             _isRunning = false;
             _cts?.Cancel();
-            return Task.CompletedTask;
         }
 
         public Task<RunnerStatus> GetStatusAsync()
@@ -363,11 +388,20 @@ namespace Aetherium.Server.Agents
             return Task.CompletedTask;
         }
 
-        public Task StopAsync()
+        public async Task StopAsync()
         {
             _isRunning = false;
             _cts?.Cancel();
-            return Task.CompletedTask;
+            
+            // Broadcast final telemetry state when stopping
+            if (_telemetryGrain != null && _dashboardHub != null && _agentId != null)
+            {
+                var analysis = await _telemetryGrain.GetAnalysisAsync();
+                if (analysis != null)
+                {
+                    await _dashboardHub.Clients.Group($"agent:{_agentId}").SendAsync("TelemetryUpdate", analysis);
+                }
+            }
         }
 
         public async Task<PerformanceAnalysis?> GetTelemetryAsync()

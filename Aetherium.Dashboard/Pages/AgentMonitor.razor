@@ -1,6 +1,7 @@
 @page "/agent-monitor"
 @inject AgentTelemetryService TelemetryService
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
 @implements IAsyncDisposable
 @using Microsoft.AspNetCore.SignalR
 @using Microsoft.AspNetCore.SignalR.Client
@@ -76,8 +77,18 @@ else if (!string.IsNullOrEmpty(agentId))
 
     protected override async Task OnInitializedAsync()
     {
+        // Use relative URL to avoid hardcoded scheme/host
+        var hubUrl = Navigation.ToAbsoluteUri("/agentDashboardHub");
+        
         hubConnection = new HubConnectionBuilder()
-            .WithUrl("http://localhost:5000/agentDashboardHub")
+            .WithUrl(hubUrl)
+            .WithAutomaticReconnect(new[] 
+            { 
+                TimeSpan.Zero, 
+                TimeSpan.FromSeconds(2), 
+                TimeSpan.FromSeconds(5), 
+                TimeSpan.FromSeconds(10) 
+            })
             .Build();
 
         hubConnection.On<PerformanceAnalysis>("TelemetryUpdate", (telemetry) =>
@@ -92,13 +103,50 @@ else if (!string.IsNullOrEmpty(agentId))
             InvokeAsync(StateHasChanged);
         });
 
+        // Re-subscribe to agent group when reconnected
+        hubConnection.Reconnected += async _ =>
+        {
+            if (!string.IsNullOrWhiteSpace(agentId) && hubConnection != null)
+            {
+                try
+                {
+                    await hubConnection.SendAsync("SubscribeToAgent", agentId);
+                    // Also refresh telemetry via Orleans
+                    currentTelemetry = await TelemetryService.GetTelemetryAsync(agentId);
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to resubscribe to agent {agentId} after reconnect: {ex.Message}");
+                }
+            }
+        };
+
+        // Handle closed events with backoff retry
+        hubConnection.Closed += async error =>
+        {
+            await Task.Delay(Random.Shared.Next(1000, 3000));
+            try
+            {
+                if (hubConnection != null)
+                {
+                    await hubConnection.StartAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Connection will show as disconnected in UI; automatic reconnect will handle retry
+                Console.WriteLine($"Failed to reconnect after closed event: {ex.Message}");
+            }
+        };
+
         try
         {
             await hubConnection.StartAsync();
         }
         catch (Exception ex)
         {
-            // Connection failed - will retry on subscribe
+            // Connection failed - will retry on subscribe or via automatic reconnect
             Console.WriteLine($"Failed to connect to SignalR hub: {ex.Message}");
         }
     }
