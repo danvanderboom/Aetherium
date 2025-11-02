@@ -46,6 +46,7 @@ The game features a comprehensive extensible agent tool system:
 ### Architecture & Design
 - ✅ [Agent Tool System](agents/TOOLS.md) - Extensible tool architecture
 - ✅ [Narrative Systems](narrative-systems.md) - Procedural storytelling and emergent narratives
+- ✅ [Instance System](instances.md) - Dungeon instances, lockouts, and party support
 - ✅ [Development Guide](development.md) - Developer setup, testing, and workflow
 - ✅ [Client-Server Architecture](../CLIENT_SERVER_README.md) - SignalR, Orleans, and communication protocol
 - Coming soon: System architecture overview

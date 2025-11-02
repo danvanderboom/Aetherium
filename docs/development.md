@@ -314,10 +314,17 @@ See [CLIENT_SERVER_README.md](../CLIENT_SERVER_README.md) for detailed architect
 
 The server uses Orleans for distributed state management:
 
+- **WorldGrain**: Coordinates multi-map worlds
 - **GameMapGrain**: Manages individual game maps/worlds
 - **MapRegionGrain**: Manages regions within maps for scalability
+- **InstanceAllocatorGrain**: Allocates dungeon instances for parties/players
+- **DungeonInstanceGrain**: Manages individual instance lifecycle
+- **PartyGrain/RaidGrain**: Manages party composition and membership
+- **LockoutLedgerGrain**: Enforces instance entry restrictions
 - **GameSession**: Per-client game state
 - **GameManagementGrain**: Game-wide management and coordination
+
+See [Instance System Documentation](instances.md) for details on the instance system.
 
 ### World Generation
 
