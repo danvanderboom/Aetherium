@@ -61,13 +61,13 @@ dotnet run
 
 This change is ready for:
 - [ ] Code review
-- [ ] OpenSpec archiving (when tooling is available)
+- [x] OpenSpec archiving — archived as `openspec/changes/archive/2025-10-30-add-client-server-architecture`
 - [ ] Deployment to production
 
 ## Related Files
 
-- Proposal: `openspec/changes/add-client-server-architecture/proposal.md`
-- Tasks: `openspec/changes/add-client-server-architecture/tasks.md` (all complete)
-- Spec: `openspec/changes/add-client-server-architecture/specs/client-server-communication/spec.md`
+- Proposal: `openspec/changes/archive/2025-10-30-add-client-server-architecture/proposal.md`
+- Tasks: `openspec/changes/archive/2025-10-30-add-client-server-architecture/tasks.md` (all complete)
+- Spec: `openspec/changes/archive/2025-10-30-add-client-server-architecture/specs/client-server-communication/spec.md`
 
 
