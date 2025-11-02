@@ -91,11 +91,19 @@ namespace Aetherium.Server.MultiWorld
                 await clusterGrain.RegisterWorldAsync(config.WorldId);
             }
 
-            // Create initial map
+            // Create initial map (propagate requested size into generator parameters)
+            var parameters = config.GeneratorParameters ?? new Dictionary<string, object>();
+            if (config.Size != null)
+            {
+                parameters["Width"] = config.Size.Width;
+                parameters["Height"] = config.Size.Height;
+                parameters["Depth"] = config.Size.Depth;
+            }
+
             var initialMapId = await AddMapAsync(
                 "Main",
                 config.GeneratorType,
-                config.GeneratorParameters);
+                parameters);
 
             _worldState.State.Info.State = WorldState.Active;
             await _worldState.WriteStateAsync();

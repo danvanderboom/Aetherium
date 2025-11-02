@@ -174,7 +174,7 @@ else if (!string.IsNullOrEmpty(agentId))
             HubConnectionState.Connected => "bg-success",
             HubConnectionState.Connecting => "bg-warning",
             HubConnectionState.Disconnected => "bg-secondary",
-            HubConnectionState.Disconnecting => "bg-warning",
+            HubConnectionState.Reconnecting => "bg-warning",
             _ => "bg-secondary"
         };
     }

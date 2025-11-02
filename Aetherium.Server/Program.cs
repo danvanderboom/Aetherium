@@ -81,6 +81,18 @@ namespace Aetherium.Server
             builder.Services.AddControllers(); // Add API controllers
             builder.Services.AddSingleton<GameSessionManager>();
             
+            // Register world hosting service (only when Orleans is enabled)
+            if (!disableOrleans)
+            {
+                builder.Services.AddSingleton<Aetherium.Server.Services.IWorldHost>(sp =>
+                {
+                    var grainFactory = sp.GetRequiredService<Orleans.IGrainFactory>();
+                    var clusterClient = sp.GetRequiredService<Orleans.IClusterClient>();
+                    var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Aetherium.Server.Services.OrleansWorldHost>>();
+                    return new Aetherium.Server.Services.OrleansWorldHost(grainFactory, clusterClient, logger);
+                });
+            }
+            
             // Update PerceptionService to use WorldClock
             builder.Services.AddSingleton<PerceptionService>(sp =>
             {
@@ -205,6 +217,9 @@ namespace Aetherium.Server
                         siloBuilder.AddMemoryGrainStorage("worldStore");
                         siloBuilder.AddMemoryGrainStorage("mapStore");
                     }
+                    
+                    // Configure Orleans Streams for world events
+                    siloBuilder.AddMemoryStreams("Default");
                     // Azure Storage support - requires Microsoft.Orleans.Persistence.AzureStorage package
                     // Uncomment when package is added:
                     /*
@@ -279,6 +294,16 @@ namespace Aetherium.Server
                     {
                         var host = sp.GetRequiredService<IHost>();
                         return host.Services.GetRequiredService<IClusterClient>();
+                    });
+                    
+                    // Register IWorldHost for grains (GameManagementGrain needs it) - only if it exists
+                    siloBuilder.Services.AddSingleton<Aetherium.Server.Services.IWorldHost>(sp =>
+                    {
+                        var host = sp.GetRequiredService<IHost>();
+                        var worldHost = host.Services.GetService<Aetherium.Server.Services.IWorldHost>();
+                        if (worldHost == null)
+                            throw new InvalidOperationException("IWorldHost service not found in host services");
+                        return worldHost;
                     });
                     
                     // SignalR backplane with Orleans is configured via AddOrleans() on signalRBuilder above

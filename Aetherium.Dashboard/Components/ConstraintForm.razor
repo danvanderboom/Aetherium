@@ -6,7 +6,7 @@
         @foreach (var param in Parameters.OrderBy(p => p.Group ?? "").ThenBy(p => p.Name))
         {
             <div class="mb-3">
-                <label class="form-label">@(param.Name)@(param.Required ? " *" : "")</label>
+                <label class="form-label">@(param.Name)@((param.MinValue.HasValue || param.MaxValue.HasValue) ? " *" : "")</label>
                 @if (!string.IsNullOrEmpty(param.Description))
                 {
                     <small class="form-text text-muted d-block mb-1">@param.Description</small>

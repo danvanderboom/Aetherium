@@ -26,7 +26,8 @@ namespace Aetherium.Test.MultiWorld
 
             public void Configure(ISiloBuilder siloBuilder)
             {
-                // Add in-memory grain storage
+                // Add in-memory grain storage (worldStore needed for WorldGrain initialization)
+                siloBuilder.AddMemoryGrainStorage("worldStore");
                 siloBuilder.AddMemoryGrainStorage("mapStore");
 
                 // Register required services

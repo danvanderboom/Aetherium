@@ -38,6 +38,13 @@ namespace Aetherium.Server.Management
         Task<OperationResult> PauseWorldAsync(string worldId);
         Task<OperationResult> ResumeWorldAsync(string worldId);
         Task<OperationResult> ShutdownWorldAsync(string worldId);
+        
+        // World ACL and Invites (using IWorldHost)
+        Task<List<Aetherium.Model.Worlds.WorldSummary>> ListWorldsWithAclAsync(Aetherium.Model.Worlds.WorldQuery query);
+        Task<OperationResult> SetWorldAclAsync(string worldId, Aetherium.Model.Worlds.WorldAcl acl);
+        Task<Aetherium.Model.Worlds.WorldAcl?> GetWorldAclAsync(string worldId);
+        Task<string> InvitePlayerAsync(string worldId, string playerId);
+        Task<OperationResult> AcceptInviteAsync(string inviteId);
 
         // Gameplay control + perception (for agents)
         Task<string?> GetPerceptionAsync(string sessionId); // JSON-serialized PerceptionDto

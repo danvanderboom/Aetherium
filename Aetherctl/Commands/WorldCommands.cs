@@ -11,6 +11,7 @@ using Aetherctl.Config;
 using Aetherctl.SignalR;
 using Aetherium.Server.MultiWorld;
 using Aetherium.Server.Management;
+using Aetherium.Model.Worlds;
 
 namespace Aetherctl.Commands
 {
@@ -492,12 +493,183 @@ namespace Aetherctl.Commands
                 }
             });
 
+            // ACL commands
+            var setAclCmd = new Command("set-acl", "Set access control list for a world");
+            var aclWorldIdArg = new Argument<string>("worldId", "World ID");
+            var accessLevelOpt = new Option<string>("--access-level", () => "public", "Access level: public or private");
+            var allowedPlayersOpt = new Option<string[]>("--allowed-players", () => Array.Empty<string>(), "Comma-separated list of allowed player IDs");
+            setAclCmd.AddArgument(aclWorldIdArg);
+            setAclCmd.AddOption(accessLevelOpt);
+            setAclCmd.AddOption(allowedPlayersOpt);
+            setAclCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var worldId = parseResult.GetValueForArgument(aclWorldIdArg);
+                    var accessLevelStr = parseResult.GetValueForOption(accessLevelOpt);
+                    var allowedPlayers = parseResult.GetValueForOption(allowedPlayersOpt) ?? Array.Empty<string>();
+
+                    var accessLevel = accessLevelStr?.ToLower() == "private" 
+                        ? Aetherium.Model.Worlds.WorldAccessLevel.Private 
+                        : Aetherium.Model.Worlds.WorldAccessLevel.Public;
+
+                    var acl = new Aetherium.Model.Worlds.WorldAcl
+                    {
+                        AccessLevel = accessLevel,
+                        AllowedPlayers = new HashSet<Aetherium.Model.Worlds.PlayerId>(
+                            allowedPlayers.Select(p => new Aetherium.Model.Worlds.PlayerId(p))
+                        ),
+                        OwnerPlayers = new HashSet<Aetherium.Model.Worlds.PlayerId>()
+                    };
+
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var mgmt = factory.GetGameManagement();
+                    var result = await mgmt.SetWorldAclAsync(worldId, acl);
+
+                    if (result.Success)
+                    {
+                        if (Common.IsJsonOutput(parseResult))
+                            Common.WriteOutput(parseResult, new { success = true, worldId, accessLevel = accessLevelStr });
+                        else
+                            Common.WriteSuccess(parseResult, $"Set ACL for world {worldId} to {accessLevelStr}");
+                    }
+                    else
+                    {
+                        Common.WriteError(parseResult, $"Error: {result.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Error setting ACL: {ex.Message}");
+                }
+            });
+
+            var getAclCmd = new Command("get-acl", "Get access control list for a world");
+            var getAclWorldIdArg = new Argument<string>("worldId", "World ID");
+            getAclCmd.AddArgument(getAclWorldIdArg);
+            getAclCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var worldId = parseResult.GetValueForArgument(getAclWorldIdArg);
+
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var mgmt = factory.GetGameManagement();
+                    var acl = await mgmt.GetWorldAclAsync(worldId);
+
+                    if (acl == null)
+                    {
+                        Common.WriteError(parseResult, $"ACL not found for world {worldId}");
+                        return;
+                    }
+
+                    if (Common.IsJsonOutput(parseResult))
+                    {
+                        Common.WriteOutput(parseResult, new
+                        {
+                            success = true,
+                            worldId,
+                            accessLevel = acl.AccessLevel.ToString(),
+                            allowedPlayers = acl.AllowedPlayers.Select(p => p.Value).ToArray(),
+                            ownerPlayers = acl.OwnerPlayers.Select(p => p.Value).ToArray()
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine($"World: {worldId}");
+                        Console.WriteLine($"  Access Level: {acl.AccessLevel}");
+                        Console.WriteLine($"  Allowed Players: {string.Join(", ", acl.AllowedPlayers.Select(p => p.Value))}");
+                        Console.WriteLine($"  Owner Players: {string.Join(", ", acl.OwnerPlayers.Select(p => p.Value))}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Error getting ACL: {ex.Message}");
+                }
+            });
+
+            // Invite commands
+            var inviteCmd = new Command("invite", "Invite a player to a private world");
+            var inviteWorldIdArg = new Argument<string>("worldId", "World ID");
+            var invitePlayerIdArg = new Argument<string>("playerId", "Player ID");
+            inviteCmd.AddArgument(inviteWorldIdArg);
+            inviteCmd.AddArgument(invitePlayerIdArg);
+            inviteCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var worldId = parseResult.GetValueForArgument(inviteWorldIdArg);
+                    var playerId = parseResult.GetValueForArgument(invitePlayerIdArg);
+
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var mgmt = factory.GetGameManagement();
+                    var inviteId = await mgmt.InvitePlayerAsync(worldId, playerId);
+
+                    if (Common.IsJsonOutput(parseResult))
+                    {
+                        Common.WriteOutput(parseResult, new { success = true, worldId, playerId, inviteId });
+                    }
+                    else
+                    {
+                        Console.WriteLine($"✓ Invited player {playerId} to world {worldId}");
+                        Console.WriteLine($"  Invite ID: {inviteId}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Error inviting player: {ex.Message}");
+                }
+            });
+
+            var acceptInviteCmd = new Command("accept-invite", "Accept a world invite");
+            var inviteIdArg = new Argument<string>("inviteId", "Invite ID");
+            acceptInviteCmd.AddArgument(inviteIdArg);
+            acceptInviteCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var inviteId = parseResult.GetValueForArgument(inviteIdArg);
+
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var mgmt = factory.GetGameManagement();
+                    var result = await mgmt.AcceptInviteAsync(inviteId);
+
+                    if (result.Success)
+                    {
+                        if (Common.IsJsonOutput(parseResult))
+                            Common.WriteOutput(parseResult, new { success = true, inviteId });
+                        else
+                            Common.WriteSuccess(parseResult, $"Accepted invite {inviteId}");
+                    }
+                    else
+                    {
+                        Common.WriteError(parseResult, $"Error: {result.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Error accepting invite: {ex.Message}");
+                }
+            });
+
             worldCmd.AddCommand(createCmd);
             worldCmd.AddCommand(listCmd);
             worldCmd.AddCommand(infoCmd);
             worldCmd.AddCommand(pauseCmd);
             worldCmd.AddCommand(resumeCmd);
             worldCmd.AddCommand(shutdownCmd);
+            worldCmd.AddCommand(setAclCmd);
+            worldCmd.AddCommand(getAclCmd);
+            worldCmd.AddCommand(inviteCmd);
+            worldCmd.AddCommand(acceptInviteCmd);
             root.AddCommand(worldCmd);
         }
     }

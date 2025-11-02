@@ -20,10 +20,12 @@ namespace Aetherium.Test.MultiWorld
 
 		private sealed class SiloConfigurator : ISiloConfigurator
 		{
-			public void Configure(ISiloBuilder siloBuilder)
-			{
-				siloBuilder.AddMemoryGrainStorage("mapStore");
-				siloBuilder.ConfigureServices(services =>
+		public void Configure(ISiloBuilder siloBuilder)
+		{
+			// Add in-memory grain storage (worldStore needed for WorldGrain/ClusterGrain if accessed)
+			siloBuilder.AddMemoryGrainStorage("worldStore");
+			siloBuilder.AddMemoryGrainStorage("mapStore");
+			siloBuilder.ConfigureServices(services =>
 				{
 					services.Configure<SimulationOptions>(options =>
 					{

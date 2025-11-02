@@ -5,6 +5,7 @@ using NUnit.Framework;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using Orleans.Hosting;
+using Orleans.Configuration;
 using Orleans;
 using Aetherium.Server.Management;
 using Aetherium.Server.MultiWorld;
@@ -31,6 +32,12 @@ namespace Aetherium.Test
                 siloBuilder.AddMemoryGrainStorage("worldStore");
                 siloBuilder.AddMemoryGrainStorage("mapStore");
                 siloBuilder.AddMemoryGrainStorage("management");
+
+                // Increase request timeout to accommodate world generation during tests
+                siloBuilder.Configure<SiloMessagingOptions>(opts =>
+                {
+                    opts.ResponseTimeout = TimeSpan.FromMinutes(3);
+                });
 
                 // Register required services used by grains
                 siloBuilder.ConfigureServices(services =>

@@ -8,7 +8,7 @@
             @foreach (var candidate in Results.Candidates)
             {
                 <div class="col-md-4 mb-3">
-                    <div class="card @(candidate.Success ? "" : "border-danger")" style="cursor: pointer;" @onclick="@(() => OnSelect(candidate))">
+                    <div class="card @(candidate.Success ? "" : "border-danger")" style="cursor: pointer;" @onclick="@(() => OnSelect.InvokeAsync(candidate))">
                         <div class="card-header">
                             <small>Seed: @candidate.Seed</small>
                             @if (!candidate.Success)

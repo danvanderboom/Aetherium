@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Orleans.Sdk" Version="9.2.1" />
     <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1" />
     <PackageReference Include="Microsoft.Orleans.Serialization.Abstractions" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
     <PackageReference Include="Microsoft.Identity.Web" Version="2.19.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
     <PackageReference Include="UFX.Orleans.SignalRBackplane" Version="9.2.1" />

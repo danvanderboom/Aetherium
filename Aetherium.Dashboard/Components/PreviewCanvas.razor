@@ -74,7 +74,7 @@
             AnchorType.Rectangle => a.Width.HasValue && a.Height.HasValue &&
                 x >= a.X && x < a.X + a.Width.Value &&
                 y >= a.Y && y < a.Y + a.Height.Value,
-            AnchorType.Polygon => a.Vertices != null && IsPointInPolygon(new Point { X = x, Y = y }, a.Vertices),
+            AnchorType.Polygon => a.Vertices != null && IsPointInPolygon(new WorldGenCLI.Models.Point { X = x, Y = y }, a.Vertices.Select(p => new WorldGenCLI.Models.Point { X = p.X, Y = p.Y }).ToList()),
             _ => false
         };
     }
@@ -84,7 +84,7 @@
         return region.Points.Any(p => p.X == x && p.Y == y);
     }
 
-    private bool IsPointInPolygon(Point point, List<Point> vertices)
+    private bool IsPointInPolygon(WorldGenCLI.Models.Point point, List<WorldGenCLI.Models.Point> vertices)
     {
         // Ray casting algorithm (simplified)
         if (vertices.Count < 3)

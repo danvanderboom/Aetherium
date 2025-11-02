@@ -17,13 +17,13 @@
 
 <ul class="nav nav-tabs mt-4" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link @(activeTab == "worlds" ? "active" : "")" @onclick="() => SetActiveTab(\"worlds\")">Worlds</button>
+        <button class="nav-link @(activeTab == "worlds" ? "active" : "")" @onclick='() => SetActiveTab("worlds")'>Worlds</button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link @(activeTab == "sessions" ? "active" : "")" @onclick="() => SetActiveTab(\"sessions\")">Sessions</button>
+        <button class="nav-link @(activeTab == "sessions" ? "active" : "")" @onclick='() => SetActiveTab("sessions")'>Sessions</button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link @(activeTab == "agents" ? "active" : "")" @onclick="() => SetActiveTab(\"agents\")">Agents</button>
+        <button class="nav-link @(activeTab == "agents" ? "active" : "")" @onclick='() => SetActiveTab("agents")'>Agents</button>
     </li>
 </ul>
 

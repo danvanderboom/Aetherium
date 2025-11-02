@@ -1,3 +1,4 @@
+using Aetherium.Dashboard;
 using Aetherium.Dashboard.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;

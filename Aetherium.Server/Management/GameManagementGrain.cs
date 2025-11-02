@@ -28,6 +28,7 @@ namespace Aetherium.Server.Management
         private readonly GameSessionManager _sessionManager;
         private readonly IGrainFactory _grainFactory;
         private readonly InteractionSystem _interactionSystem = new InteractionSystem();
+        private readonly Aetherium.Server.Services.IWorldHost? _worldHost;
 
         private class SessionMetadata
         {
@@ -36,11 +37,16 @@ namespace Aetherium.Server.Management
             public DateTime ConnectedAt { get; set; }
         }
 
-        public GameManagementGrain(IHubContext<GameHub> hubContext, GameSessionManager sessionManager, IGrainFactory grainFactory)
+        public GameManagementGrain(
+            IHubContext<GameHub> hubContext, 
+            GameSessionManager sessionManager, 
+            IGrainFactory grainFactory,
+            IServiceProvider serviceProvider)
         {
             _hubContext = hubContext ?? throw new ArgumentNullException(nameof(hubContext));
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
+            _worldHost = serviceProvider.GetService<Aetherium.Server.Services.IWorldHost>();
         }
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
@@ -656,28 +662,58 @@ namespace Aetherium.Server.Management
 
         public async Task<string> CreateWorldAsync(CreateWorldRequest request)
         {
-            var worldId = $"world:{Guid.NewGuid()}";
-            var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
-
-            var config = new WorldConfig
+            // Use IWorldHost if available (new system), otherwise fallback to direct grain creation
+            if (_worldHost != null)
             {
-                WorldId = worldId,
-                Name = request.Name,
-                Description = request.Description,
-                GeneratorType = string.IsNullOrWhiteSpace(request.GeneratorType) ? "rooms-and-corridors" : request.GeneratorType,
-                GeneratorParameters = request.GeneratorParameters,
-                NarrativeId = request.NarrativeId,
-                MaxPlayers = request.MaxPlayers,
-                Size = request.Size ?? new WorldSize { Width = 100, Height = 100, Depth = 1 },
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = "system"
-            };
+                var template = new Aetherium.Model.Worlds.WorldTemplate
+                {
+                    Name = request.Name,
+                    Description = request.Description,
+                    GeneratorType = string.IsNullOrWhiteSpace(request.GeneratorType) ? "rooms-and-corridors" : request.GeneratorType,
+                    GeneratorParameters = request.GeneratorParameters ?? new Dictionary<string, object>(),
+                    MaxPlayers = request.MaxPlayers,
+                    NarrativeId = request.NarrativeId,
+                    ClusterId = null
+                };
 
-            await worldGrain.InitializeAsync(config);
-            _worldRegistry[worldId] = worldId;
+                // Default to public world
+                var acl = new Aetherium.Model.Worlds.WorldAcl
+                {
+                    AccessLevel = Aetherium.Model.Worlds.WorldAccessLevel.Public
+                };
 
-            Console.WriteLine($"[GameManagementGrain] Created world {worldId} ({request.Name})");
-            return worldId;
+                var worldId = await _worldHost.CreateWorldAsync(template, acl);
+                _worldRegistry[worldId.Value] = worldId.Value;
+
+                Console.WriteLine($"[GameManagementGrain] Created world {worldId.Value} ({request.Name}) via IWorldHost");
+                return worldId.Value;
+            }
+            else
+            {
+                // Fallback to direct grain creation (for backwards compatibility)
+                var worldId = $"world:{Guid.NewGuid()}";
+                var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+
+                var config = new WorldConfig
+                {
+                    WorldId = worldId,
+                    Name = request.Name,
+                    Description = request.Description,
+                    GeneratorType = string.IsNullOrWhiteSpace(request.GeneratorType) ? "rooms-and-corridors" : request.GeneratorType,
+                    GeneratorParameters = request.GeneratorParameters ?? new Dictionary<string, object>(),
+                    NarrativeId = request.NarrativeId,
+                    MaxPlayers = request.MaxPlayers,
+                    Size = request.Size ?? new WorldSize { Width = 100, Height = 100, Depth = 1 },
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "system"
+                };
+
+                await worldGrain.InitializeAsync(config);
+                _worldRegistry[worldId] = worldId;
+
+                Console.WriteLine($"[GameManagementGrain] Created world {worldId} ({request.Name}) via direct grain");
+                return worldId;
+            }
         }
 
         public async Task<OperationResult> PauseWorldAsync(string worldId)
@@ -739,6 +775,106 @@ namespace Aetherium.Server.Management
             {
                 Console.WriteLine($"[GameManagementGrain] Error shutting down world: {ex.Message}");
                 return OperationResult.Error($"Failed to shut down world: {ex.Message}");
+            }
+        }
+
+        // World ACL and Invites
+        public async Task<List<Aetherium.Model.Worlds.WorldSummary>> ListWorldsWithAclAsync(Aetherium.Model.Worlds.WorldQuery query)
+        {
+            if (_worldHost == null)
+                return new List<Aetherium.Model.Worlds.WorldSummary>();
+
+            try
+            {
+                var worlds = await _worldHost.ListWorldsAsync(query);
+                return worlds.ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error listing worlds with ACL: {ex.Message}");
+                return new List<Aetherium.Model.Worlds.WorldSummary>();
+            }
+        }
+
+        public async Task<OperationResult> SetWorldAclAsync(string worldId, Aetherium.Model.Worlds.WorldAcl acl)
+        {
+            if (_worldHost == null)
+                return OperationResult.Error("World hosting service not available");
+
+            try
+            {
+                var worldIdValue = new Aetherium.Model.Worlds.WorldId(worldId);
+                await _worldHost.SetWorldAclAsync(worldIdValue, acl);
+                Console.WriteLine($"[GameManagementGrain] Set ACL for world {worldId}");
+                return OperationResult.Ok();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error setting world ACL: {ex.Message}");
+                return OperationResult.Error($"Failed to set world ACL: {ex.Message}");
+            }
+        }
+
+        public async Task<Aetherium.Model.Worlds.WorldAcl?> GetWorldAclAsync(string worldId)
+        {
+            if (_worldHost == null)
+                return null;
+
+            try
+            {
+                var aclGrain = _grainFactory.GetGrain<Aetherium.Server.MultiWorld.IWorldAclGrain>(worldId);
+                return await aclGrain.GetAclAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error getting world ACL: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<string> InvitePlayerAsync(string worldId, string playerId)
+        {
+            if (_worldHost == null)
+                throw new InvalidOperationException("World hosting service not available");
+
+            try
+            {
+                var worldIdValue = new Aetherium.Model.Worlds.WorldId(worldId);
+                var playerIdValue = new Aetherium.Model.Worlds.PlayerId(playerId);
+                var inviteId = await _worldHost.InviteAsync(worldIdValue, playerIdValue);
+                Console.WriteLine($"[GameManagementGrain] Invited player {playerId} to world {worldId}");
+                return inviteId.Value;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error inviting player: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<OperationResult> AcceptInviteAsync(string inviteId)
+        {
+            if (_worldHost == null)
+                return OperationResult.Error("World hosting service not available");
+
+            try
+            {
+                var inviteIdValue = new Aetherium.Model.Worlds.InviteId(inviteId);
+                var success = await _worldHost.AcceptInviteAsync(inviteIdValue);
+                if (success)
+                {
+                    Console.WriteLine($"[GameManagementGrain] Accepted invite {inviteId}");
+                    return OperationResult.Ok();
+                }
+                else
+                {
+                    return OperationResult.Error("Invite not found or already accepted");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error accepting invite: {ex.Message}");
+                return OperationResult.Error($"Failed to accept invite: {ex.Message}");
             }
         }
 
