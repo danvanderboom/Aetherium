@@ -157,11 +157,31 @@ namespace Aetherium.Server.MultiWorld
             }
             
             // Process scheduled events for this region
-            var eventScheduler = GetEventScheduler();
-            if (eventScheduler != null && clock != null)
+            // Try grain-based scheduler first, fall back to service
+            var mapGrain = GetMapGrain();
+            if (mapGrain != null && clock != null)
             {
-                var currentGameTime = clock.GetTotalGameTimeHours();
-                await eventScheduler.ProcessScheduledEventsAsync(currentGameTime, day);
+                var worldId = await mapGrain.GetWorldAsync();
+                if (!string.IsNullOrEmpty(worldId))
+                {
+                    var grainFactory = this.ServiceProvider.GetService<Orleans.IGrainFactory>();
+                    if (grainFactory != null)
+                    {
+                        var eventSchedulerGrain = grainFactory.GetGrain<IEventSchedulerGrain>(worldId);
+                        var currentGameTime = clock.GetTotalGameTimeHours();
+                        await eventSchedulerGrain.ProcessScheduledEventsAsync(currentGameTime, day);
+                    }
+                }
+            }
+            else
+            {
+                // Fallback to service-based scheduler (for backward compatibility)
+                var eventScheduler = GetEventScheduler();
+                if (eventScheduler != null && clock != null)
+                {
+                    var currentGameTime = clock.GetTotalGameTimeHours();
+                    await eventScheduler.ProcessScheduledEventsAsync(currentGameTime, day);
+                }
             }
             
             // Periodically persist state (not every tick to reduce writes)

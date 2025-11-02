@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Aetherium.Server.Simulation;
+using Aetherium.Server.MultiWorld;
+using Orleans;
 
 namespace Aetherium.Server.Events
 {
@@ -16,9 +18,10 @@ namespace Aetherium.Server.Events
             var x = scheduledEvent.X ?? 0;
             var y = scheduledEvent.Y ?? 0;
             var z = scheduledEvent.Z ?? 0;
+            var regionId = scheduledEvent.RegionId ?? string.Empty;
 
-            // TODO: Spawn merchant caravan entities at location
-            // - Create merchant NPCs
+            // TODO: Get map ID from region ID and spawn merchant caravan entities
+            // - Create merchant NPCs via SpawnControllerGrain
             // - Create trade goods
             // - Emit narrative event
 
@@ -55,10 +58,10 @@ namespace Aetherium.Server.Events
                 ? Convert.ToInt32(countObj)
                 : 5;
 
-            // TODO: Spawn monster invasion
-            // - Use SpawnManager to determine spawn rates
+            // TODO: Get event instance ID from scheduled event and use SpawnControllerGrain
+            // - Use SpawnControllerGrain.SpawnEntitiesAsync to spawn monsters
             // - Create monster entities at location
-            // - Emit narrative event
+            // - Emit narrative event via AOI broadcasts
 
             await Task.CompletedTask;
         }
