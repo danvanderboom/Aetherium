@@ -56,8 +56,9 @@ namespace Aetherium.Server.Events
             _state.State.Handlers["monster_invasion"] = "MonsterInvasionHandler";
 
             // Create handler instances
-            _handlers["merchant_caravan"] = new MerchantCaravanHandler();
+            _handlers["merchant_caravan"] = new MerchantCaravanHandler(_grainFactory);
             _handlers["monster_invasion"] = new MonsterInvasionHandler(
+                _grainFactory,
                 this.ServiceProvider.GetService<SpawnManager>());
         }
 
@@ -196,6 +197,9 @@ namespace Aetherium.Server.Events
             // Track active instance
             _state.State.ActiveEventInstances.Add(eventInstanceId.Value);
 
+            // Store event instance id in scheduled event data for handlers
+            scheduledEvent.EventData["eventInstanceId"] = eventInstanceId.Value;
+
             // Execute handler if available
             if (_handlers.TryGetValue(scheduledEvent.EventType, out var handler))
             {
@@ -248,8 +252,9 @@ namespace Aetherium.Server.Events
             // Instantiate handler based on type
             IEventHandler? handler = handlerType switch
             {
-                "MerchantCaravanHandler" => new MerchantCaravanHandler(),
+                "MerchantCaravanHandler" => new MerchantCaravanHandler(_grainFactory),
                 "MonsterInvasionHandler" => new MonsterInvasionHandler(
+                    _grainFactory,
                     this.ServiceProvider.GetService<SpawnManager>()),
                 _ => null
             };
