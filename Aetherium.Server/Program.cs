@@ -352,7 +352,15 @@ namespace Aetherium.Server
             }
 
             // Configure URLs
-            builder.WebHost.UseUrls("http://localhost:5000");
+            var aspNetCoreUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+            if (!string.IsNullOrWhiteSpace(aspNetCoreUrls))
+            {
+                builder.WebHost.UseUrls(aspNetCoreUrls);
+            }
+            else
+            {
+                builder.WebHost.UseUrls("http://localhost:5000");
+            }
 
             var app = builder.Build();
 
@@ -394,7 +402,8 @@ namespace Aetherium.Server
                 return Microsoft.AspNetCore.Http.Results.Json(new { message = "Agent dashboard - TODO: Implement agent listing" });
             });
 
-            Console.WriteLine("Console Game Server starting on http://localhost:5000");
+            var effectiveUrls = aspNetCoreUrls ?? "http://localhost:5000";
+            Console.WriteLine($"Console Game Server starting on {effectiveUrls}");
             Console.WriteLine("Orleans silo co-hosted with ASP.NET Core");
             Console.WriteLine("Multi-world hosting enabled - use CLI to create worlds");
             Console.WriteLine("Waiting for client connections...");
