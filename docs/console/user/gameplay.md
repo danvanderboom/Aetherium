@@ -61,6 +61,21 @@ How to play Console Game - exploring, interacting, and surviving in the dungeon.
 - **Closing**: Stand next to an open door, press **L**
 - Some doors may be locked or require keys
 
+#### Using Items
+Some items can be used in multiple ways depending on context. When you interact with an item that has multiple usage options, you'll be presented with a choice:
+
+- **Keys** can unlock matching doors
+- **Lockpicks** can attempt to pick locks on doors
+- **Crowbars** can force open doors
+- **Potions** can be consumed directly
+- **Torches** can be placed in the world
+
+**Multi-Use Items:**
+- When multiple usage options are available, you'll see a menu to select which one to use
+- For example, a crowbar might offer "Force Open" or "Unlock Door" options
+- The available options depend on what you're using the item on (the target)
+- Options are filtered based on context (e.g., door-unlocking only appears when near a locked door)
+
 ## Advanced Features
 
 ### Lighting & Vision Modes
@@ -223,6 +238,8 @@ When using Sunlight mode, time progresses:
 - Make sure you're facing the door
 - Try moving one step closer
 - Door might be locked - check inventory for keys
+- If you have a key, use it on the door (you may need to select "Unlock Door" from usage options)
+- Some doors can be lockpicked or forced open with the right tools
 
 ### "Heat trails are confusing"
 - Switch back to Normal mode (**1** or **2**)

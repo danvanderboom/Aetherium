@@ -86,6 +86,21 @@ F/PgDn   Down Lvl |                     | Esc Quit
 4. Press L to close behind you
 ```
 
+### Using Items with Multiple Options
+```
+1. Use an item on a target (via affordance)
+2. If multiple usage options appear, select one:
+   - Type the number (1, 2, 3, etc.)
+   - Or use the option name (e.g., "force-open")
+3. Item executes with selected usage mode
+
+Examples:
+- Crowbar on door: "Force Open" or "Unlock Door"
+- Lockpick on locked door: "Lockpick"
+- Potion: "Consume"
+- Key on matching door: Auto-unlocks (single option)
+```
+
 ### Changing Levels
 ```
 1. Find stairs/ladder

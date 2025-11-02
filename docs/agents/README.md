@@ -301,6 +301,7 @@ When `AGENT_LLM_ENABLED=1`, agents:
 **Available Tool Categories:**
 - **Movement** (4 tools): move, rotate, changelevel, jumptolocation
 - **Interaction** (5 tools): pickup, drop, use, open, close
+  - **🆕 Multi-Use Tools**: The `use` tool now supports multiple usage modes with context-gated options (e.g., unlock-door, force-open, consume, lockpick). See [Tool System Documentation](TOOLS.md#multi-use-tools) for details.
 - **Vision** (4 tools): toggledirectionalvision, setfov, setlightingmode, setvisionmode
 - **World-Building** (13 tools): Entity/terrain/map/narrative management (for WorldBuilder agents)
 

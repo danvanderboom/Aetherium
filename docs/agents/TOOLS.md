@@ -11,17 +11,24 @@ The Agent Tool System provides a comprehensive, extensible framework for AI agen
 - Tools are discovered via reflection at startup
 - Capability-based access control ensures security
 
-### 2. **Dual API Support**
+### 2. **Multi-Use Tools** 🆕
+- Items can support multiple usage modes depending on context
+- Context-gated usage options (e.g., "only works on doors", "only in forests", "only during combat")
+- Proactive disambiguation: affordances list usage options upfront
+- Reactive disambiguation: server returns options when usage is ambiguous
+- Single-use tools continue to work as before (backward compatible)
+
+### 3. **Dual API Support**
 - **Legacy SignalR Methods**: Existing methods like `MovePlayer`, `Pickup`, etc. still work
 - **Unified Tool API**: New `ExecuteTool(toolId, args)` method for dynamic tool execution
 - Both APIs execute the same underlying tool implementations
 
-### 3. **LLM Format Support**
+### 4. **LLM Format Support**
 - **OpenAI Function Calling**: For GPT-4 and compatible models
 - **Simple JSON Format**: For models like phi-4 that don't support function calling
 - Automatic format detection based on model name
 
-### 4. **Tool Profiles**
+### 5. **Tool Profiles**
 - **Explorer**: Basic navigation tools only
 - **FullAccess**: All player-level tools (movement, inventory, interaction, vision)
 - **WorldBuilder**: Entity and terrain manipulation tools
@@ -39,7 +46,7 @@ The Agent Tool System provides a comprehensive, extensible framework for AI agen
 ### Interaction Tools (Category: `interaction`, `inventory`)
 - **`pickup`** - Pick up items by entity ID
 - **`drop`** - Drop items from inventory
-- **`use`** - Use item on another entity (e.g., key on door)
+- **`use`** - Use item on another entity (e.g., key on door). Supports multi-use tools with context-gated usage options (see Multi-Use Tools section below)
 - **`open`** - Open doors or containers
 - **`close`** - Close doors or containers
 
@@ -280,6 +287,110 @@ Console.WriteLine($"Result: {result.Message}");
 - Measure success rates per tool
 - Identify problematic tools or capabilities
 - Performance profiling per tool
+
+## Multi-Use Tools
+
+### Overview
+
+Some items can be used in multiple ways depending on context. For example:
+- A **crowbar** might be used to force open doors OR pry open crates
+- A **key** might unlock doors OR activate mechanisms
+- A **consumable potion** might be consumed directly OR used on another entity
+
+When multiple usage options are available, the system supports two disambiguation modes:
+
+### Proactive Disambiguation
+
+Usage options are listed in perception affordances upfront:
+
+```json
+{
+  "action": "use",
+  "itemId": "crowbar-1",
+  "targetId": "door-1",
+  "usageOptions": [
+    {"usageId": "force-open", "label": "Force Open", "targetId": "door-1"},
+    {"usageId": "unlock-door", "label": "Unlock Door", "targetId": "door-1"}
+  ]
+}
+```
+
+The client can present these options immediately when the affordance is available.
+
+### Reactive Disambiguation
+
+If `use` is called without a `usageId` and multiple options exist, the server returns available options:
+
+```json
+{
+  "success": false,
+  "reason": "Multiple usage options available",
+  "options": [
+    {"usageId": "force-open", "label": "Force Open", "description": "Force open the door"},
+    {"usageId": "unlock-door", "label": "Unlock Door", "description": "Unlock the door with this key"}
+  ]
+}
+```
+
+The client can then present choices and retry with the selected `usageId`.
+
+### Context-Gated Usage Options
+
+Usage options can have context requirements that filter when they're available:
+
+```csharp
+new UseOption
+{
+    UsageId = "unlock-door",
+    Label = "Unlock Door",
+    Description = "Unlock the door with this key",
+    ContextRequirements = new List<string> { "target-is-door", "adjacent-target" }
+}
+```
+
+Common context tags:
+- `near-door` - A door is nearby (adjacent or same location)
+- `target-is-door` - The target entity is a door
+- `adjacent-target` - Target is within 1 tile
+- `indoors` / `outdoors` - Current terrain context
+- `in-forest` - Player is in forest terrain
+- `in-combat` - Player is in combat (future)
+
+### Single Option Auto-Execution
+
+If exactly one valid usage option exists, it executes automatically without requiring selection (backward compatible with single-use tools).
+
+### Usage Examples
+
+**Using a key on a locked door (single option - auto-executes):**
+```csharp
+var result = await client.ExecuteToolAsync("use", new Dictionary<string, object>
+{
+    ["itemEntityId"] = "key-1",
+    ["onEntityId"] = "door-1"
+    // usageId not needed - auto-executes unlock-door
+});
+```
+
+**Using a crowbar on a door (multiple options - must specify):**
+```csharp
+var result = await client.ExecuteToolAsync("use", new Dictionary<string, object>
+{
+    ["itemEntityId"] = "crowbar-1",
+    ["onEntityId"] = "door-1",
+    ["usageId"] = "force-open"  // Explicit selection required
+});
+```
+
+**Consuming a potion (no target required):**
+```csharp
+var result = await client.ExecuteToolAsync("use", new Dictionary<string, object>
+{
+    ["itemEntityId"] = "potion-1",
+    ["onEntityId"] = "potion-1",  // Using on itself for consume
+    ["usageId"] = "consume"
+});
+```
 
 ## Migration from Legacy API
 
