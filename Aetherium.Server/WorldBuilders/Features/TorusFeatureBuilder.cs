@@ -2,10 +2,12 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Aetherium;
 using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.WorldBuilders;
+using Aetherium.Server.Agents.Tools;
 
 namespace Aetherium.WorldBuilders.Features
 {
@@ -16,6 +18,13 @@ namespace Aetherium.WorldBuilders.Features
         Random rand = new Random();
 
         public TorusFeatureBuilder(World world, WorldFeature feature) : base(world, feature)
+        {
+        }
+
+        public TorusFeatureBuilder(World world, WorldFeature feature, 
+            AgentToolRegistry? toolRegistry = null, 
+            IServiceProvider? serviceProvider = null)
+            : base(world, feature, toolRegistry, serviceProvider)
         {
         }
 
@@ -52,9 +61,41 @@ namespace Aetherium.WorldBuilders.Features
                 if (location.Z < 0) // underground levels
                 {
                     if (InsideTorus(location, axis, majorRadius, minorRadius))
-                        World.SetTerrain("Indoors", location);
+                    {
+                        // Use SetTerrainTool if available, otherwise fall back to direct World.SetTerrain
+                        if (ToolRegistry != null && ServiceProvider != null)
+                        {
+                            ExecuteTool("setterrain", new Dictionary<string, object>
+                            {
+                                ["x"] = location.X,
+                                ["y"] = location.Y,
+                                ["z"] = location.Z,
+                                ["terrainType"] = "Indoors"
+                            });
+                        }
+                        else
+                        {
+                            World.SetTerrain("Indoors", location);
+                        }
+                    }
                     else if (InsideTorus(location, axis, majorRadius, minorRadius + borderWidth))
-                        World.SetTerrain("Mountain", location); // 3D torus border
+                    {
+                        // Use SetTerrainTool if available, otherwise fall back to direct World.SetTerrain
+                        if (ToolRegistry != null && ServiceProvider != null)
+                        {
+                            ExecuteTool("setterrain", new Dictionary<string, object>
+                            {
+                                ["x"] = location.X,
+                                ["y"] = location.Y,
+                                ["z"] = location.Z,
+                                ["terrainType"] = "Mountain"
+                            });
+                        }
+                        else
+                        {
+                            World.SetTerrain("Mountain", location); // 3D torus border
+                        }
+                    }
                 }
                 else if (location.Z == 0) // above ground level
                 {

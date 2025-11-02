@@ -6,17 +6,17 @@ using Aetherium.Components;
 namespace Aetherium.Server.Agents.Tools.WorldBuilding
 {
     /// <summary>
-    /// Tool for spawning new entities in the world.
+    /// Tool for setting terrain at specific coordinates.
     /// Requires world_edit capability.
     /// </summary>
-    [AgentTool("spawnentity", "Create a new entity at a specific location", 
-        Categories = new[] { "worldbuilding", "entity_management" },
+    [AgentTool("setterrain", "Set terrain type at specified coordinates", 
+        Categories = new[] { "worldbuilding", "terrain_management" },
         RequiredCapabilities = new[] { "world_edit" })]
-    public class SpawnEntityTool : IAgentTool
+    public class SetTerrainTool : IAgentTool
     {
-        public string ToolId => "spawnentity";
-        public string Description => "Create a new entity at specified coordinates with components";
-        public IEnumerable<string> Categories => new[] { "worldbuilding", "entity_management" };
+        public string ToolId => "setterrain";
+        public string Description => "Set terrain type at specified coordinates";
+        public IEnumerable<string> Categories => new[] { "worldbuilding", "terrain_management" };
         public IEnumerable<string> RequiredCapabilities => new[] { "world_edit" };
         
         public ToolParameterSchema GetParameterSchema()
@@ -41,18 +41,13 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
                         Description = "Z coordinate (level)",
                         DefaultValue = 0
                     },
-                    ["entityType"] = new()
+                    ["terrainType"] = new()
                     {
                         Type = "string",
-                        Description = "Type of entity to spawn (e.g., 'key', 'door', 'item')"
-                    },
-                    ["properties"] = new()
-                    {
-                        Type = "object",
-                        Description = "Additional properties for the entity (JSON object)"
+                        Description = "Type of terrain to set (e.g., 'Plains', 'Forest', 'Water', 'Mountain')"
                     }
                 },
-                Required = new() { "x", "y", "entityType" }
+                Required = new() { "x", "y", "terrainType" }
             };
         }
         
@@ -60,6 +55,10 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
         {
             if (!context.HasCapability("world_edit"))
                 return ToolExecutionResult.Error("Missing required capability: world_edit");
+            
+            // Check if we have World context (WorldBuildingToolContext)
+            if (context is not WorldBuildingToolContext worldContext)
+                return ToolExecutionResult.Error("SetTerrainTool requires WorldBuildingToolContext with World reference");
             
             // Validate parameters
             if (!args.TryGetValue("x", out var xObj) || !int.TryParse(xObj.ToString(), out var x))
@@ -72,29 +71,28 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
             if (args.TryGetValue("z", out var zObj))
                 int.TryParse(zObj.ToString(), out z);
             
-            if (!args.TryGetValue("entityType", out var typeObj))
-                return ToolExecutionResult.Error("Missing required parameter: entityType");
+            if (!args.TryGetValue("terrainType", out var typeObj))
+                return ToolExecutionResult.Error("Missing required parameter: terrainType");
             
-            var entityType = typeObj.ToString();
-            if (string.IsNullOrWhiteSpace(entityType))
-                return ToolExecutionResult.Error("Entity type cannot be empty");
+            var terrainType = typeObj.ToString();
+            if (string.IsNullOrWhiteSpace(terrainType))
+                return ToolExecutionResult.Error("Terrain type cannot be empty");
             
-            // Check if we have World context (WorldBuildingToolContext)
-            if (context is not WorldBuildingToolContext worldContext)
-                return ToolExecutionResult.Error("SpawnEntityTool requires WorldBuildingToolContext with World reference");
+            // Check if terrain type is registered
+            if (!worldContext.World.TerrainTypes.ContainsKey(terrainType))
+                return ToolExecutionResult.Error($"Terrain type '{terrainType}' is not registered in this world");
             
-            // Create location
+            // Set terrain at location
             var location = new WorldLocation(x, y, z);
-            
-            // TODO: Full entity creation implementation would:
-            // 1. Create entity instance based on entityType (requires entity factory/prefab system)
-            // 2. Add components based on entityType and properties
-            // 3. Set location on entity
-            // 4. Add entity to world
-            
-            // For now, return not implemented since entity creation requires specific entity types
-            // which may need factory/prefab system
-            return ToolExecutionResult.Error($"SpawnEntityTool: Entity creation for type '{entityType}' requires entity factory/prefab system. Would spawn at ({x}, {y}, {z})");
+            try
+            {
+                worldContext.World.SetTerrain(terrainType, location);
+                return ToolExecutionResult.Ok($"Set terrain '{terrainType}' at ({x}, {y}, {z})");
+            }
+            catch (System.Exception ex)
+            {
+                return ToolExecutionResult.Error($"Failed to set terrain: {ex.Message}");
+            }
         }
     }
 }

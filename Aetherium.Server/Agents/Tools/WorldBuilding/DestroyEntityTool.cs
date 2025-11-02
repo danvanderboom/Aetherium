@@ -45,13 +45,28 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
             if (string.IsNullOrWhiteSpace(entityId))
                 return ToolExecutionResult.Error("Entity ID cannot be empty");
             
-            // TODO: Full implementation would:
-            // 1. Find entity in world
-            // 2. Remove from spatial index
-            // 3. Clean up references
-            // 4. Destroy entity
+            // Check if we have World context (WorldBuildingToolContext)
+            if (context is not WorldBuildingToolContext worldContext)
+                return ToolExecutionResult.Error("DestroyEntityTool requires WorldBuildingToolContext with World reference");
             
-            return ToolExecutionResult.Error("DestroyEntityTool: Full implementation pending. Would destroy entity " + entityId);
+            // Check if entity exists
+            if (!worldContext.World.Entities.TryGetValue(entityId, out var entity))
+                return ToolExecutionResult.Error($"Entity not found: {entityId}");
+            
+            try
+            {
+                // Remove entity from world
+                worldContext.World.RemoveEntity(entityId);
+                return ToolExecutionResult.Ok($"Destroyed entity {entityId}");
+            }
+            catch (System.ArgumentException ex)
+            {
+                return ToolExecutionResult.Error($"Failed to destroy entity: {ex.Message}");
+            }
+            catch (System.Exception ex)
+            {
+                return ToolExecutionResult.Error($"Failed to destroy entity: {ex.Message}");
+            }
         }
     }
 }

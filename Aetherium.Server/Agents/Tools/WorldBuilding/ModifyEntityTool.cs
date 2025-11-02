@@ -60,13 +60,23 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
             if (string.IsNullOrWhiteSpace(entityId))
                 return ToolExecutionResult.Error("Entity ID cannot be empty");
             
-            // TODO: Full implementation would:
-            // 1. Find entity in world
-            // 2. Apply property modifications
-            // 3. Add/remove components as specified
-            // 4. Update world state
+            // Check if we have World context (WorldBuildingToolContext)
+            if (context is not WorldBuildingToolContext worldContext)
+                return ToolExecutionResult.Error("ModifyEntityTool requires WorldBuildingToolContext with World reference");
             
-            return ToolExecutionResult.Error("ModifyEntityTool: Full implementation pending. Would modify entity " + entityId);
+            // Find entity in world
+            if (!worldContext.World.Entities.TryGetValue(entityId, out var entity))
+                return ToolExecutionResult.Error($"Entity not found: {entityId}");
+            
+            // TODO: Full implementation would:
+            // 1. Apply property modifications from args["properties"]
+            // 2. Add components from args["addComponents"]
+            // 3. Remove components from args["removeComponents"]
+            // These operations require component system knowledge and reflection
+            
+            // For now, return not implemented since component modification requires
+            // detailed knowledge of component system and reflection
+            return ToolExecutionResult.Error($"ModifyEntityTool: Component modification requires component system knowledge. Would modify entity {entityId}");
         }
     }
 }

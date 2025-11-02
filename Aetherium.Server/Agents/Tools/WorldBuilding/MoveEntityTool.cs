@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Aetherium.Core;
+using Aetherium.Components;
 
 namespace Aetherium.Server.Agents.Tools.WorldBuilding
 {
@@ -71,13 +73,27 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
             if (args.TryGetValue("z", out var zObj))
                 int.TryParse(zObj.ToString(), out z);
             
-            // TODO: Full implementation would:
-            // 1. Find entity in world
-            // 2. Update position component
-            // 3. Update spatial index
-            // 4. Update world state
+            // Check if we have World context (WorldBuildingToolContext)
+            if (context is not WorldBuildingToolContext worldContext)
+                return ToolExecutionResult.Error("MoveEntityTool requires WorldBuildingToolContext with World reference");
             
-            return ToolExecutionResult.Error("MoveEntityTool: Full implementation pending. Would move entity " + entityId + " to (" + x + "," + y + "," + z + ")");
+            // Find entity in world
+            if (!worldContext.World.Entities.TryGetValue(entityId, out var entity))
+                return ToolExecutionResult.Error($"Entity not found: {entityId}");
+            
+            // Create destination location
+            var destination = new WorldLocation(x, y, z);
+            
+            try
+            {
+                // Move entity to new location
+                worldContext.World.MoveEntity(entityId, destination);
+                return ToolExecutionResult.Ok($"Moved entity {entityId} to ({x}, {y}, {z})");
+            }
+            catch (System.Exception ex)
+            {
+                return ToolExecutionResult.Error($"Failed to move entity: {ex.Message}");
+            }
         }
     }
 }

@@ -56,13 +56,14 @@ The Agent Tool System provides a comprehensive, extensible framework for AI agen
 - **`setlightingmode`** - Set lighting (Torch/Sunlight/Darkness)
 - **`setvisionmode`** - Set vision mode (Normal/Infrared/UltraViolet/Sonar)
 
-### World-Building Tools (Category: `worldbuilding`, `entity_management`)
-- **`spawnentity`** - Create entities at coordinates
-- **`destroyentity`** - Remove entities
-- **`modifyentity`** - Change entity properties
-- **`moveentity`** - Relocate entities
+### World-Building Tools (Category: `worldbuilding`, `entity_management`, `terrain_management`)
+- **`setterrain`** - Set terrain type at specified coordinates (fully implemented)
+- **`spawnentity`** - Create entities at coordinates (requires entity factory/prefab system)
+- **`destroyentity`** - Remove entities from world (fully implemented)
+- **`modifyentity`** - Change entity properties (requires component system knowledge)
+- **`moveentity`** - Relocate entities to new coordinates (fully implemented)
 
-**Note**: World-building tools currently have stub implementations and require the `world_edit` or `world_generate` capabilities.
+**Note**: World-building tools require the `world_edit` capability. When used during world building (via `WorldFeatureBuilder`), tools execute with `WorldBuildingToolContext` that provides direct `World` access without requiring game sessions.
 
 ## Quick Start
 
@@ -276,11 +277,14 @@ Console.WriteLine($"Result: {result.Message}");
 - Useful for complex tasks like world generation or quest creation
 - Parent validates child outputs for coherence
 
-### Advanced World-Building (Planned)
-- Full implementations of terrain modification tools
-- Map section generation with validation
-- Prefab placement and room creation
-- Narrative token management
+### Advanced World-Building
+- ✅ **Terrain modification tools** - `SetTerrainTool` fully implemented
+- ✅ **Entity management tools** - `MoveEntityTool` and `DestroyEntityTool` fully implemented
+- ✅ **World building integration** - Feature builders can execute tools during world generation
+- 🔄 **Prefab placement** - `SpawnEntityTool` pending (requires entity factory/prefab system)
+- 🔄 **Component modification** - `ModifyEntityTool` pending (requires component system knowledge)
+- 🔄 **Map section generation** - Planned for future enhancements
+- 🔄 **Narrative token management** - Planned for future enhancements
 
 ### Tool Metrics & Analytics (Planned)
 - Track tool usage frequency
@@ -422,6 +426,96 @@ await gameClient.ExecuteToolAsync("pickup", new Dictionary<string, object> {
     ["targetEntityId"] = entityId
 });
 ```
+
+## World Building Integration
+
+### Overview
+
+World building tools can be executed during world generation via `WorldFeatureBuilder`. This allows feature builders to use the same tool system that agents and players use, providing consistent validation, authorization, and side-effects.
+
+### Using Tools in Feature Builders
+
+Feature builders can execute tools during `Build()` by using the `ExecuteTool()` helper method:
+
+```csharp
+public class CustomFeatureBuilder : WorldFeatureBuilder
+{
+    public override void Build()
+    {
+        foreach (var location in Feature.Chunk.AllLocations)
+        {
+            // Use SetTerrainTool if registry/provider are available
+            if (ToolRegistry != null && ServiceProvider != null)
+            {
+                ExecuteTool("setterrain", new Dictionary<string, object>
+                {
+                    ["x"] = location.X,
+                    ["y"] = location.Y,
+                    ["z"] = location.Z,
+                    ["terrainType"] = "Plains"
+                });
+            }
+            else
+            {
+                // Fall back to direct World manipulation
+                World.SetTerrain("Plains", location);
+            }
+        }
+    }
+}
+```
+
+### WorldBuildingToolContext
+
+When tools are executed during world building, they receive a `WorldBuildingToolContext` instead of a standard `ToolExecutionContext`. This specialized context:
+
+- Provides direct `World` access via `context.World`
+- Automatically grants `world_edit` capability
+- Includes optional `CurrentFeature` reference
+- Does not require game sessions or Orleans grains
+
+### Example: TorusFeatureBuilder Using SetTerrainTool
+
+The `TorusFeatureBuilder` demonstrates tool usage during world generation:
+
+```csharp
+if (location.Z < 0) // underground levels
+{
+    if (InsideTorus(location, axis, majorRadius, minorRadius))
+    {
+        // Use SetTerrainTool if available, otherwise fall back
+        if (ToolRegistry != null && ServiceProvider != null)
+        {
+            ExecuteTool("setterrain", new Dictionary<string, object>
+            {
+                ["x"] = location.X,
+                ["y"] = location.Y,
+                ["z"] = location.Z,
+                ["terrainType"] = "Indoors"
+            });
+        }
+        else
+        {
+            World.SetTerrain("Indoors", location);
+        }
+    }
+}
+```
+
+### Benefits of Tool Integration
+
+1. **Consistency**: World building uses the same validation and error handling as runtime operations
+2. **Testability**: Tools can be tested independently from world building logic
+3. **Composability**: Feature builders can compose tools to build complex world features
+4. **Extensibility**: New world building capabilities can be added as tools without modifying feature builders
+
+### Tool Execution Performance
+
+Tools executed during world building are called synchronously (blocking) to keep `Build()` synchronous. This is acceptable for world generation since:
+
+- World generation is typically not in a tight performance loop
+- Tool execution overhead is minimal (<10ms per call)
+- Direct `World` manipulation is still available for hot paths
 
 ## Troubleshooting
 

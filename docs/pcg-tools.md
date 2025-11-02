@@ -85,3 +85,72 @@ The Dashboard includes a PCG Editor UI at `/pcg` that provides:
 
 Access the editor by navigating to the PCG Editor page in the Dashboard after starting both the API server and Dashboard.
 
+## World Building Tool Integration
+
+Feature builders can execute agent tools during world generation, providing consistent validation and error handling with runtime operations.
+
+### Using Tools in Feature Builders
+
+When a `WorldFeatureBuilder` has access to `AgentToolRegistry` and `IServiceProvider`, it can execute tools during `Build()`:
+
+```csharp
+public class CustomFeatureBuilder : WorldFeatureBuilder
+{
+    public override void Build()
+    {
+        // Execute SetTerrainTool during world generation
+        ExecuteTool("setterrain", new Dictionary<string, object>
+        {
+            ["x"] = 10,
+            ["y"] = 20,
+            ["z"] = 0,
+            ["terrainType"] = "Forest"
+        });
+    }
+}
+```
+
+### Available World Building Tools
+
+- **`setterrain`** - Set terrain type at coordinates (fully implemented)
+- **`moveentity`** - Move entities to new locations (fully implemented)
+- **`destroyentity`** - Remove entities from world (fully implemented)
+- **`spawnentity`** - Create entities at coordinates (requires entity factory/prefab system)
+- **`modifyentity`** - Modify entity properties (requires component system knowledge)
+
+### Example: TorusFeatureBuilder
+
+The `TorusFeatureBuilder` demonstrates tool integration by using `SetTerrainTool` for underground terrain placement when tools are available:
+
+```csharp
+if (location.Z < 0) // underground levels
+{
+    if (InsideTorus(location, axis, majorRadius, minorRadius))
+    {
+        // Use SetTerrainTool if registry/provider available
+        if (ToolRegistry != null && ServiceProvider != null)
+        {
+            ExecuteTool("setterrain", new Dictionary<string, object>
+            {
+                ["x"] = location.X,
+                ["y"] = location.Y,
+                ["z"] = location.Z,
+                ["terrainType"] = "Indoors"
+            });
+        }
+        else
+        {
+            // Fall back to direct World manipulation
+            World.SetTerrain("Indoors", location);
+        }
+    }
+}
+```
+
+### Benefits
+
+- **Consistency**: Same validation and error handling as runtime operations
+- **Testability**: Tools can be tested independently
+- **Composability**: Feature builders can compose tools for complex features
+- **Backward Compatibility**: Direct `World` manipulation still works when tools aren't available
+
