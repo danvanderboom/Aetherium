@@ -49,6 +49,14 @@ namespace Aetherium.Server.Events
             if (_state.State == null)
                 throw new InvalidOperationException("State not initialized");
 
+            // Resolve MapId from RegionId if provided and MapId is not set
+            if (!string.IsNullOrEmpty(config.RegionId) && string.IsNullOrEmpty(config.MapId))
+            {
+                var regionGrain = _grainFactory.GetGrain<IMapRegionGrain>(config.RegionId);
+                var snapshot = await regionGrain.GetSnapshotAsync();
+                config.MapId = snapshot.MapId;
+            }
+
             _state.State.EventInstanceId = config.EventInstanceId;
             _state.State.EventId = config.EventId;
             _state.State.EventType = config.EventType;
