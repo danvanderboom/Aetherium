@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Orleans;
 
 namespace Aetherium.Server.Events
 {
@@ -53,19 +54,20 @@ namespace Aetherium.Server.Events
     /// <summary>
     /// Represents a scheduled procedural event.
     /// </summary>
+    [GenerateSerializer]
     public class ScheduledEvent
     {
-        public string EventId { get; set; } = Guid.NewGuid().ToString();
-        public string EventType { get; set; } = string.Empty;
-        public Dictionary<string, object> EventData { get; set; } = new Dictionary<string, object>();
-        public double ScheduledGameTime { get; set; }
-        public string? RegionId { get; set; }
-        public int? X { get; set; }
-        public int? Y { get; set; }
-        public int? Z { get; set; }
-        public bool IsRecurring { get; set; }
-        public double? RecurIntervalHours { get; set; }
-        public bool IsTriggered { get; set; }
+        [Id(0)] public string EventId { get; set; } = Guid.NewGuid().ToString();
+        [Id(1)] public string EventType { get; set; } = string.Empty;
+        [Id(2)] public Dictionary<string, object> EventData { get; set; } = new Dictionary<string, object>();
+        [Id(3)] public double ScheduledGameTime { get; set; }
+        [Id(4)] public string? RegionId { get; set; }
+        [Id(5)] public int? X { get; set; }
+        [Id(6)] public int? Y { get; set; }
+        [Id(7)] public int? Z { get; set; }
+        [Id(8)] public bool IsRecurring { get; set; }
+        [Id(9)] public double? RecurIntervalHours { get; set; }
+        [Id(10)] public bool IsTriggered { get; set; }
     }
 }
 

@@ -156,33 +156,33 @@ namespace Aetherium.Server.MultiWorld
                 await modifierRegistry.ApplyAllAsync(this, snapshot, gameTimeElapsed, timeOfDay, day);
             }
             
-            // Process scheduled events for this region
-            // Try grain-based scheduler first, fall back to service
-            var mapGrain = GetMapGrain();
-            if (mapGrain != null && clock != null)
-            {
-                var worldId = await mapGrain.GetWorldAsync();
-                if (!string.IsNullOrEmpty(worldId))
-                {
-                    var grainFactory = this.ServiceProvider.GetService<Orleans.IGrainFactory>();
-                    if (grainFactory != null)
-                    {
-                        var eventSchedulerGrain = grainFactory.GetGrain<IEventSchedulerGrain>(worldId);
-                        var currentGameTime = clock.GetTotalGameTimeHours();
-                        await eventSchedulerGrain.ProcessScheduledEventsAsync(currentGameTime, day);
-                    }
-                }
-            }
-            else
-            {
-                // Fallback to service-based scheduler (for backward compatibility)
-                var eventScheduler = GetEventScheduler();
-                if (eventScheduler != null && clock != null)
-                {
-                    var currentGameTime = clock.GetTotalGameTimeHours();
-                    await eventScheduler.ProcessScheduledEventsAsync(currentGameTime, day);
-                }
-            }
+			// Process scheduled events for this region
+			// Prefer service-based scheduler when available to avoid unnecessary grain activations in tests
+			var serviceScheduler = GetEventScheduler();
+			if (serviceScheduler != null && clock != null)
+			{
+				var currentGameTime = clock.GetTotalGameTimeHours();
+				await serviceScheduler.ProcessScheduledEventsAsync(currentGameTime, day);
+			}
+			else
+			{
+				// Fall back to grain-based scheduler if service is not registered
+				var mapGrain = GetMapGrain();
+				if (mapGrain != null && clock != null)
+				{
+					var worldId = await mapGrain.GetWorldAsync();
+					if (!string.IsNullOrEmpty(worldId))
+					{
+						var grainFactory = this.ServiceProvider.GetService<Orleans.IGrainFactory>();
+						if (grainFactory != null)
+						{
+							var eventSchedulerGrain = grainFactory.GetGrain<IEventSchedulerGrain>(worldId);
+							var currentGameTime = clock.GetTotalGameTimeHours();
+							await eventSchedulerGrain.ProcessScheduledEventsAsync(currentGameTime, day);
+						}
+					}
+				}
+			}
             
             // Periodically persist state (not every tick to reduce writes)
             // Persist if significant time has elapsed since last save
