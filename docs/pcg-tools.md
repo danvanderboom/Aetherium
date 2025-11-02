@@ -16,6 +16,12 @@ aetherctl worldgen generate \
 
 # Or with JSON output
 aetherctl worldgen generate --generator AdvancedDungeon --json
+
+# Render world preview as ASCII
+aetherctl worldgen render --template dungeon --width 60 --height 60 --ascii
+
+# Render world preview as PNG
+aetherctl worldgen render --template dungeon --width 60 --height 60 --png output.png
 ```
 
 Key options:
