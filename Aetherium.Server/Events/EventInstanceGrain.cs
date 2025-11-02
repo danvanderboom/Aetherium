@@ -143,6 +143,21 @@ namespace Aetherium.Server.Events
 
             await _state.WriteStateAsync();
 
+            // Despawn any entities spawned for this event via the spawn controller
+            try
+            {
+                var spawnController = _grainFactory.GetGrain<ISpawnControllerGrain>(_state.State.EventInstanceId.Value);
+                var spawnedEntities = await spawnController.GetSpawnedEntitiesAsync();
+                if (spawnedEntities.Count > 0)
+                {
+                    await spawnController.DespawnEntitiesAsync(spawnedEntities);
+                }
+            }
+            catch
+            {
+                // Swallow errors for cleanup path; scheduler cleanup still proceeds
+            }
+
             // Notify scheduler to remove from active instances
             var schedulerGrain = _grainFactory.GetGrain<IEventSchedulerGrain>(_state.State.WorldId.Value);
             // Scheduler will clean up on next tick
