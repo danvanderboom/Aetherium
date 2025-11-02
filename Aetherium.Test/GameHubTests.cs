@@ -6,6 +6,7 @@ using NUnit.Framework;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using Orleans.Hosting;
+using global::Orleans.Configuration;
 using Orleans;
 using Aetherium.Server;
 using Aetherium.Server.MultiWorld;
@@ -33,10 +34,30 @@ namespace Aetherium.Test
                 // Configure test grain storage
                 siloBuilder.AddMemoryGrainStorage("worldStore");
                 siloBuilder.AddMemoryGrainStorage("mapStore");
+                siloBuilder.AddMemoryGrainStorage("management");
+
+                // Increase request timeout to accommodate world generation during tests
+                siloBuilder.Configure<SiloMessagingOptions>(opts =>
+                {
+                    opts.ResponseTimeout = TimeSpan.FromMinutes(3);
+                });
 
                 // Register required services used by grains
                 siloBuilder.ConfigureServices(services =>
                 {
+                    // Core simulation options for tests (use large region to minimize region grains)
+                    services.Configure<Aetherium.Server.Simulation.SimulationOptions>(opts =>
+                    {
+                        opts.RegionSize = 128;
+                        opts.EnableWeather = false;
+                        opts.EnableSeasons = false;
+                        opts.EnableAgentChanges = false;
+                        opts.EnableProceduralEvents = false;
+                    });
+
+                    // In-memory snapshot store for regions (required dependency)
+                    services.AddSingleton<Aetherium.Server.Persistence.IWorldSnapshotStore, Aetherium.Test.TestStubs.InMemoryWorldSnapshotStore>();
+
                     // Map generator registry
                     services.AddSingleton<Aetherium.WorldGen.MapGeneratorRegistry>(sp =>
                     {

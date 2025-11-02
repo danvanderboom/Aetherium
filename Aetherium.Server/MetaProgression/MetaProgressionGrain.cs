@@ -31,6 +31,12 @@ namespace Aetherium.Server.MetaProgression
                     UnlockedGenerators = new HashSet<string> { "PerlinTerrain", "BasicDungeon" } // Start with basic generators unlocked
                 };
             }
+            else if (_state.State.UnlockedGenerators.Count == 0)
+            {
+                // Backfill defaults if state exists but has no unlocks (for legacy tests/state)
+                _state.State.UnlockedGenerators.Add("PerlinTerrain");
+                _state.State.UnlockedGenerators.Add("BasicDungeon");
+            }
 
             return base.OnActivateAsync(cancellationToken);
         }
@@ -197,6 +203,12 @@ namespace Aetherium.Server.MetaProgression
             if (_state.State == null)
                 return Task.FromResult(new List<string> { "PerlinTerrain", "BasicDungeon" }); // Default unlocked
 
+            if (_state.State.UnlockedGenerators.Count == 0)
+            {
+                // Return defaults if none recorded
+                return Task.FromResult(new List<string> { "PerlinTerrain", "BasicDungeon" });
+            }
+
             return Task.FromResult(_state.State.UnlockedGenerators.ToList());
         }
 
@@ -208,7 +220,10 @@ namespace Aetherium.Server.MetaProgression
                 return Task.FromResult(generatorName == "PerlinTerrain" || generatorName == "BasicDungeon");
             }
 
-            return Task.FromResult(_state.State.UnlockedGenerators.Contains(generatorName));
+            return Task.FromResult(
+                _state.State.UnlockedGenerators.Count == 0
+                    ? (generatorName == "PerlinTerrain" || generatorName == "BasicDungeon")
+                    : _state.State.UnlockedGenerators.Contains(generatorName));
         }
 
         public Task<MetaProgressionState?> GetStateAsync()

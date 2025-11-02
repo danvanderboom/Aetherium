@@ -111,11 +111,8 @@ namespace Aetherium.Test.Agents
         {
             public void Configure(ISiloBuilder siloBuilder)
             {
-                siloBuilder.ConfigureApplicationParts(parts =>
-                {
-                    parts.AddApplicationPart(typeof(AgentRunnerGrain).Assembly).WithReferences();
-                    parts.AddApplicationPart(typeof(AgentTelemetryGrain).Assembly).WithReferences();
-                });
+                // Orleans v9 auto-discovers grain assemblies referenced by the test project.
+                // No explicit application part configuration is required here.
 
                 // Note: In a full implementation, you would register the mocked hub context here:
                 // siloBuilder.ConfigureServices(services =>

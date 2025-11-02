@@ -154,6 +154,13 @@ namespace Aetherium.Server.MultiWorld
                 }
             }
 
+            // Fallback: if any markets exist, return the first available world/map to keep portals functional
+            var anyMarket = _state.State.Economy.Markets.Values.FirstOrDefault();
+            if (anyMarket != null)
+            {
+                return (anyMarket.WorldId, anyMarket.MapId);
+            }
+
             return (null, null);
         }
 

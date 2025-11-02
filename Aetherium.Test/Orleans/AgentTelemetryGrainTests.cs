@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 using NUnit.Framework;
 using Orleans;
 using Orleans.Hosting;
@@ -258,11 +259,8 @@ namespace Aetherium.Test.Orleans
         {
             public void Configure(ISiloBuilder siloBuilder)
             {
-                // Configure silo for tests
-                siloBuilder.ConfigureApplicationParts(parts =>
-                {
-                    parts.AddApplicationPart(typeof(AgentTelemetryGrain).Assembly).WithReferences();
-                });
+                // Orleans v9 auto-discovers grain assemblies referenced by the test project.
+                // No explicit application part configuration is required here.
             }
         }
     }

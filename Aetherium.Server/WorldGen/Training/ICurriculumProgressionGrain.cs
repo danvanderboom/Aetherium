@@ -73,7 +73,15 @@ namespace Aetherium.WorldGen.Training
         public double CurrentSuccessRate { get; set; }
 
         [Orleans.Id(7)]
-        public Dictionary<string, object> StageProgress { get; set; } = new Dictionary<string, object>();
+        public Dictionary<string, CurriculumStageProgressInfo> StageProgress { get; set; } = new Dictionary<string, CurriculumStageProgressInfo>();
+    }
+
+    [Orleans.GenerateSerializer]
+    public sealed class CurriculumStageProgressInfo
+    {
+        [Orleans.Id(0)] public int TotalRuns { get; set; }
+        [Orleans.Id(1)] public int SuccessfulRuns { get; set; }
+        [Orleans.Id(2)] public double SuccessRate { get; set; }
     }
 }
 

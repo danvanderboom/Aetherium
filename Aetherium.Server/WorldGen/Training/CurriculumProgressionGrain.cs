@@ -12,6 +12,23 @@ namespace Aetherium.WorldGen.Training
     /// </summary>
     public class CurriculumProgressionGrain : Grain, ICurriculumProgressionGrain
     {
+        // Internal registry for tests and runtime to provide curriculum definitions
+        // Nested private so tests can reflect it via IsNestedPrivate
+        private static class CurriculumLibrary
+        {
+            private static readonly Dictionary<string, CurriculumDefinition> _curricula = new Dictionary<string, CurriculumDefinition>();
+
+            public static CurriculumDefinition? GetCurriculum(string curriculumId)
+            {
+                return _curricula.TryGetValue(curriculumId, out var curriculum) ? curriculum : null;
+            }
+
+            public static void RegisterCurriculum(CurriculumDefinition curriculum)
+            {
+                _curricula[curriculum.CurriculumId] = curriculum;
+            }
+        }
+
         private string? _curriculumId;
         private string? _agentId;
         private CurriculumDefinition? _curriculum;
@@ -101,7 +118,7 @@ namespace Aetherium.WorldGen.Training
                 CurriculumId = _curriculumId ?? string.Empty,
                 CurrentStageId = _currentStageId ?? string.Empty,
                 TotalStages = _curriculum?.Stages.Count ?? 0,
-                StageProgress = new Dictionary<string, object>()
+                StageProgress = new Dictionary<string, CurriculumStageProgressInfo>()
             };
 
             // Count completed stages
@@ -116,12 +133,12 @@ namespace Aetherium.WorldGen.Training
                         progress.CompletedStages++;
                     }
 
-                    progress.StageProgress[stage.StageId] = new
+                    progress.StageProgress[stage.StageId] = new CurriculumStageProgressInfo
                     {
-                        totalRuns = stageProgress.TotalRuns,
-                        successfulRuns = stageProgress.SuccessfulRuns,
-                        successRate = stageProgress.TotalRuns > 0 
-                            ? (double)stageProgress.SuccessfulRuns / stageProgress.TotalRuns 
+                        TotalRuns = stageProgress.TotalRuns,
+                        SuccessfulRuns = stageProgress.SuccessfulRuns,
+                        SuccessRate = stageProgress.TotalRuns > 0
+                            ? (double)stageProgress.SuccessfulRuns / stageProgress.TotalRuns
                             : 0.0
                     };
                 }
@@ -249,30 +266,6 @@ namespace Aetherium.WorldGen.Training
             public int SuccessfulRuns { get; set; }
             public int TotalSteps { get; set; }
             public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
-        }
-    }
-
-    /// <summary>
-    /// Simple in-memory curriculum library. In production, would load from storage.
-    /// </summary>
-    internal static class CurriculumLibrary
-    {
-        private static readonly Dictionary<string, CurriculumDefinition> _curricula = new Dictionary<string, CurriculumDefinition>();
-
-        static CurriculumLibrary()
-        {
-            // Load curricula from Data/Curricula on initialization
-            // For now, just provides lookup
-        }
-
-        public static CurriculumDefinition? GetCurriculum(string curriculumId)
-        {
-            return _curricula.TryGetValue(curriculumId, out var curriculum) ? curriculum : null;
-        }
-
-        public static void RegisterCurriculum(CurriculumDefinition curriculum)
-        {
-            _curricula[curriculum.CurriculumId] = curriculum;
         }
     }
 }

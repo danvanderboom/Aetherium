@@ -13,6 +13,7 @@ namespace Aetherium.Server.MultiWorld
     /// <summary>
     /// Orleans grain coordinating a multi-map world.
     /// </summary>
+    [Orleans.Concurrency.Reentrant]
     public class WorldGrain : Grain, IWorldGrain
     {
         private readonly IPersistentState<WorldGrainState> _worldState;

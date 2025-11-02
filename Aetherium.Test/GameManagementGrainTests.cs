@@ -42,6 +42,19 @@ namespace Aetherium.Test
                 // Register required services used by grains
                 siloBuilder.ConfigureServices(services =>
                 {
+                    // Core simulation options for tests (use large region to minimize region grains)
+                    services.Configure<Aetherium.Server.Simulation.SimulationOptions>(opts =>
+                    {
+                        opts.RegionSize = 128;
+                        opts.EnableWeather = false;
+                        opts.EnableSeasons = false;
+                        opts.EnableAgentChanges = false;
+                        opts.EnableProceduralEvents = false;
+                    });
+
+                    // In-memory snapshot store for regions (required dependency for MapRegionGrain)
+                    services.AddSingleton<Aetherium.Server.Persistence.IWorldSnapshotStore, Aetherium.Test.TestStubs.InMemoryWorldSnapshotStore>();
+
                     // Map generator registry
                     services.AddSingleton<Aetherium.WorldGen.MapGeneratorRegistry>(sp =>
                     {

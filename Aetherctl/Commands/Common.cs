@@ -2,6 +2,7 @@ using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Text.Json;
+using System.Linq;
 
 namespace Aetherctl.Commands
 {
@@ -18,7 +19,17 @@ namespace Aetherctl.Commands
         public static bool IsJsonOutput(ParseResult parseResult)
         {
             if (JsonOption == null) return false;
-            return parseResult.GetValueForOption(JsonOption);
+            // Some System.CommandLine versions require an explicit value for bool options.
+            // Treat presence of the switch (e.g., "--json") as true when no value is provided.
+            var value = parseResult.GetValueForOption(JsonOption);
+            if (value)
+            {
+                return true;
+            }
+
+            // Fall back to checking for the option token presence
+            var alias = JsonOption.Aliases.FirstOrDefault() ?? "--json";
+            return parseResult.Tokens.Any(t => string.Equals(t.Value, alias, StringComparison.OrdinalIgnoreCase));
         }
 
         public static bool IsVerbose(ParseResult parseResult)

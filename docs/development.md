@@ -67,7 +67,7 @@ dotnet test Aetherium.Test --filter "FullyQualifiedName~GameMapGrain_LoadMap_Res
 
 ### Test Status
 
-Current test status: **597 passed, 0 failed, 2 skipped** (as of latest run)
+Current test status: **703 passed, 0 failed, 2 skipped** (as of latest run)
 
 ### Testing Best Practices
 
@@ -128,6 +128,17 @@ This allows tests to use fixed seeds for reproducible results:
 var parameters = new Dictionary<string, object> { { "seed", 12345 } };
 await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", parameters);
 ```
+
+### Orleans v9 Testing Notes
+
+- Grain discovery: Orleans v9 auto-discovers grain assemblies from referenced projects. No `ConfigureApplicationParts` calls are needed in tests.
+- In-memory storage names used by grains:
+  - `worldStore`, `mapStore`, `narrativeStore`, `metaStore` (see tests' `ISiloConfigurator` for examples).
+- GameHub/Management tests:
+  - Register `IWorldSnapshotStore` with an in-memory test stub for region snapshots.
+  - Bump `SiloMessagingOptions.ResponseTimeout` in tests if world creation/generation is heavy.
+- Concurrency:
+  - `WorldGrain` is marked `[Reentrant]` to avoid deadlocks during initialization that cascades into map/cluster operations in tests.
 
 ## Recent Changes
 
@@ -403,6 +414,6 @@ When contributing code:
 
 ---
 
-**Last Updated**: Based on latest changes (seed parameter support, test fixes)  
-**Test Status**: 597 passed, 0 failed, 2 skipped
+**Last Updated**: Based on latest changes (Orleans v9 test config, reentrancy, fixes)  
+**Test Status**: 703 passed, 0 failed, 2 skipped
 

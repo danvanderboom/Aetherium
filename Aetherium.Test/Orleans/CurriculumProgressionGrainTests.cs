@@ -271,10 +271,8 @@ namespace Aetherium.Test.Orleans
         {
             public void Configure(ISiloBuilder siloBuilder)
             {
-                siloBuilder.ConfigureApplicationParts(parts =>
-                {
-                    parts.AddApplicationPart(typeof(CurriculumProgressionGrain).Assembly).WithReferences();
-                });
+                // Orleans v9 auto-discovers grain assemblies referenced by the test project.
+                // No explicit application part configuration is required here.
             }
         }
     }
