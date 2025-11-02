@@ -17,6 +17,7 @@ using WorldGenCLI.Api;
 using WorldGenCLI.Services;
 using WorldGenCLI.Rendering;
 using WorldGenCLI.Models;
+using SkiaSharp;
 
 namespace Aetherctl.Commands
 {
@@ -226,6 +227,7 @@ namespace Aetherctl.Commands
             // worldgen render --ascii (Phase 1)
             var renderCmd = new Command("render", "Render a generated world preview");
             var renderAsciiOpt = new Option<bool>("--ascii", "Output ASCII map to stdout");
+            var renderPngOpt = new Option<string?>("--png", "Write PNG preview to the specified path");
             renderCmd.AddOption(generatorOpt);
             renderCmd.AddOption(templateOpt);
             renderCmd.AddOption(widthOpt);
@@ -236,6 +238,7 @@ namespace Aetherctl.Commands
             renderCmd.AddOption(paramOpt);
             renderCmd.AddOption(benchmarkOpt);
             renderCmd.AddOption(renderAsciiOpt);
+            renderCmd.AddOption(renderPngOpt);
             renderCmd.SetHandler(async (InvocationContext ctx) =>
             {
                 try
@@ -251,6 +254,7 @@ namespace Aetherctl.Commands
                     var parameters = parseResult.GetValueForOption(paramOpt) ?? Array.Empty<string>();
                     var benchmarkId = parseResult.GetValueForOption(benchmarkOpt);
                     var ascii = parseResult.GetValueForOption(renderAsciiOpt);
+                    var pngPath = parseResult.GetValueForOption(renderPngOpt);
 
                     var registry = new MapGeneratorRegistry();
                     registry.DiscoverTypes(typeof(IMapGenerator).Assembly);
@@ -329,6 +333,16 @@ namespace Aetherctl.Commands
                             rows
                         });
                     }
+                    else if (!string.IsNullOrWhiteSpace(pngPath))
+                    {
+                        var directory = Path.GetDirectoryName(pngPath);
+                        if (!string.IsNullOrEmpty(directory))
+                            Directory.CreateDirectory(directory);
+
+                        RenderPng(map, pngPath!, 8);
+                        if (!Common.IsQuiet(parseResult))
+                            Console.WriteLine($"PNG written to {pngPath}");
+                    }
                     else if (ascii)
                     {
                         for (int y = 0; y < map.Height; y++)
@@ -405,6 +419,56 @@ namespace Aetherctl.Commands
                     new DungeonValidationPass()
                 }
             };
+        }
+
+        private static void RenderPng(MapRenderDto map, string path, int scale)
+        {
+            int width = map.Width * scale;
+            int height = map.Height * scale;
+
+            using var bitmap = new SKBitmap(width, height);
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(new SKColor(20, 20, 24));
+
+            using var paint = new SKPaint { IsAntialias = false, FilterQuality = SKFilterQuality.None };
+            for (int y = 0; y < map.Height; y++)
+            {
+                for (int x = 0; x < map.Width; x++)
+                {
+                    var tileId = map.Tiles[y * map.Width + x];
+                    var color = ResolveColor(map, tileId);
+                    paint.Color = color;
+                    var rect = new SKRect(x * scale, y * scale, (x + 1) * scale, (y + 1) * scale);
+                    canvas.DrawRect(rect, paint);
+                }
+            }
+
+            using var image = SKImage.FromBitmap(bitmap);
+            using var data = image.Encode(SKEncodedImageFormat.Png, 90);
+            using var stream = File.Open(path, FileMode.Create, FileAccess.Write, FileShare.None);
+            data.SaveTo(stream);
+        }
+
+        private static SKColor ResolveColor(MapRenderDto map, byte tileId)
+        {
+            if (map.Palette.TryGetValue(tileId, out var info))
+            {
+                var name = (info.Name ?? "").ToLowerInvariant();
+                return name switch
+                {
+                    "wall" or "stone" => new SKColor(80, 80, 88),
+                    "floor" or "ground" => new SKColor(180, 180, 190),
+                    "door" => new SKColor(139, 69, 19),
+                    "water" => new SKColor(70, 130, 180),
+                    "grass" => new SKColor(34, 139, 34),
+                    "dirt" => new SKColor(160, 82, 45),
+                    "rock" => new SKColor(105, 105, 105),
+                    "tree" => new SKColor(0, 100, 0),
+                    "lava" => new SKColor(220, 20, 60),
+                    _ => new SKColor(120, 120, 128)
+                };
+            }
+            return new SKColor(30, 30, 34);
         }
 
         private static async Task StartApiServer(int port)
