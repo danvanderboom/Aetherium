@@ -300,13 +300,29 @@ namespace Aetherium.Server
         }
 
         [Obsolete("Use ExecuteTool(\"use\", args) instead. This method will be removed in a future version.")]
-        public async Task<InteractionResultDto> Use(string itemEntityId, string onEntityId)
+        public async Task<InteractionResultDto> Use(string itemEntityId, string onEntityId, string? usageId = null)
         {
             var session = sessionManager.GetSession(Context.ConnectionId);
             if (session == null)
                 return new InteractionResultDto { Success = false, Reason = "No session" };
 
-            var result = interactionSystem.TryUse(session, itemEntityId, onEntityId);
+            var result = interactionSystem.TryUse(session, itemEntityId, onEntityId, usageId);
+            
+            // Handle reactive disambiguation: if options are returned, return them in the DTO
+            if (result.Options != null && result.Options.Count > 0)
+            {
+                return new InteractionResultDto 
+                { 
+                    Success = false, 
+                    Reason = result.Reason,
+                    Options = result.Options.Select(opt => new UsageOptionDto
+                    {
+                        UsageId = opt.UsageId,
+                        Label = opt.Label,
+                        Description = opt.Description
+                    }).ToList()
+                };
+            }
             
             // Process narrative consequences if successful
             if (result.Success && clusterClient != null && session.WorldId != null)

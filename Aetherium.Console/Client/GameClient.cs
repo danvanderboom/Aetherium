@@ -127,11 +127,11 @@ namespace Aetherium.Client
             return await connection.InvokeAsync<InteractionResultDto>("Drop", itemEntityId);
         }
 
-        public async Task<InteractionResultDto?> UseAsync(string itemEntityId, string onEntityId)
+        public async Task<InteractionResultDto?> UseAsync(string itemEntityId, string onEntityId, string? usageId = null)
         {
             if (connection == null || !IsConnected)
                 return null;
-            return await connection.InvokeAsync<InteractionResultDto>("Use", itemEntityId, onEntityId);
+            return await connection.InvokeAsync<InteractionResultDto>("Use", itemEntityId, onEntityId, usageId);
         }
 
         public async Task<InteractionResultDto?> OpenAsync(string targetEntityId)

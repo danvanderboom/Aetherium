@@ -504,10 +504,68 @@ namespace Aetherium.Core
                     // For use, we need an item from inventory and a target
                     if (currentPerception?.Inventory?.Items != null && currentPerception.Inventory.Items.Any())
                     {
-                        var item = currentPerception.Inventory.Items.FirstOrDefault(i => 
-                            !string.IsNullOrEmpty(i.KeyId) && i.KeyId == aff.RequiresKeyId) 
-                            ?? currentPerception.Inventory.Items.First();
-                        result = await gameClient.UseAsync(item.Id, aff.TargetId ?? "");
+                        // Use ItemId from affordance if available, otherwise find matching item
+                        var item = !string.IsNullOrEmpty(aff.ItemId)
+                            ? currentPerception.Inventory.Items.FirstOrDefault(i => i.Id == aff.ItemId)
+                            : currentPerception.Inventory.Items.FirstOrDefault(i => 
+                                !string.IsNullOrEmpty(i.KeyId) && i.KeyId == aff.RequiresKeyId);
+                        
+                        if (item == null)
+                            item = currentPerception.Inventory.Items.First();
+                        
+                        // Check for proactive UsageOptions (2+ options)
+                        string? selectedUsageId = null;
+                        if (aff.UsageOptions != null && aff.UsageOptions.Count > 1)
+                        {
+                            // Present choice to user
+                            Console.WriteLine("\nMultiple usage options available:");
+                            for (int i = 0; i < aff.UsageOptions.Count; i++)
+                            {
+                                Console.WriteLine($"{i + 1}. {aff.UsageOptions[i].Label} - {aff.UsageOptions[i].UsageId}");
+                            }
+                            Console.Write("Select option (1-" + aff.UsageOptions.Count + "): ");
+                            var input = Console.ReadLine();
+                            if (int.TryParse(input, out int choice) && choice >= 1 && choice <= aff.UsageOptions.Count)
+                            {
+                                selectedUsageId = aff.UsageOptions[choice - 1].UsageId;
+                            }
+                            else
+                            {
+                                msg = "Invalid selection";
+                                break;
+                            }
+                        }
+                        else if (aff.UsageOptions != null && aff.UsageOptions.Count == 1)
+                        {
+                            // Auto-select single option
+                            selectedUsageId = aff.UsageOptions[0].UsageId;
+                        }
+                        
+                        result = await gameClient.UseAsync(item.Id, aff.TargetId ?? "", selectedUsageId);
+                        
+                        // Handle reactive disambiguation (options returned from server)
+                        if (result?.Options != null && result.Options.Count > 0)
+                        {
+                            Console.WriteLine("\nMultiple usage options available:");
+                            for (int i = 0; i < result.Options.Count; i++)
+                            {
+                                Console.WriteLine($"{i + 1}. {result.Options[i].Label} - {result.Options[i].UsageId}");
+                            }
+                            Console.Write("Select option (1-" + result.Options.Count + "): ");
+                            var input = Console.ReadLine();
+                            if (int.TryParse(input, out int choice) && choice >= 1 && choice <= result.Options.Count)
+                            {
+                                selectedUsageId = result.Options[choice - 1].UsageId;
+                                // Retry with selected usageId
+                                result = await gameClient.UseAsync(item.Id, aff.TargetId ?? "", selectedUsageId);
+                            }
+                            else
+                            {
+                                msg = "Invalid selection";
+                                break;
+                            }
+                        }
+                        
                         msg = result?.Success == true ? "Used!" : $"Failed: {result?.Reason ?? "Unknown error"}";
                     }
                     else

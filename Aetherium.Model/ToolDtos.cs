@@ -19,6 +19,24 @@ namespace Aetherium.Model
     }
     
     /// <summary>
+    /// DTO for a single usage option of a multi-use tool.
+    /// </summary>
+    [GenerateSerializer]
+    public class ToolUsageOptionDto
+    {
+        [Id(0)]
+        public string UsageId { get; set; } = string.Empty;
+        [Id(1)]
+        public string Label { get; set; } = string.Empty;
+        [Id(2)]
+        public string Description { get; set; } = string.Empty;
+        [Id(3)]
+        public ToolParameterSchemaDto? ParameterSchemaOverride { get; set; }
+        [Id(4)]
+        public string[] ContextRequirements { get; set; } = Array.Empty<string>();
+    }
+    
+    /// <summary>
     /// DTO for tool information.
     /// </summary>
     [GenerateSerializer]
@@ -34,6 +52,10 @@ namespace Aetherium.Model
         public string[] RequiredCapabilities { get; set; } = Array.Empty<string>();
         [Id(4)]
         public ToolParameterSchemaDto ParameterSchema { get; set; } = new();
+        [Id(5)]
+        public bool IsMultiUse { get; set; } = false;
+        [Id(6)]
+        public ToolUsageOptionDto[] UsageOptions { get; set; } = Array.Empty<ToolUsageOptionDto>();
     }
     
     /// <summary>

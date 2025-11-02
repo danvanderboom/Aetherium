@@ -1,6 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Aetherium.Components;
 using Aetherium.Core;
+using Aetherium.Entities;
 
 namespace Aetherium.Server
 {
@@ -8,8 +11,27 @@ namespace Aetherium.Server
     {
         public bool Success { get; set; }
         public string Reason { get; set; } = string.Empty;
+        public List<UseOption>? Options { get; set; } // For reactive disambiguation
+        
         public static InteractionResult Ok() => new InteractionResult { Success = true };
         public static InteractionResult Fail(string reason) => new InteractionResult { Success = false, Reason = reason };
+        public static InteractionResult OptionsResult(List<UseOption> options) => new InteractionResult 
+        { 
+            Success = false, 
+            Reason = "Multiple usage options available", 
+            Options = options 
+        };
+    }
+
+    /// <summary>
+    /// Represents a single usage option for an item.
+    /// </summary>
+    public class UseOption
+    {
+        public string UsageId { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public List<string> ContextRequirements { get; set; } = new List<string>();
     }
 
     public class InteractionSystem
@@ -84,7 +106,7 @@ namespace Aetherium.Server
             return result;
         }
 
-        public InteractionResult TryUse(GameSession session, string itemEntityId, string onEntityId)
+        public InteractionResult TryUse(GameSession session, string itemEntityId, string onEntityId, string? usageId = null)
         {
             if (session.Player == null)
                 return InteractionResult.Fail("No player");
@@ -99,29 +121,189 @@ namespace Aetherium.Server
             if (!session.World.Entities.TryGetValue(onEntityId, out var target))
                 return InteractionResult.Fail("Target not found");
 
-            // Key on a door: match Key.KeyId to OpensAndCloses.KeyShape
-            var key = item.AllComponents.OfType<Key>().FirstOrDefault();
-            var door = target.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
-            if (key != null && door != null)
+            // Get all valid usage options
+            var options = GetUseOptions(session, itemEntityId, onEntityId);
+
+            // If no options, fail
+            if (options.Count == 0)
+                return InteractionResult.Fail("No effect");
+
+            // If usageId is provided, use it directly
+            if (!string.IsNullOrEmpty(usageId))
             {
-                if (!string.IsNullOrEmpty(door.KeyShape) && door.KeyShape == key.KeyId)
-                {
-                    door.IsLocked = false;
-                    
-                    // Emit world event for door unlocked
-                    session.World.EmitEvent(new WorldEvent
-                    {
-                        EventType = WorldEventType.DoorUnlocked,
-                        Location = target.Get<WorldLocation>(),
-                        Entity = target
-                    });
-                    
-                    return InteractionResult.Ok();
-                }
-                return InteractionResult.Fail("Key does not match");
+                return TryUseWithMode(session, itemEntityId, onEntityId, usageId);
             }
 
-            return InteractionResult.Fail("No effect");
+            // If exactly one option, auto-execute (backward compatibility)
+            if (options.Count == 1)
+            {
+                return TryUseWithMode(session, itemEntityId, onEntityId, options[0].UsageId);
+            }
+
+            // Multiple options: return them for reactive disambiguation
+            return InteractionResult.OptionsResult(options);
+        }
+
+        /// <summary>
+        /// Gets all valid usage options for an item and optional target, considering context.
+        /// </summary>
+        public List<UseOption> GetUseOptions(GameSession session, string itemEntityId, string? targetEntityId = null)
+        {
+            var options = new List<UseOption>();
+
+            if (session.Player == null)
+                return options;
+
+            var inventory = session.Player.Get<Inventory>();
+            if (inventory == null || !inventory.Items.TryGetValue(itemEntityId, out var item))
+                return options;
+
+            var contextTags = ContextEvaluator.EvaluateContext(session, targetEntityId);
+            Entity? target = null;
+            var hasTarget = !string.IsNullOrEmpty(targetEntityId) && session.World.Entities.TryGetValue(targetEntityId, out target);
+
+            // Consume (no target required)
+            var consumable = item.AllComponents.OfType<Consumable>().FirstOrDefault();
+            if (consumable != null && consumable.Uses > 0)
+            {
+                options.Add(new UseOption
+                {
+                    UsageId = "consume",
+                    Label = "Consume",
+                    Description = "Consume this item",
+                    ContextRequirements = new List<string>()
+                });
+            }
+
+            // Place (no target required, but requires PlaceableLight)
+            var placeableLight = item.AllComponents.OfType<PlaceableLight>().FirstOrDefault();
+            if (placeableLight != null)
+            {
+                options.Add(new UseOption
+                {
+                    UsageId = "place",
+                    Label = "Place",
+                    Description = "Place this item at current location",
+                    ContextRequirements = new List<string>()
+                });
+            }
+
+            if (hasTarget && target != null)
+            {
+                // Unlock door (Key + locked door)
+                var key = item.AllComponents.OfType<Key>().FirstOrDefault();
+                var door = target.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+                if (key != null && door != null && door.IsLocked && 
+                    !string.IsNullOrEmpty(door.KeyShape) && door.KeyShape == key.KeyId)
+                {
+                    options.Add(new UseOption
+                    {
+                        UsageId = "unlock-door",
+                        Label = "Unlock Door",
+                        Description = "Unlock the door with this key",
+                        ContextRequirements = new List<string> { "target-is-door", "adjacent-target" }
+                    });
+                }
+
+                // Lockpick (Lockpick + locked door)
+                var lockpick = item.AllComponents.OfType<Lockpick>().FirstOrDefault();
+                if (lockpick != null && door != null && door.IsLocked)
+                {
+                    options.Add(new UseOption
+                    {
+                        UsageId = "lockpick",
+                        Label = "Lockpick",
+                        Description = "Attempt to pick the lock",
+                        ContextRequirements = new List<string> { "target-is-door", "adjacent-target" }
+                    });
+                }
+
+                // Force open (ForcesDoor component + door)
+                var forcesDoor = item.AllComponents.OfType<ForcesDoor>().FirstOrDefault();
+                if (forcesDoor != null && door != null && forcesDoor.Strength > 0)
+                {
+                    options.Add(new UseOption
+                    {
+                        UsageId = "force-open",
+                        Label = "Force Open",
+                        Description = "Force open the door",
+                        ContextRequirements = new List<string> { "target-is-door", "adjacent-target" }
+                    });
+                }
+            }
+
+            // Filter options based on context requirements
+            var validOptions = options.Where(opt =>
+                ContextEvaluator.MeetsRequirements(contextTags, opt.ContextRequirements)
+            ).ToList();
+
+            return validOptions;
+        }
+
+        /// <summary>
+        /// Executes a use action with a specific usage mode.
+        /// </summary>
+        public InteractionResult TryUseWithMode(GameSession session, string itemEntityId, string? targetEntityId, string usageId)
+        {
+            switch (usageId.ToLowerInvariant())
+            {
+                case "consume":
+                    return TryConsume(session, itemEntityId);
+                
+                case "place":
+                    return TryPlace(session, itemEntityId);
+                
+                case "unlock-door":
+                    // Extract key unlock logic to avoid recursion
+                    if (string.IsNullOrEmpty(targetEntityId))
+                        return InteractionResult.Fail("Target required for unlock-door");
+                    
+                    if (session.Player == null)
+                        return InteractionResult.Fail("No player");
+                    
+                    var inventory = session.Player.Get<Inventory>();
+                    if (inventory == null || !inventory.Items.TryGetValue(itemEntityId, out var item))
+                        return InteractionResult.Fail("Item not in inventory");
+                    
+                    if (!session.World.Entities.TryGetValue(targetEntityId, out var target))
+                        return InteractionResult.Fail("Target not found");
+                    
+                    var key = item.AllComponents.OfType<Key>().FirstOrDefault();
+                    var door = target.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+                    if (key != null && door != null)
+                    {
+                        if (!string.IsNullOrEmpty(door.KeyShape) && door.KeyShape == key.KeyId)
+                        {
+                            door.IsLocked = false;
+                            
+                            // Emit world event for door unlocked
+                            session.World.EmitEvent(new WorldEvent
+                            {
+                                EventType = WorldEventType.DoorUnlocked,
+                                Location = target.Get<WorldLocation>(),
+                                Entity = target
+                            });
+                            
+                            return InteractionResult.Ok();
+                        }
+                        return InteractionResult.Fail("Key does not match");
+                    }
+                    
+                    return InteractionResult.Fail("Key or door not found");
+                
+                case "lockpick":
+                    if (string.IsNullOrEmpty(targetEntityId))
+                        return InteractionResult.Fail("Target required for lockpick");
+                    return TryLockpick(session, itemEntityId, targetEntityId);
+                
+                case "force-open":
+                    if (string.IsNullOrEmpty(targetEntityId))
+                        return InteractionResult.Fail("Target required for force-open");
+                    return TryForceOpen(session, itemEntityId, targetEntityId);
+                
+                default:
+                    return InteractionResult.Fail($"Unknown usage mode: {usageId}");
+            }
         }
 
         private InteractionResult ToggleDoor(GameSession session, string targetEntityId, bool open)

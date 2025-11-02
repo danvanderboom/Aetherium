@@ -94,7 +94,9 @@ namespace Aetherium.Server
             DateTime currentTime,
             bool directionalVision,
             int? headingDegrees,
-            int? fovDegrees)
+            int? fovDegrees,
+            InteractionSystem? interactionSystem = null,
+            GameSession? session = null)
         {
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
@@ -318,12 +320,13 @@ Light sources found:
             perception.VisibleItems = visibleItems;
 
             // If we can find the player entity at playerLocation, include inventory and affordances
+            Inventory? inv = null;
             if (world.EntitiesByLocation.TryGetValue(playerLocation, out var here))
             {
                 var player = here.Values.OfType<Aetherium.Character>().FirstOrDefault();
                 if (player != null)
                 {
-                    var inv = player.Get<Inventory>();
+                    inv = player.Get<Inventory>();
                     if (inv != null)
                         perception.Inventory = inv.ToDto();
 
@@ -343,7 +346,7 @@ Light sources found:
                             affordances.Add(new AffordanceDto { Action = "drop", ActorId = player.EntityId, TargetId = id });
                     }
 
-                    // Door affordances for same/adjacent tiles
+                    // Door affordances for same/adjacent tiles and use affordances for items in inventory
                     var deltas = new[] { (0,0), (1,0), (-1,0), (0,1), (0,-1) };
                     foreach (var (dx, dy) in deltas)
                     {
@@ -357,8 +360,28 @@ Light sources found:
                                 {
                                     if (door.IsLocked)
                                     {
-                                        var aff = new AffordanceDto { Action = "use", ActorId = player.EntityId, TargetId = e.EntityId, RequiresKeyId = door.KeyShape };
-                                        affordances.Add(aff);
+                                        // Create "use" affordances for each item in inventory that can be used on this door
+                                        if (inv != null)
+                                        {
+                                            foreach (var itemId in inv.ItemEntityIds)
+                                            {
+                                                var aff = new AffordanceDto 
+                                                { 
+                                                    Action = "use", 
+                                                    ActorId = player.EntityId, 
+                                                    ItemId = itemId,
+                                                    TargetId = e.EntityId, 
+                                                    RequiresKeyId = door.KeyShape 
+                                                };
+                                                affordances.Add(aff);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            // No inventory, but still create a generic use affordance for the door
+                                            var aff = new AffordanceDto { Action = "use", ActorId = player.EntityId, TargetId = e.EntityId, RequiresKeyId = door.KeyShape };
+                                            affordances.Add(aff);
+                                        }
                                     }
                                     else
                                     {
@@ -368,6 +391,21 @@ Light sources found:
                             }
                         }
                     }
+                }
+            }
+
+            // Populate UsageOptions for "use" affordances if InteractionSystem is available
+            if (interactionSystem != null && session != null && inv != null)
+            {
+                foreach (var aff in affordances.Where(a => a.Action == "use" && !string.IsNullOrEmpty(a.ItemId) && !string.IsNullOrEmpty(a.TargetId)))
+                {
+                    var useOptions = interactionSystem.GetUseOptions(session, aff.ItemId!, aff.TargetId);
+                    aff.UsageOptions = useOptions.Select(opt => new AffordanceUsageDto
+                    {
+                        UsageId = opt.UsageId,
+                        Label = opt.Label,
+                        TargetId = aff.TargetId
+                    }).ToList();
                 }
             }
 
