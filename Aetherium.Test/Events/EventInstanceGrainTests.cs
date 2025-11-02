@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using Orleans.TestingHost;
@@ -81,6 +82,53 @@ namespace Aetherium.Test.Events
             // Assert
             Assert.That(info, Is.Not.Null);
             Assert.That(info!.MapId, Is.EqualTo(mapId));
+        }
+
+        [Test]
+        public async Task CompleteAsync_SetsCompletedState_AndBroadcasts()
+        {
+            // Arrange
+            var worldId = new WorldId("world-complete");
+            var eventInstanceId = new EventInstanceId("event-complete");
+            var regionId = "mapX:region:0,0,0";
+            var mapId = "mapX";
+
+            // Seed region map resolution
+            var mockRegion = _cluster.GrainFactory.GetGrain<IMapRegionGrain>(regionId);
+            await mockRegion.LoadSnapshotAsync(new RegionStateSnapshot
+            {
+                RegionId = regionId,
+                MapId = mapId,
+                RegionX = 0, RegionY = 0, ZLevel = 0, RegionSize = 64,
+                SavedAt = DateTime.UtcNow,
+                GameTimeHours = 0.0
+            });
+
+            var config = new EventInstanceConfig
+            {
+                EventInstanceId = eventInstanceId,
+                EventId = "evt-1",
+                EventType = "merchant_caravan",
+                WorldId = worldId,
+                RegionId = regionId,
+                X = 5, Y = 6, Z = 0,
+                AreaOfInterestRadius = 50,
+                EventData = new Dictionary<string, object>(),
+                CreatedAt = DateTime.UtcNow,
+                ScheduledGameTime = 10.0
+            };
+
+            var grain = _cluster.GrainFactory.GetGrain<IEventInstanceGrain>(eventInstanceId.Value);
+            await grain.InitializeAsync(config);
+
+            // Act
+            await grain.CompleteAsync();
+            var info = await grain.GetInfoAsync();
+
+            // Assert: state updated
+            Assert.That(info, Is.Not.Null);
+            Assert.That(info!.State, Is.EqualTo(EventInstanceState.Completed));
+            Assert.That(info.CompletedAt, Is.Not.Null);
         }
     }
 }

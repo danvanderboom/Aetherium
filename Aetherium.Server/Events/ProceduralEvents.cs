@@ -13,15 +13,24 @@ namespace Aetherium.Server.Events
     public class MerchantCaravanHandler : IEventHandler
     {
         private readonly IGrainFactory? _grainFactory;
+        private readonly SpawnManager? _spawnManager;
 
         public MerchantCaravanHandler()
         {
             _grainFactory = null;
+            _spawnManager = null;
         }
 
         public MerchantCaravanHandler(IGrainFactory grainFactory)
         {
             _grainFactory = grainFactory;
+            _spawnManager = null;
+        }
+
+        public MerchantCaravanHandler(IGrainFactory grainFactory, SpawnManager? spawnManager)
+        {
+            _grainFactory = grainFactory;
+            _spawnManager = spawnManager;
         }
 
         public async Task HandleEventAsync(ScheduledEvent scheduledEvent, double currentGameTime, int day)
@@ -63,6 +72,14 @@ namespace Aetherium.Server.Events
                 { "spawnType", spawnType },
                 { "eventType", scheduledEvent.EventType }
             };
+
+            // Include spawn rate from SpawnManager if available
+            if (_spawnManager != null && !string.IsNullOrEmpty(eventInfo.RegionId))
+            {
+                var timeOfDay = currentGameTime % 24.0;
+                var spawnRate = _spawnManager.GetSpawnRate(spawnType, eventInfo.RegionId, timeOfDay, day);
+                spawnConfig["spawnRate"] = spawnRate;
+            }
 
             var spawnResult = await spawnController.SpawnEntitiesAsync(
                 scheduledEvent.EventType,
