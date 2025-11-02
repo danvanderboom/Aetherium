@@ -162,6 +162,16 @@ namespace Aetherium.Server.Events
             var schedulerGrain = _grainFactory.GetGrain<IEventSchedulerGrain>(_state.State.WorldId.Value);
             // Scheduler will clean up on next tick
 
+            // Broadcast completion narrative to players in AOI
+            var completionData = new Dictionary<string, object>
+            {
+                { "eventType", _state.State.EventType },
+                { "status", "completed" },
+                { "eventInstanceId", _state.State.EventInstanceId.Value },
+                { "completedAt", _state.State.CompletedAt?.ToString("O") }
+            };
+            await BroadcastToAreaAsync("event_completed", completionData);
+
             DeactivateOnIdle();
         }
 

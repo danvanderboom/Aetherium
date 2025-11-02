@@ -56,11 +56,27 @@ namespace Aetherium.Server.Events
                 ? typeObj?.ToString() ?? "Monster"
                 : "Monster";
 
+            // Resolve optional spawnRate from config; default to 1.0 (always spawn)
+            double spawnRate = 1.0;
+            if (spawnConfig.TryGetValue("spawnRate", out var rateObj))
+            {
+                if (rateObj is double d) spawnRate = d;
+                else if (rateObj is float f) spawnRate = f;
+                else if (rateObj is int i) spawnRate = i;
+                else if (double.TryParse(rateObj?.ToString(), out var parsed)) spawnRate = parsed;
+            }
+
             // Spawn entities
             for (int i = 0; i < count; i++)
             {
                 try
                 {
+                    // Respect spawn rate deterministically: <=0 skip; >=1 spawn
+                    if (spawnRate <= 0)
+                    {
+                        continue;
+                    }
+
                     // Calculate spawn location (spread around event location)
                     var spawnX = x + (i % 3 - 1) * 2; // -2, 0, 2 offset
                     var spawnY = y + (i / 3 - 1) * 2;
@@ -71,7 +87,7 @@ namespace Aetherium.Server.Events
                         X = spawnX,
                         Y = spawnY,
                         Z = z,
-                        SpawnRate = 1.0 // Always spawn for events
+                        SpawnRate = Math.Max(0.0, Math.Min(1.0, spawnRate))
                     };
 
                     var result = await mapGrain.SpawnEntityAsync(request);
