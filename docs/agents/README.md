@@ -29,6 +29,10 @@ Quick examples:
 ```powershell
 # Sessions
 aetherctl session list --json
+# Close a session (server-supported)
+aetherctl session close <sessionId>
+# Create a session (pending server support; returns clear error)
+aetherctl session create
 
 # Tools
 aetherctl tools list
@@ -50,7 +54,10 @@ aetherctl world list --json
 
 # Worldgen
 aetherctl worldgen generate --template dungeon --width 80 --height 60 --json
+# ASCII preview
 aetherctl worldgen render --template dungeon --width 80 --height 60 --ascii
+# PNG preview (Phase 2)
+aetherctl worldgen render --template dungeon --width 80 --height 60 --png .\out.png
 
 # Monitor frames
 aetherctl monitor --server-url ws://localhost:5001/monitor --ascii --save .\frames
@@ -209,6 +216,12 @@ Invoke-RestMethod -Method Post `
 # List all active game sessions
 aetherctl session list
 aetherctl session list --json
+
+# Terminate a session (server-supported)
+aetherctl session close <sessionId>
+
+# Create a session (pending server support)
+aetherctl session create
 ```
 
 ### Tool Management Commands

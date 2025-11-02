@@ -98,15 +98,17 @@
 - [x] Session/Agent controls (`session list`, `agent attach|step|run|stop|status`)
 - [x] Vision controls (`vision directional|omnidirectional|fov|status`)
 - [x] World management (`world create|list|info|pause|resume|shutdown`)
-- [x] Worldgen (`worldgen generate|serve|render --ascii`)
+- [x] Worldgen (`worldgen generate|serve|render --ascii`, `render --png`)
 - [x] Monitor (WebSocket frames: `monitor --ascii|--json|--save`)
 - [x] Prompts (`prompts add|list|edit|delete`) — delete pending server API
 - [x] Narrative commands (`narrative create|load|show|delete|list`)
 - [x] Server management (`server add|list|remove|connect`, `login`, `status`)
 - [x] Test suite (18 tests passing)
+- [x] Session termination (`session close <sessionId>`); session create pending server API
 - [ ] Delegation commands
 
-### Phase 10: Documentation (Not Started)
+### Phase 10: Documentation (In Progress)
+- [x] `docs/agents/README.md` - CLI quick examples updated (PNG render, session close/create)
 - [ ] `docs/agents/TOOLS.md` - Tool system guide
 - [ ] `docs/agents/WORLDBUILDING.md` - World-building tools reference
 - [ ] `docs/agents/DELEGATION.md` - Hierarchical delegation guide
