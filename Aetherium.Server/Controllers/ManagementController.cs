@@ -125,7 +125,8 @@ namespace Aetherium.Server.Controllers
                         Width = request.Size.Width,
                         Height = request.Size.Height,
                         Depth = request.Size.Depth
-                    } : null
+                    } : null,
+                    ClusterId = request.ClusterId
                 };
 
                 var worldId = await mgmt.CreateWorldAsync(createRequest);

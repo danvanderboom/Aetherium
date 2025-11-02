@@ -1,0 +1,55 @@
+{
+  "HubId": "central-hub",
+  "Name": "Central Hub",
+  "Description": "A central hub world connecting multiple procedural zones. Players can access portals to different world types from here.",
+  "GeneratorType": "hub",
+  "GeneratorParameters": {
+    "hubLayout": "centralized",
+    "portalCount": 4
+  },
+  "Size": {
+    "Width": 200,
+    "Height": 200,
+    "Depth": 1
+  },
+  "Tags": [
+    "hub",
+    "central",
+    "starting-area"
+  ],
+  "NarrativeId": null,
+  "Portals": [
+    {
+      "PortalId": "hub-to-dungeon",
+      "TargetWorldTag": "dungeon",
+      "TargetWorldTemplate": null,
+      "TargetMapTag": "entrance",
+      "TargetMapName": null,
+      "Activation": null,
+      "Parameters": {}
+    },
+    {
+      "PortalId": "hub-to-outdoor",
+      "TargetWorldTag": "outdoor",
+      "TargetWorldTemplate": null,
+      "TargetMapTag": null,
+      "TargetMapName": null,
+      "Activation": null,
+      "Parameters": {}
+    },
+    {
+      "PortalId": "hub-to-city",
+      "TargetWorldTag": "city",
+      "TargetWorldTemplate": null,
+      "TargetMapTag": null,
+      "TargetMapName": null,
+      "Activation": "unlocked",
+      "Parameters": {}
+    }
+  ],
+  "Metadata": {
+    "spawnArea": "center",
+    "safeZone": true
+  }
+}
+

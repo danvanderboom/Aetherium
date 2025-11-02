@@ -255,6 +255,185 @@ namespace Aetherium.Test.WorldGen.Training
                 Assert.That(depth, Is.GreaterThanOrEqualTo(2));
             }
         }
+
+        [Test]
+        public void BenchmarkLibrary_LoadBenchmarks_MissingDirectory_HandlesGracefully()
+        {
+            // Arrange
+            var nonExistentDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+            // Act - should not throw
+            BenchmarkLibrary.LoadBenchmarks(nonExistentDir);
+
+            // Assert - library should still be functional (empty but not null)
+            var result = BenchmarkLibrary.GetBenchmark("any-id");
+            Assert.That(result, Is.Null); // No benchmarks loaded, so null is expected
+        }
+
+        [Test]
+        public void BenchmarkLibrary_LoadBenchmarks_ValidJsonFile_LoadsAndRegisters()
+        {
+            // Arrange
+            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDir);
+            
+            var validBenchmarkJson = @"{
+                ""benchmarkId"": ""load-test-benchmark"",
+                ""name"": ""Load Test Benchmark"",
+                ""description"": ""Test for loading"",
+                ""categories"": [""test""],
+                ""difficulty"": 50,
+                ""version"": ""1.0"",
+                ""recipe"": {
+                    ""generator"": ""AdvancedDungeonGenerator"",
+                    ""template"": ""Dungeon"",
+                    ""seed"": 999,
+                    ""generatorVersion"": ""1.0"",
+                    ""width"": 30,
+                    ""height"": 30,
+                    ""levels"": 1,
+                    ""parameters"": {}
+                },
+                ""successCriteria"": {
+                    ""type"": ""ReachGoal"",
+                    ""maxSteps"": 100
+                }
+            }";
+
+            var jsonFile = Path.Combine(tempDir, "test-benchmark.json");
+            File.WriteAllText(jsonFile, validBenchmarkJson);
+
+            try
+            {
+                // Act
+                BenchmarkLibrary.LoadBenchmarks(tempDir);
+
+                // Assert
+                var loadedBenchmark = BenchmarkLibrary.GetBenchmark("load-test-benchmark");
+                Assert.That(loadedBenchmark, Is.Not.Null);
+                Assert.That(loadedBenchmark.BenchmarkId, Is.EqualTo("load-test-benchmark"));
+                Assert.That(loadedBenchmark.Name, Is.EqualTo("Load Test Benchmark"));
+            }
+            finally
+            {
+                // Cleanup
+                try { File.Delete(jsonFile); } catch { }
+                try { Directory.Delete(tempDir); } catch { }
+            }
+        }
+
+        [Test]
+        public void BenchmarkLibrary_LoadBenchmarks_InvalidJsonFile_HandlesGracefully()
+        {
+            // Arrange
+            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDir);
+            
+            var invalidJson = "{ invalid json }";
+            var jsonFile = Path.Combine(tempDir, "invalid-benchmark.json");
+            File.WriteAllText(jsonFile, invalidJson);
+
+            try
+            {
+                // Act - should not throw
+                BenchmarkLibrary.LoadBenchmarks(tempDir);
+
+                // Assert - invalid file should be skipped, library still functional
+                var result = BenchmarkLibrary.GetBenchmark("invalid-benchmark");
+                Assert.That(result, Is.Null); // Invalid file shouldn't be registered
+            }
+            finally
+            {
+                // Cleanup
+                try { File.Delete(jsonFile); } catch { }
+                try { Directory.Delete(tempDir); } catch { }
+            }
+        }
+
+        [Test]
+        public void BenchmarkLibrary_LoadBenchmarks_MixedValidAndInvalid_FiltersCorrectly()
+        {
+            // Arrange
+            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDir);
+            
+            var validBenchmarkJson = @"{
+                ""benchmarkId"": ""valid-benchmark"",
+                ""name"": ""Valid Benchmark"",
+                ""description"": ""Valid test"",
+                ""categories"": [""test""],
+                ""difficulty"": 50,
+                ""version"": ""1.0"",
+                ""recipe"": {
+                    ""generator"": ""AdvancedDungeonGenerator"",
+                    ""template"": ""Dungeon"",
+                    ""seed"": 123,
+                    ""generatorVersion"": ""1.0"",
+                    ""width"": 30,
+                    ""height"": 30,
+                    ""levels"": 1,
+                    ""parameters"": {}
+                },
+                ""successCriteria"": {
+                    ""type"": ""ReachGoal"",
+                    ""maxSteps"": 100
+                }
+            }";
+
+            var validFile = Path.Combine(tempDir, "valid.json");
+            var invalidFile = Path.Combine(tempDir, "invalid.json");
+            File.WriteAllText(validFile, validBenchmarkJson);
+            File.WriteAllText(invalidFile, "{ invalid }");
+
+            try
+            {
+                // Act
+                BenchmarkLibrary.LoadBenchmarks(tempDir);
+
+                // Assert
+                var valid = BenchmarkLibrary.GetBenchmark("valid-benchmark");
+                Assert.That(valid, Is.Not.Null);
+                Assert.That(valid.BenchmarkId, Is.EqualTo("valid-benchmark"));
+            }
+            finally
+            {
+                // Cleanup
+                try { File.Delete(validFile); } catch { }
+                try { File.Delete(invalidFile); } catch { }
+                try { Directory.Delete(tempDir); } catch { }
+            }
+        }
+
+        [Test]
+        public void BenchmarkLibrary_GetAllBenchmarks_ReturnsAllRegisteredBenchmarks()
+        {
+            // Arrange
+            var benchmark1 = new BenchmarkScenario { BenchmarkId = "bench1", Categories = new List<string> { "test" } };
+            var benchmark2 = new BenchmarkScenario { BenchmarkId = "bench2", Categories = new List<string> { "test" } };
+            
+            var benchmarks = new Dictionary<string, BenchmarkScenario>
+            {
+                ["bench1"] = benchmark1,
+                ["bench2"] = benchmark2
+            };
+            
+            var libraryType = typeof(BenchmarkLibrary);
+            var benchmarksField = libraryType.GetField("_benchmarks", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            
+            if (benchmarksField != null)
+            {
+                benchmarksField.SetValue(null, benchmarks);
+            }
+
+            // Act
+            var allBenchmarks = BenchmarkLibrary.GetAllBenchmarks();
+
+            // Assert
+            Assert.That(allBenchmarks, Is.Not.Null);
+            Assert.That(allBenchmarks.Count, Is.GreaterThanOrEqualTo(2));
+            Assert.That(allBenchmarks.Any(b => b.BenchmarkId == "bench1"), Is.True);
+            Assert.That(allBenchmarks.Any(b => b.BenchmarkId == "bench2"), Is.True);
+        }
     }
 }
 

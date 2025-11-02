@@ -442,7 +442,11 @@ namespace Aetherium.Server
                 
                 if (string.IsNullOrEmpty(resolvedWorldId) || string.IsNullOrEmpty(resolvedMapId))
                     return new InteractionResultDto { Success = false, Reason = "Could not resolve portal target" };
-
+                
+                // Cache resolved target in portal component for efficiency
+                portalComponent.TargetWorldId = resolvedWorldId;
+                portalComponent.TargetMapId = resolvedMapId;
+                
                 targetWorldId = resolvedWorldId;
                 targetMapId = resolvedMapId;
             }

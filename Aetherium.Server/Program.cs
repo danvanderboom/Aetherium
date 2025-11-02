@@ -167,6 +167,30 @@ namespace Aetherium.Server
             builder.Services.AddSingleton<MapGeneratorRegistry>();
             builder.Services.AddSingleton<MapValidator>();
             
+            // Add hub world services
+            builder.Services.AddSingleton<Aetherium.Server.HubWorld.HubWorldLoader>(sp =>
+            {
+                var hubPath = Environment.GetEnvironmentVariable("HUB_PATH") ?? "./Data/Hubs";
+                var loader = new Aetherium.Server.HubWorld.HubWorldLoader(hubPath);
+                // Load hubs asynchronously - this will happen when service is first accessed
+                _ = loader.LoadHubsAsync().ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                        Console.WriteLine($"[Program] Error loading hubs: {t.Exception?.GetBaseException().Message}");
+                });
+                return loader;
+            });
+            builder.Services.AddSingleton<Aetherium.Server.HubWorld.HubWorldGenerator>(sp =>
+            {
+                var loader = sp.GetRequiredService<Aetherium.Server.HubWorld.HubWorldLoader>();
+                return new Aetherium.Server.HubWorld.HubWorldGenerator(loader);
+            });
+            builder.Services.AddSingleton<Aetherium.Server.HubWorld.HubTemplateResolver>(sp =>
+            {
+                var generator = sp.GetRequiredService<Aetherium.Server.HubWorld.HubWorldGenerator>();
+                return new Aetherium.Server.HubWorld.HubTemplateResolver(generator);
+            });
+            
             // Add prefab library
             var environment = builder.Environment.EnvironmentName;
             var useFileStorage = environment == "Development" || 
@@ -254,6 +278,23 @@ namespace Aetherium.Server
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<MapValidator>());
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<PrefabLibrary>());
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<Aetherium.Server.Agents.Tools.AgentToolRegistry>());
+                    
+                    // Register hub world services for grains
+                    siloBuilder.Services.AddSingleton(sp =>
+                    {
+                        var host = sp.GetRequiredService<IHost>();
+                        return host.Services.GetRequiredService<Aetherium.Server.HubWorld.HubWorldLoader>();
+                    });
+                    siloBuilder.Services.AddSingleton(sp =>
+                    {
+                        var host = sp.GetRequiredService<IHost>();
+                        return host.Services.GetRequiredService<Aetherium.Server.HubWorld.HubWorldGenerator>();
+                    });
+                    siloBuilder.Services.AddSingleton(sp =>
+                    {
+                        var host = sp.GetRequiredService<IHost>();
+                        return host.Services.GetRequiredService<Aetherium.Server.HubWorld.HubTemplateResolver>();
+                    });
                     
                     // Register simulation services for grains
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<WorldClock>());

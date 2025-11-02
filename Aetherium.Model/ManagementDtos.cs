@@ -141,6 +141,9 @@ namespace Aetherium.Model
         
         [Id(6)]
         public WorldSizeDto? Size { get; set; }
+        
+        [Id(7)]
+        public string? ClusterId { get; set; } // Optional cluster ID for multi-world ecosystems
     }
 
     /// <summary>

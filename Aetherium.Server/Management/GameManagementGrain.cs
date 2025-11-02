@@ -29,6 +29,7 @@ namespace Aetherium.Server.Management
         private readonly IGrainFactory _grainFactory;
         private readonly InteractionSystem _interactionSystem = new InteractionSystem();
         private readonly Aetherium.Server.Services.IWorldHost? _worldHost;
+        private readonly IServiceProvider _serviceProvider;
 
         private class SessionMetadata
         {
@@ -47,6 +48,7 @@ namespace Aetherium.Server.Management
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
             _worldHost = serviceProvider.GetService<Aetherium.Server.Services.IWorldHost>();
+            _serviceProvider = serviceProvider;
         }
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
@@ -662,18 +664,26 @@ namespace Aetherium.Server.Management
 
         public async Task<string> CreateWorldAsync(CreateWorldRequest request)
         {
+            // Check if generator type is a hub template and resolve it
+            WorldConfig? hubConfig = null;
+            var hubTemplateResolver = _serviceProvider.GetService<Aetherium.Server.HubWorld.HubTemplateResolver>();
+            if (hubTemplateResolver != null && !string.IsNullOrEmpty(request.GeneratorType))
+            {
+                hubConfig = await hubTemplateResolver.TryResolveHubAsync(request.GeneratorType, request, request.ClusterId);
+            }
+
             // Use IWorldHost if available (new system), otherwise fallback to direct grain creation
             if (_worldHost != null)
             {
                 var template = new Aetherium.Model.Worlds.WorldTemplate
                 {
-                    Name = request.Name,
-                    Description = request.Description,
-                    GeneratorType = string.IsNullOrWhiteSpace(request.GeneratorType) ? "rooms-and-corridors" : request.GeneratorType,
-                    GeneratorParameters = request.GeneratorParameters ?? new Dictionary<string, object>(),
-                    MaxPlayers = request.MaxPlayers,
-                    NarrativeId = request.NarrativeId,
-                    ClusterId = null
+                    Name = hubConfig?.Name ?? request.Name,
+                    Description = hubConfig?.Description ?? request.Description,
+                    GeneratorType = hubConfig?.GeneratorType ?? (string.IsNullOrWhiteSpace(request.GeneratorType) ? "rooms-and-corridors" : request.GeneratorType),
+                    GeneratorParameters = hubConfig?.GeneratorParameters ?? (request.GeneratorParameters ?? new Dictionary<string, object>()),
+                    MaxPlayers = hubConfig?.MaxPlayers ?? request.MaxPlayers,
+                    NarrativeId = hubConfig?.NarrativeId ?? request.NarrativeId,
+                    ClusterId = hubConfig?.ClusterId ?? request.ClusterId
                 };
 
                 // Default to public world
@@ -685,18 +695,15 @@ namespace Aetherium.Server.Management
                 var worldId = await _worldHost.CreateWorldAsync(template, acl);
                 _worldRegistry[worldId.Value] = worldId.Value;
 
-                Console.WriteLine($"[GameManagementGrain] Created world {worldId.Value} ({request.Name}) via IWorldHost");
+                Console.WriteLine($"[GameManagementGrain] Created world {worldId.Value} ({template.Name}) via IWorldHost{(hubConfig != null ? " (hub)" : "")}");
                 return worldId.Value;
             }
             else
             {
                 // Fallback to direct grain creation (for backwards compatibility)
-                var worldId = $"world:{Guid.NewGuid()}";
-                var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
-
-                var config = new WorldConfig
+                var config = hubConfig ?? new WorldConfig
                 {
-                    WorldId = worldId,
+                    WorldId = $"world:{Guid.NewGuid()}",
                     Name = request.Name,
                     Description = request.Description,
                     GeneratorType = string.IsNullOrWhiteSpace(request.GeneratorType) ? "rooms-and-corridors" : request.GeneratorType,
@@ -705,13 +712,23 @@ namespace Aetherium.Server.Management
                     MaxPlayers = request.MaxPlayers,
                     Size = request.Size ?? new WorldSize { Width = 100, Height = 100, Depth = 1 },
                     CreatedAt = DateTime.UtcNow,
-                    CreatedBy = "system"
+                    CreatedBy = "system",
+                    ClusterId = request.ClusterId
                 };
+
+                // Ensure WorldId is set
+                if (string.IsNullOrEmpty(config.WorldId))
+                {
+                    config.WorldId = $"world:{Guid.NewGuid()}";
+                }
+
+                var worldId = config.WorldId;
+                var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
 
                 await worldGrain.InitializeAsync(config);
                 _worldRegistry[worldId] = worldId;
 
-                Console.WriteLine($"[GameManagementGrain] Created world {worldId} ({request.Name}) via direct grain");
+                Console.WriteLine($"[GameManagementGrain] Created world {worldId} ({config.Name}) via direct grain{(hubConfig != null ? " (hub)" : "")}");
                 return worldId;
             }
         }

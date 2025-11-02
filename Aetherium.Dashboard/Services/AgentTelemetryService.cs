@@ -23,8 +23,16 @@ namespace Aetherium.Dashboard
             if (_orleansClient == null)
                 return null;
 
-            var telemetryGrain = _orleansClient.GetGrain<IAgentTelemetryGrain>(agentId);
-            return await telemetryGrain.GetAnalysisAsync();
+            try
+            {
+                var telemetryGrain = _orleansClient.GetGrain<IAgentTelemetryGrain>(agentId);
+                return await telemetryGrain.GetAnalysisAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AgentTelemetryService] Error getting telemetry for agent {agentId}: {ex.Message}");
+                return null;
+            }
         }
 
         public async Task<List<PerformanceSnapshot>> GetSnapshotsAsync(string agentId, int? limit = null)
@@ -32,8 +40,16 @@ namespace Aetherium.Dashboard
             if (_orleansClient == null)
                 return new List<PerformanceSnapshot>();
 
-            var telemetryGrain = _orleansClient.GetGrain<IAgentTelemetryGrain>(agentId);
-            return await telemetryGrain.GetSnapshotsAsync(limit);
+            try
+            {
+                var telemetryGrain = _orleansClient.GetGrain<IAgentTelemetryGrain>(agentId);
+                return await telemetryGrain.GetSnapshotsAsync(limit);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AgentTelemetryService] Error getting snapshots for agent {agentId}: {ex.Message}");
+                return new List<PerformanceSnapshot>();
+            }
         }
 
         public async Task<List<string>> GetFailedRunIdsAsync(string agentId, int? limit = null)
@@ -41,8 +57,16 @@ namespace Aetherium.Dashboard
             if (_orleansClient == null)
                 return new List<string>();
 
-            var telemetryGrain = _orleansClient.GetGrain<IAgentTelemetryGrain>(agentId);
-            return await telemetryGrain.GetFailedRunIdsAsync(limit);
+            try
+            {
+                var telemetryGrain = _orleansClient.GetGrain<IAgentTelemetryGrain>(agentId);
+                return await telemetryGrain.GetFailedRunIdsAsync(limit);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AgentTelemetryService] Error getting failed run IDs for agent {agentId}: {ex.Message}");
+                return new List<string>();
+            }
         }
     }
 }

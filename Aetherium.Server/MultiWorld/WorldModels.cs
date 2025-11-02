@@ -82,6 +82,7 @@ namespace Aetherium.Server.MultiWorld
         [Id(4)] public string? NarrativeId { get; set; }
         [Id(5)] public int MaxPlayers { get; set; } = 100;
         [Id(6)] public WorldSize? Size { get; set; }
+        [Id(7)] public string? ClusterId { get; set; } // Optional cluster ID for multi-world ecosystems
     }
 
     /// <summary>

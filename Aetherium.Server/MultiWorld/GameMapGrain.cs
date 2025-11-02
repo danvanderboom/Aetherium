@@ -99,7 +99,21 @@ namespace Aetherium.Server.MultiWorld
             // Partition map into regions and initialize region grains
             await PartitionIntoRegionsAsync();
 
-            // Skip cluster registration during initialization to avoid reentrancy/timeouts.
+            // Register map and portals with cluster if world belongs to a cluster
+            // Get cluster ID from world grain
+            var worldGrain = _grainFactory.GetGrain<IWorldGrain>(worldId);
+            var worldInfo = await worldGrain.GetInfoAsync();
+            
+            if (worldInfo?.ClusterId != null && !string.IsNullOrEmpty(worldInfo.ClusterId))
+            {
+                var clusterGrain = _grainFactory.GetGrain<IClusterGrain>(worldInfo.ClusterId);
+                
+                // Register map with cluster (creates market)
+                await clusterGrain.RegisterMapAsync(worldId, mapId);
+                
+                // Find and register portals from the generated world
+                await RegisterPortalsWithClusterAsync(clusterGrain, worldId, mapId);
+            }
 
             // Update state
             _mapState.State = new MapState
@@ -132,11 +146,15 @@ namespace Aetherium.Server.MultiWorld
                 WorldGenerationTemplate.Outdoor => new IWorldGenerationPass[]
                 {
                     new Passes.OutdoorLayoutPass(),
+                    new Passes.OutdoorInteractionsPass(),
+                    new Passes.PortalNetworkPass(), // Place portals for cross-world travel
                     new Passes.OutdoorValidationPass()
                 },
                 _ => new IWorldGenerationPass[]
                 {
                     new Passes.DungeonLayoutPass(),
+                    new Passes.DungeonInteractionsPass(),
+                    new Passes.PortalNetworkPass(), // Place portals for cross-world travel
                     new Passes.DungeonValidationPass()
                 }
             };
@@ -255,6 +273,40 @@ namespace Aetherium.Server.MultiWorld
         private static string GetRegionKey(string mapId, int regionX, int regionY, int zLevel)
         {
             return $"{mapId}:region:{regionX},{regionY},{zLevel}";
+        }
+
+        /// <summary>
+        /// Finds portals in the generated world and registers them with the cluster.
+        /// </summary>
+        private async Task RegisterPortalsWithClusterAsync(IClusterGrain clusterGrain, string worldId, string mapId)
+        {
+            if (_world == null)
+                return;
+
+            // Find all entities with PortalComponent
+            foreach (var entity in _world.Entities.Values)
+            {
+                if (!entity.Has<PortalComponent>())
+                    continue;
+
+                var portalComponent = entity.Get<PortalComponent>();
+                if (portalComponent == null)
+                    continue;
+
+                // Create portal link for registration
+                var portalLink = new PortalLink
+                {
+                    PortalId = portalComponent.PortalId,
+                    SourceWorldId = worldId,
+                    SourceMapId = mapId,
+                    TargetWorldId = portalComponent.TargetWorldId,
+                    TargetMapId = portalComponent.TargetMapId,
+                    TargetTag = portalComponent.TargetTag,
+                    IsResolved = portalComponent.TargetWorldId != null && portalComponent.TargetMapId != null
+                };
+
+                await clusterGrain.RegisterPortalAsync(portalLink);
+            }
         }
 
         /// <summary>

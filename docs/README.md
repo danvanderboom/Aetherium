@@ -49,6 +49,7 @@ The game features a comprehensive extensible agent tool system:
 - ✅ [Instance System](instances.md) - Dungeon instances, lockouts, and party support
 - ✅ [Development Guide](development.md) - Developer setup, testing, and workflow
 - ✅ [Client-Server Architecture](../CLIENT_SERVER_README.md) - SignalR, Orleans, and communication protocol
+- ✅ [Multi-World Ecosystems](multiworld-ecosystems.md) - World clusters, portals, cross-world economy, meta-progression, and hub worlds
 - Coming soon: System architecture overview
 - Coming soon: Entity-Component-System (ECS) guide
 
@@ -92,6 +93,10 @@ See [Development Guide - Unified CLI](development.md#unified-cli-aetherctl) for 
 - **ManagementHub**: World management operations with B2C authentication
 - **GameHub**: Gameplay communication between clients and server
 - **AgentDashboardHub**: Agent telemetry and monitoring
+- **REST APIs**:
+  - `/api/cluster` - Cluster, portal, and economy management
+  - `/api/metaprogression/{playerId}` - Meta-progression (discoveries, unlocks)
+  - `/api/management/worlds` - World creation and management
 - Coming soon: Game state DTOs reference
 
 ### Contributing

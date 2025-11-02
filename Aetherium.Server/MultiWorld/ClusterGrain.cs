@@ -14,6 +14,7 @@ namespace Aetherium.Server.MultiWorld
     public class ClusterGrain : Grain, IClusterGrain
     {
         private readonly IPersistentState<ClusterState> _state;
+        private IDisposable? _economyTimer;
 
         public ClusterGrain(
             [PersistentState("cluster", "worldStore")] IPersistentState<ClusterState> state)
@@ -44,7 +45,24 @@ namespace Aetherium.Server.MultiWorld
                 };
             }
 
+            // Start periodic economy ticking if cluster has active worlds
+            // Tick every 5 minutes (economy time) - adjust as needed
+            if (_state.State.Info.WorldIds.Count > 0)
+            {
+                _economyTimer = RegisterTimer(
+                    async _ => await TickEconomyAsync(),
+                    null,
+                    TimeSpan.FromMinutes(5),
+                    TimeSpan.FromMinutes(5));
+            }
+
             return base.OnActivateAsync(cancellationToken);
+        }
+
+        public override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+        {
+            _economyTimer?.Dispose();
+            return base.OnDeactivateAsync(reason, cancellationToken);
         }
 
         public Task InitializeAsync(ClusterInfo clusterInfo)
@@ -66,6 +84,16 @@ namespace Aetherium.Server.MultiWorld
 
             _state.State.Info.WorldIds.Add(worldId);
             await _state.WriteStateAsync();
+
+            // Start economy timer if this is the first world
+            if (_state.State.Info.WorldIds.Count == 1 && _economyTimer == null)
+            {
+                _economyTimer = RegisterTimer(
+                    async _ => await TickEconomyAsync(),
+                    null,
+                    TimeSpan.FromMinutes(5),
+                    TimeSpan.FromMinutes(5));
+            }
         }
 
         public async Task RegisterMapAsync(string worldId, string mapId)

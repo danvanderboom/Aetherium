@@ -8,7 +8,7 @@
 
 ## 2. Testing
 - [x] 2.1 Add unit/integration tests for proactive and reactive multi-use flows
-- [ ] 2.2 Add integration smoke tests
+- [x] 2.2 Add integration smoke tests
 
 ## 3. Documentation
 - [x] 3.1 Author OpenSpec change with requirements and scenarios

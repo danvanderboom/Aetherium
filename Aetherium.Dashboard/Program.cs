@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.Configuration;
 using Orleans;
 using Orleans.Configuration;
+using Yarp.ReverseProxy.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +14,36 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddSignalR();
+
+// Add reverse proxy for forwarding SignalR hub to server
+builder.Services.AddReverseProxy()
+    .LoadFromMemory(
+        routes: new[]
+        {
+            new RouteConfig
+            {
+                RouteId = "agentHub",
+                ClusterId = "server",
+                Match = new RouteMatch
+                {
+                    Path = "/agentDashboardHub/{**catchall}"
+                }
+            }
+        },
+        clusters: new[]
+        {
+            new ClusterConfig
+            {
+                ClusterId = "server",
+                Destinations = new Dictionary<string, DestinationConfig>
+                {
+                    ["destination1"] = new()
+                    {
+                        Address = "http://localhost:5000"
+                    }
+                }
+            }
+        });
 
 // Add Orleans client for connecting to the cluster
 builder.Host.UseOrleansClient(client =>
@@ -25,6 +56,9 @@ builder.Host.UseOrleansClient(client =>
         opts.ServiceId = "Aetherium";
     });
 });
+
+// Add hosted service to handle Orleans client connection with retry/backoff
+builder.Services.AddHostedService<OrleansClientConnectionService>();
 
 // Add telemetry service - will get Orleans client from DI
 builder.Services.AddSingleton<AgentTelemetryService>(sp =>
@@ -79,6 +113,7 @@ app.UseCors();
 
 app.MapRazorPages();
 app.MapBlazorHub();
+app.MapReverseProxy(); // Map reverse proxy for SignalR hub forwarding
 app.MapFallbackToPage("/_Host");
 
 app.Run();

@@ -51,15 +51,15 @@
 - [x] 8.4 Create docs/training/dashboard-guide.md
 
 ## 9. Integration & Fixes
-- [ ] 9.1 Fix Dashboard Orleans client integration
-- [ ] 9.2 Add SignalR broadcasting from AgentRunnerGrain
-- [ ] 9.3 Register AgentDashboardHub context in Orleans silo
-- [ ] 9.4 Enhance dashboard SignalR connection handling
+- [x] 9.1 Fix Dashboard Orleans client integration
+- [x] 9.2 Add SignalR broadcasting from AgentRunnerGrain
+- [x] 9.3 Register AgentDashboardHub context in Orleans silo
+- [x] 9.4 Enhance dashboard SignalR connection handling
 
 ## 10. Testing
-- [ ] 10.1 Create AgentTelemetryTests
-- [ ] 10.2 Create CurriculumGeneratorTests
-- [ ] 10.3 Create BenchmarkLibraryTests
-- [ ] 10.4 Create PerformanceAnalyzerTests
-- [ ] 10.5 Create AgentTrainingIntegrationTests
+- [x] 10.1 Create AgentTelemetryTests
+- [x] 10.2 Create CurriculumGeneratorTests
+- [x] 10.3 Create BenchmarkLibraryTests
+- [x] 10.4 Create PerformanceAnalyzerTests
+- [x] 10.5 Create AgentTrainingIntegrationTests
 

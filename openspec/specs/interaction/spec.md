@@ -1,5 +1,8 @@
-## ADDED Requirements
+# interaction Specification
 
+## Purpose
+TBD - created by archiving change add-multi-use-tools. Update Purpose after archive.
+## Requirements
 ### Requirement: Multi-Use Tools
 Items SHALL support multiple usage options when appropriate. Each usage option SHALL have a unique usage ID, label, description, and optional context requirements.
 
