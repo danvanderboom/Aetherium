@@ -1,0 +1,22 @@
+{
+    "name": "Aetherium.Unity.Tests.EditMode",
+    "rootNamespace": "Aetherium.Unity.Tests",
+    "references": [
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [
+        "Android",
+        "iOS",
+        "CloudRendering"
+    ],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_EDITOR"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
+

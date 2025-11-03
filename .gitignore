@@ -338,3 +338,45 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+
+# Unity (Aetherium.Unity project only)
+# Unity generated folders
+Aetherium.Unity/Library/
+Aetherium.Unity/Temp/
+Aetherium.Unity/Obj/
+Aetherium.Unity/Build/
+Aetherium.Unity/Builds/
+Aetherium.Unity/Logs/
+Aetherium.Unity/UserSettings/
+Aetherium.Unity/MemoryCaptures/
+
+# Unity auto-generated files (Unity project only - keep .meta files)
+Aetherium.Unity/*.csproj
+Aetherium.Unity/*.unityproj
+Aetherium.Unity/*.sln
+Aetherium.Unity/*.suo
+Aetherium.Unity/*.tmp
+Aetherium.Unity/*.user
+Aetherium.Unity/*.userprefs
+Aetherium.Unity/*.pidb
+Aetherium.Unity/*.booproj
+Aetherium.Unity/*.svd
+Aetherium.Unity/*.pdb
+Aetherium.Unity/*.mdb
+Aetherium.Unity/*.opendb
+Aetherium.Unity/*.VC.db
+
+# Unity Asset Store cache
+Aetherium.Unity/Assets/AssetStoreMetaData/
+
+# Unity3D generated files on crash reports
+Aetherium.Unity/sysinfo.txt
+
+# Builds (Unity project only)
+Aetherium.Unity/Builds/
+Aetherium.Unity/*.apk
+Aetherium.Unity/*.aab
+Aetherium.Unity/*.unitypackage
+
+# Crashlytics generated file
+Aetherium.Unity/crashlytics-build.properties

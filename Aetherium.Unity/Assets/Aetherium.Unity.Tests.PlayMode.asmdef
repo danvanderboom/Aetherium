@@ -1,0 +1,16 @@
+{
+    "name": "Aetherium.Unity.Tests.PlayMode",
+    "rootNamespace": "Aetherium.Unity.Tests",
+    "references": [
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
+
