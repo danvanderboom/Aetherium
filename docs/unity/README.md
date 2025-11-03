@@ -75,30 +75,51 @@ Live mode connects to the server via SignalR at `http://localhost:5000/gamehub`.
 
 ### Movement
 - **WASD** or **Arrow Keys**: Move player (North, East, South, West)
+- **Gamepad Left Stick**: Move player (cardinalized to NESW)
 - Movement executes the "move" tool with appropriate direction
 
 ### Rotation
 - **Z**: Rotate left (counter-clockwise)
 - **X**: Rotate right (clockwise)
+- **Gamepad LB (Left Bumper)**: Rotate left (counter-clockwise)
+- **Gamepad RB (Right Bumper)**: Rotate right (clockwise)
 - Rotation executes the "rotate" tool
 
 ### Z-Level Changes
 - **PageUp** or **U**: Move up one Z-level
 - **PageDown** or **D**: Move down one Z-level
+- **Gamepad RT (Right Trigger)**: Move up one Z-level
+- **Gamepad LT (Left Trigger)**: Move down one Z-level
 - Z-level change executes the "changelevel" tool
+
+### Tool Use
+- **Gamepad A Button**: Use tool (context-dependent) or confirm option selection
+- **Gamepad B Button**: Cancel option selection
+
+### Multi-Option Selection
+When a tool returns multiple usage options (e.g., multi-use items), the game enters option selection mode:
+- **Gamepad D-Pad Up/Down**: Navigate through options
+- **Gamepad A Button**: Confirm selected option
+- **Gamepad B Button**: Cancel selection
+- The HUD displays available options with a selection indicator (>>)
+- During option selection, movement and other actions are disabled until confirmed or cancelled
 
 ## Keybindings Reference
 
-| Action | Keys | Tool Executed |
-|--------|------|---------------|
-| Move North | W / ↑ | `move` with direction="north" |
-| Move South | S / ↓ | `move` with direction="south" |
-| Move East | D / → | `move` with direction="east" |
-| Move West | A / ← | `move` with direction="west" |
-| Rotate Left | Z | `rotate` with clockwise=false |
-| Rotate Right | X | `rotate` with clockwise=true |
-| Level Up | PageUp / U | `changelevel` with up=true |
-| Level Down | PageDown / D | `changelevel` with up=false |
+| Action | Keyboard | Gamepad | Tool Executed |
+|--------|----------|---------|---------------|
+| Move North | W / ↑ | Left Stick Up | `move` with direction="north" |
+| Move South | S / ↓ | Left Stick Down | `move` with direction="south" |
+| Move East | D / → | Left Stick Right | `move` with direction="east" |
+| Move West | A / ← | Left Stick Left | `move` with direction="west" |
+| Rotate Left | Z | LB | `rotate` with clockwise=false |
+| Rotate Right | X | RB | `rotate` with clockwise=true |
+| Level Up | PageUp / U | RT | `changelevel` with up=true |
+| Level Down | PageDown / D | LT | `changelevel` with up=false |
+| Use / Confirm | - | A | Context tool use or confirm option |
+| Cancel | - | B | Cancel option selection |
+| Option Up | - | D-Pad Up | Navigate options up |
+| Option Down | - | D-Pad Down | Navigate options down |
 
 ## Scene Setup
 

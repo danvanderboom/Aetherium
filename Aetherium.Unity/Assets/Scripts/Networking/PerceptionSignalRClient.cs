@@ -54,21 +54,31 @@ namespace Aetherium.Unity.Networking
             }
         }
 
-        public async Task ExecuteToolAsync(string toolId, Dictionary<string, object> args)
+        public async Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, Dictionary<string, object> args)
         {
             try
             {
                 // TODO: Implement tool execution
-                // await connection.InvokeAsync<ToolExecutionResultDto>("ExecuteTool", toolId, args);
+                // return await connection.InvokeAsync<ToolExecutionResultDto>("ExecuteTool", toolId, args);
                 
                 Debug.LogWarning("SignalR tool execution not fully implemented.");
                 Debug.Log($"Would execute tool: {toolId} with args: {string.Join(", ", args.Keys)}");
                 
                 await Task.CompletedTask;
+                return new ToolExecutionResultDto
+                {
+                    Success = false,
+                    Message = "SignalR tool execution not fully implemented"
+                };
             }
             catch (Exception ex)
             {
                 Debug.LogError($"Failed to execute tool: {ex.Message}");
+                return new ToolExecutionResultDto
+                {
+                    Success = false,
+                    Message = $"Error: {ex.Message}"
+                };
             }
         }
 

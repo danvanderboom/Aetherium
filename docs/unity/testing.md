@@ -31,6 +31,7 @@ Unity.exe -runTests -testPlatform PlayMode -testResults results.xml
 Located in `Assets/Tests/EditMode/`:
 
 - **PerceptionParsingTests.cs**: Tests JSON deserialization and PerceptionLite structure validation
+- **ToolExecutionResultTests.cs**: Tests ToolExecutionResultDto and UsageOptionDto models
 
 ### PlayMode Tests
 
@@ -38,6 +39,8 @@ Located in `Assets/Tests/PlayMode/`:
 
 - **TilemapAndInputTests.cs**: Tests scene loading, tilemap rendering, and player marker positioning
 - **InputAutomationTests.cs**: Tests input simulation and player movement
+- **GamepadInputTests.cs**: Tests Gamepad input handling for movement, rotation, and level changes
+- **OptionSelectionTests.cs**: Tests multi-option selection flow and HUD display
 
 ## EditMode Tests
 
@@ -77,6 +80,41 @@ Located in `Assets/Tests/PlayMode/`:
 - Simulates keyboard input (W key)
 - Verifies player marker moves one cell forward
 - Uses Unity Input System test fixtures
+
+### GamepadInputTests
+
+**Test: GamepadMovement_LeftStick_ExecutesMoveTool**
+- Tests that Gamepad left stick input executes move tool
+- Validates Gamepad input handling
+
+**Test: GamepadRotate_Shoulders_ExecutesRotateTool**
+- Tests that Gamepad shoulder buttons execute rotate tool
+- Validates axis-based rotation input
+
+**Test: GamepadChangeLevel_Triggers_ExecutesChangeLevelTool**
+- Tests that Gamepad triggers execute change level tool
+- Validates axis-based level change input
+
+### OptionSelectionTests
+
+**Test: ToolExecutionResult_WithOptions_EntersSelectionMode**
+- Tests that tools returning options enter selection mode
+- Validates option parsing from ToolExecutionResultDto
+
+**Test: PlayerController_OptionSelection_DisplaysInHUD**
+- Tests that option selection displays correctly in HUD
+- Validates HUD overlay functionality
+
+### ToolExecutionResultTests (EditMode)
+
+**Test: ToolExecutionResultDto_SuccessResult_InitializesCorrectly**
+- Tests successful tool execution result creation
+
+**Test: ToolExecutionResultDto_WithOptionsData_StoresCorrectly**
+- Tests tool results with option data for multi-use tools
+
+**Test: UsageOptionDto_AllProperties_SetCorrectly**
+- Tests UsageOptionDto model initialization
 
 ## UI Automation Testing
 

@@ -1,6 +1,6 @@
-# Console Game Documentation
+# Aetherium Documentation
 
-Documentation for Console Game - a multiplayer ASCII dungeon crawler with dynamic lighting, heat vision, and immersive gameplay.
+Documentation for Aetherium - a multiplayer ASCII dungeon crawler with dynamic lighting, heat vision, and immersive gameplay.
 
 ## User Documentation
 

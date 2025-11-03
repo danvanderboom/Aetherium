@@ -18,6 +18,8 @@ namespace Aetherium.Unity.Rendering
 
         private PerceptionLite? currentPerception;
 
+        public Text? HudText => hudText;
+
         private void Awake()
         {
             if (gameClientFacade == null)

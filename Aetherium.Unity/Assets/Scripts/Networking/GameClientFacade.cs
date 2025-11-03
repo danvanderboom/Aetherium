@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Aetherium.Unity.Model;
 using UnityEngine;
 
@@ -120,26 +121,37 @@ namespace Aetherium.Unity.Networking
         /// </summary>
         public void ExecuteTool(string toolId, Dictionary<string, object> args)
         {
+            // Fire-and-forget async version for backward compatibility
+            _ = ExecuteToolAsync(toolId, args);
+        }
+
+        /// <summary>
+        /// Executes a tool with the specified ID and arguments asynchronously, returning the result.
+        /// In Offline mode, mutates local mock state and returns a success result.
+        /// In Live mode, sends command to server and returns the server's result.
+        /// </summary>
+        public async Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, Dictionary<string, object> args)
+        {
             if (isLiveMode)
             {
 #if USE_SIGNALR
                 if (signalRClient != null)
                 {
-                    signalRClient.ExecuteToolAsync(toolId, args);
+                    return await signalRClient.ExecuteToolAsync(toolId, args);
                 }
                 else
                 {
                     Debug.LogError("SignalR client not initialized. Falling back to mock.");
-                    mockProvider.UpdateMockState(toolId, args);
+                    return mockProvider.ExecuteToolMock(toolId, args);
                 }
 #else
-                Debug.LogWarning("ExecuteTool called in Live mode but USE_SIGNALR is not defined. Using mock.");
-                mockProvider.UpdateMockState(toolId, args);
+                Debug.LogWarning("ExecuteToolAsync called in Live mode but USE_SIGNALR is not defined. Using mock.");
+                return mockProvider.ExecuteToolMock(toolId, args);
 #endif
             }
             else
             {
-                mockProvider.UpdateMockState(toolId, args);
+                return mockProvider.ExecuteToolMock(toolId, args);
             }
         }
 

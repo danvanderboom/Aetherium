@@ -122,62 +122,106 @@
                             "action": "Move",
                             "isComposite": false,
                             "isPartOfComposite": true
+                        },
+                        {
+                            "name": "",
+                            "id": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+                            "path": "<Gamepad>/leftStick",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": false
                         }
                     ]
                 },
                 {
                     "name": "Rotate",
-                    "type": "Button",
+                    "type": "Value",
                     "id": "2f3a4b5c-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
-                    "expectedControlType": "Button",
+                    "expectedControlType": "Axis",
                     "processors": "",
                     "interactions": "",
                     "bindings": [
                         {
-                            "name": "Rotate Left",
+                            "name": "1D Axis",
                             "id": "3a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+                            "path": "1DAxis",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "",
+                            "action": "Rotate",
+                            "isComposite": true,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "negative",
+                            "id": "4b5c6d7e-8f9a-0b1c-2d3e-4f5a6b7c8d9e",
                             "path": "<Keyboard>/z",
                             "interactions": "",
                             "processors": "",
                             "groups": "Keyboard",
                             "action": "Rotate",
                             "isComposite": false,
-                            "isPartOfComposite": false
+                            "isPartOfComposite": true
                         },
                         {
-                            "name": "Rotate Right",
-                            "id": "4b5c6d7e-8f9a-0b1c-2d3e-4f5a6b7c8d9e",
+                            "name": "positive",
+                            "id": "5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f",
                             "path": "<Keyboard>/x",
                             "interactions": "",
                             "processors": "",
                             "groups": "Keyboard",
                             "action": "Rotate",
                             "isComposite": false,
-                            "isPartOfComposite": false
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "negative",
+                            "id": "6d7e8f9a-0b1c-2d3e-4f5a-6b7c8d9e0f1a",
+                            "path": "<Gamepad>/leftShoulder",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "Rotate",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "positive",
+                            "id": "7e8f9a0b-1c2d-3e4f-5a6b-7c8d9e0f1a2b",
+                            "path": "<Gamepad>/rightShoulder",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "Rotate",
+                            "isComposite": false,
+                            "isPartOfComposite": true
                         }
                     ]
                 },
                 {
                     "name": "ChangeLevel",
-                    "type": "Button",
+                    "type": "Value",
                     "id": "5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f",
-                    "expectedControlType": "Button",
+                    "expectedControlType": "Axis",
                     "processors": "",
                     "interactions": "",
                     "bindings": [
                         {
-                            "name": "Level Up",
+                            "name": "1D Axis",
                             "id": "6d7e8f9a-0b1c-2d3e-4f5a-6b7c8d9e0f1a",
-                            "path": "<Keyboard>/pageUp",
+                            "path": "1DAxis",
                             "interactions": "",
                             "processors": "",
-                            "groups": "Keyboard",
+                            "groups": "",
                             "action": "ChangeLevel",
-                            "isComposite": false,
+                            "isComposite": true,
                             "isPartOfComposite": false
                         },
                         {
-                            "name": "Level Down",
+                            "name": "negative",
                             "id": "7e8f9a0b-1c2d-3e4f-5a6b-7c8d9e0f1a2b",
                             "path": "<Keyboard>/pageDown",
                             "interactions": "",
@@ -185,27 +229,165 @@
                             "groups": "Keyboard",
                             "action": "ChangeLevel",
                             "isComposite": false,
-                            "isPartOfComposite": false
+                            "isPartOfComposite": true
                         },
                         {
-                            "name": "Level Up Alt",
+                            "name": "positive",
                             "id": "8f9a0b1c-2d3e-4f5a-6b7c-8d9e0f1a2b3c",
-                            "path": "<Keyboard>/u",
+                            "path": "<Keyboard>/pageUp",
                             "interactions": "",
                             "processors": "",
                             "groups": "Keyboard",
                             "action": "ChangeLevel",
                             "isComposite": false,
-                            "isPartOfComposite": false
+                            "isPartOfComposite": true
                         },
                         {
-                            "name": "Level Down Alt",
+                            "name": "negative",
                             "id": "9a0b1c2d-3e4f-5a6b-7c8d-9e0f1a2b3c4d",
                             "path": "<Keyboard>/d",
                             "interactions": "",
                             "processors": "",
                             "groups": "Keyboard",
                             "action": "ChangeLevel",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "positive",
+                            "id": "0b1c2d3e-4f5a-6b7c-8d9e-0f1a2b3c4d5e",
+                            "path": "<Keyboard>/u",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "ChangeLevel",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "negative",
+                            "id": "1c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
+                            "path": "<Gamepad>/leftTrigger",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "ChangeLevel",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "positive",
+                            "id": "2d3e4f5a-6b7c-8d9e-0f1a-2b3c4d5e6f7a",
+                            "path": "<Gamepad>/rightTrigger",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "ChangeLevel",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        }
+                    ]
+                },
+                {
+                    "name": "Use",
+                    "type": "Button",
+                    "id": "3e4f5a6b-7c8d-9e0f-1a2b-3c4d5e6f7a8b",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "",
+                            "id": "4f5a6b7c-8d9e-0f1a-2b3c-4d5e6f7a8b9c",
+                            "path": "<Gamepad>/buttonSouth",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "Use",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        }
+                    ]
+                },
+                {
+                    "name": "OptionNavUp",
+                    "type": "Button",
+                    "id": "5a6b7c8d-9e0f-1a2b-3c4d-5e6f7a8b9c0d",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "",
+                            "id": "6b7c8d9e-0f1a-2b3c-4d5e-6f7a8b9c0d1e",
+                            "path": "<Gamepad>/dpad/up",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "OptionNavUp",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        }
+                    ]
+                },
+                {
+                    "name": "OptionNavDown",
+                    "type": "Button",
+                    "id": "7c8d9e0f-1a2b-3c4d-5e6f-7a8b9c0d1e2f",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "",
+                            "id": "8d9e0f1a-2b3c-4d5e-6f7a-8b9c0d1e2f3a",
+                            "path": "<Gamepad>/dpad/down",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "OptionNavDown",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        }
+                    ]
+                },
+                {
+                    "name": "OptionConfirm",
+                    "type": "Button",
+                    "id": "9e0f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "",
+                            "id": "0f1a2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+                            "path": "<Gamepad>/buttonSouth",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "OptionConfirm",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        }
+                    ]
+                },
+                {
+                    "name": "OptionCancel",
+                    "type": "Button",
+                    "id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "",
+                            "id": "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+                            "path": "<Gamepad>/buttonEast",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Gamepad",
+                            "action": "OptionCancel",
                             "isComposite": false,
                             "isPartOfComposite": false
                         }
@@ -220,6 +402,17 @@
                     "devices": [
                         {
                             "devicePath": "<Keyboard>",
+                            "isOptional": false,
+                            "isOR": false
+                        }
+                    ]
+                },
+                {
+                    "name": "Gamepad",
+                    "bindingGroup": "Gamepad",
+                    "devices": [
+                        {
+                            "devicePath": "<Gamepad>",
                             "isOptional": false,
                             "isOR": false
                         }

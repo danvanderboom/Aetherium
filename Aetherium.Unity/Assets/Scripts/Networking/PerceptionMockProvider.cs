@@ -96,14 +96,25 @@ namespace Aetherium.Unity.Networking
         /// </summary>
         public void UpdateMockState(string toolId, Dictionary<string, object> args)
         {
+            ExecuteToolMock(toolId, args);
+        }
+
+        /// <summary>
+        /// Executes a tool in mock mode and returns a result.
+        /// </summary>
+        public ToolExecutionResultDto ExecuteToolMock(string toolId, Dictionary<string, object> args)
+        {
             if (frames.Count == 0)
-                return;
+                return new ToolExecutionResultDto { Success = false, Message = "No frames loaded" };
 
             var current = frames[currentFrameIndex];
             if (current == null)
-                return;
+                return new ToolExecutionResultDto { Success = false, Message = "No current frame" };
 
             // Simple mock state mutations for offline testing
+            bool success = true;
+            string message = $"Executed {toolId}";
+
             switch (toolId.ToLower())
             {
                 case "move":
@@ -115,9 +126,19 @@ namespace Aetherium.Unity.Networking
                 case "changelevel":
                     HandleChangeLevel(current, args);
                     break;
+                default:
+                    success = false;
+                    message = $"Unknown tool: {toolId}";
+                    break;
             }
 
             PerceptionUpdated?.Invoke(current);
+
+            return new ToolExecutionResultDto
+            {
+                Success = success,
+                Message = message
+            };
         }
 
         private void HandleMove(PerceptionLite perception, Dictionary<string, object> args)
