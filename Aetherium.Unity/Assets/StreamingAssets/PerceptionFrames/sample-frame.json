@@ -1,0 +1,69 @@
+{
+  "PlayerLocation": {
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+  },
+  "PlayerHeading": 0,
+  "HeadingDegrees": 0,
+  "VisibleBounds": {
+    "X": -5,
+    "Y": -5,
+    "Width": 11,
+    "Height": 11
+  },
+  "Visuals": {
+    "0,0,0": {
+      "Location": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "stone",
+      "LightLevel": 1.0
+    },
+    "1,0,0": {
+      "Location": {
+        "X": 1,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "stone",
+      "LightLevel": 0.8
+    },
+    "-1,0,0": {
+      "Location": {
+        "X": -1,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "stone",
+      "LightLevel": 0.8
+    },
+    "0,1,0": {
+      "Location": {
+        "X": 0,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "stone",
+      "LightLevel": 0.8
+    },
+    "0,-1,0": {
+      "Location": {
+        "X": 0,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "stone",
+      "LightLevel": 0.8
+    }
+  },
+  "TileTypes": {
+    "stone": {
+      "Name": "Stone",
+      "Settings": {}
+    }
+  }
+}
+
