@@ -1,0 +1,233 @@
+{
+    "name": "GameInput",
+    "maps": [
+        {
+            "name": "Player",
+            "id": "8e6f4e8f-9d1a-4c7e-9a5b-3c8e9d7f6e5a",
+            "actions": [
+                {
+                    "name": "Move",
+                    "type": "Value",
+                    "id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "WASD",
+                            "id": "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+                            "path": "2DVector",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "",
+                            "action": "Move",
+                            "isComposite": true,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "up",
+                            "id": "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+                            "path": "<Keyboard>/w",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "down",
+                            "id": "4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+                            "path": "<Keyboard>/s",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "left",
+                            "id": "5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+                            "path": "<Keyboard>/a",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "right",
+                            "id": "6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+                            "path": "<Keyboard>/d",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "Arrow Keys",
+                            "id": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+                            "path": "2DVector",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "",
+                            "action": "Move",
+                            "isComposite": true,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "up",
+                            "id": "8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+                            "path": "<Keyboard>/upArrow",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "down",
+                            "id": "9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
+                            "path": "<Keyboard>/downArrow",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "left",
+                            "id": "0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
+                            "path": "<Keyboard>/leftArrow",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        },
+                        {
+                            "name": "right",
+                            "id": "1e2f3a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+                            "path": "<Keyboard>/rightArrow",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Move",
+                            "isComposite": false,
+                            "isPartOfComposite": true
+                        }
+                    ]
+                },
+                {
+                    "name": "Rotate",
+                    "type": "Button",
+                    "id": "2f3a4b5c-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "Rotate Left",
+                            "id": "3a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+                            "path": "<Keyboard>/z",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Rotate",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "Rotate Right",
+                            "id": "4b5c6d7e-8f9a-0b1c-2d3e-4f5a6b7c8d9e",
+                            "path": "<Keyboard>/x",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "Rotate",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        }
+                    ]
+                },
+                {
+                    "name": "ChangeLevel",
+                    "type": "Button",
+                    "id": "5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "Level Up",
+                            "id": "6d7e8f9a-0b1c-2d3e-4f5a-6b7c8d9e0f1a",
+                            "path": "<Keyboard>/pageUp",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "ChangeLevel",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "Level Down",
+                            "id": "7e8f9a0b-1c2d-3e4f-5a6b-7c8d9e0f1a2b",
+                            "path": "<Keyboard>/pageDown",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "ChangeLevel",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "Level Up Alt",
+                            "id": "8f9a0b1c-2d3e-4f5a-6b7c-8d9e0f1a2b3c",
+                            "path": "<Keyboard>/u",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "ChangeLevel",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "Level Down Alt",
+                            "id": "9a0b1c2d-3e4f-5a6b-7c8d-9e0f1a2b3c4d",
+                            "path": "<Keyboard>/d",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "Keyboard",
+                            "action": "ChangeLevel",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        }
+                    ]
+                }
+            ],
+            "bindings": [],
+            "controlSchemes": [
+                {
+                    "name": "Keyboard",
+                    "bindingGroup": "Keyboard",
+                    "devices": [
+                        {
+                            "devicePath": "<Keyboard>",
+                            "isOptional": false,
+                            "isOR": false
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}
+
