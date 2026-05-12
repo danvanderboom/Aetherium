@@ -51,5 +51,7 @@ namespace Aetherium.Test.TestStubs
             _inner.GetMapDeltasSinceSequenceAsync(worldId, regionId, sinceSequence);
         public Task CompactMapDeltasAsync(string worldId, string regionId, long throughSequence) =>
             _inner.CompactMapDeltasAsync(worldId, regionId, throughSequence);
+        public Task DeleteWorldAsync(string worldId) =>
+            _inner.DeleteWorldAsync(worldId);
     }
 }

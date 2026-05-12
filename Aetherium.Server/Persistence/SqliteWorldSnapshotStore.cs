@@ -327,5 +327,27 @@ WHERE world_id = $w AND region_id = $r AND sequence <= $s;";
             cmd.ExecuteNonQuery();
             return Task.CompletedTask;
         }
+
+        public Task DeleteWorldAsync(string worldId)
+        {
+            Initialize();
+            using var conn = OpenConnection();
+            using var tx = conn.BeginTransaction();
+            foreach (var sql in new[]
+            {
+                "DELETE FROM region_snapshots WHERE world_id = $w;",
+                "DELETE FROM region_delta_log  WHERE world_id = $w;",
+                "DELETE FROM map_delta_log     WHERE world_id = $w;",
+            })
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = sql;
+                cmd.Parameters.AddWithValue("$w", worldId);
+                cmd.ExecuteNonQuery();
+            }
+            tx.Commit();
+            return Task.CompletedTask;
+        }
     }
 }

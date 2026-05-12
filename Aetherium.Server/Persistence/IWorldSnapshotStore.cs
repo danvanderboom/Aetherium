@@ -71,6 +71,14 @@ namespace Aetherium.Server.Persistence
         /// timer once a new snapshot at that sequence is durable.
         /// </summary>
         Task CompactMapDeltasAsync(string worldId, string regionId, long throughSequence);
+
+        /// <summary>
+        /// Permanently removes all persisted data for a world — snapshots, legacy delta log, and
+        /// map delta log. Intended for world decommissioning or reset. Does not touch grain state;
+        /// callers that also need grain state purged should additionally call
+        /// <c>SqliteGrainStorage.DeleteWorldGrainStateAsync</c>.
+        /// </summary>
+        Task DeleteWorldAsync(string worldId);
     }
 }
 

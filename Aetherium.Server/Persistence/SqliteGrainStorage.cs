@@ -187,5 +187,29 @@ WHERE storage_name = $s AND grain_type = $t AND grain_id = $g;";
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Removes all grain state rows whose Orleans key is <paramref name="worldId"/> exactly
+        /// (WorldGrain, WorldAclGrain, WorldInviteGrain) or starts with
+        /// <c>{worldId}:</c> (map grains whose keys follow the <c>{worldId}:map:{guid}</c>
+        /// convention set by <c>WorldGrain.AddMapAsync</c>). Call this after
+        /// <see cref="IWorldSnapshotStore.DeleteWorldAsync"/> to fully decommission a world.
+        /// </summary>
+        public Task DeleteWorldGrainStateAsync(string worldId)
+        {
+            Initialize();
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            // Orleans encodes the string key as the last segment after '/' in GrainId.ToString().
+            // Two patterns cover all world-scoped grains:
+            //   '%/{worldId}'   — grains whose key IS the worldId (World, Acl, Invite grains)
+            //   '%/{worldId}:%' — grains whose key starts with '{worldId}:' (map grains)
+            cmd.CommandText = @"
+DELETE FROM grain_state
+WHERE grain_id LIKE '%/' || $w
+   OR grain_id LIKE '%/' || $w || ':%';";
+            cmd.Parameters.AddWithValue("$w", worldId);
+            cmd.ExecuteNonQuery();
+            return Task.CompletedTask;
+        }
     }
 }

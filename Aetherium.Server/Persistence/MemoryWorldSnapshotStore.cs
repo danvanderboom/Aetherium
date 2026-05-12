@@ -162,6 +162,19 @@ namespace Aetherium.Server.Persistence
             return Task.CompletedTask;
         }
 
+        public Task DeleteWorldAsync(string worldId)
+        {
+            var snapshotPrefix = $"{worldId}:snapshot:";
+            var deltaPrefix = $"{worldId}:deltas:";
+            foreach (var key in _snapshots.Keys.Where(k => k.StartsWith(snapshotPrefix)).ToList())
+                _snapshots.TryRemove(key, out _);
+            foreach (var key in _deltaLogs.Keys.Where(k => k.StartsWith(deltaPrefix)).ToList())
+                _deltaLogs.TryRemove(key, out _);
+            foreach (var key in _mapDeltaLogs.Keys.Where(k => k.StartsWith(deltaPrefix)).ToList())
+                _mapDeltaLogs.TryRemove(key, out _);
+            return Task.CompletedTask;
+        }
+
         private static string GetSnapshotKey(string worldId, string regionId) => $"{worldId}:snapshot:{regionId}";
         private static string GetDeltaLogKey(string worldId, string regionId) => $"{worldId}:deltas:{regionId}";
     }

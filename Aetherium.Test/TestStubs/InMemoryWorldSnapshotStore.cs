@@ -119,6 +119,14 @@ namespace Aetherium.Test.TestStubs
             }
             return Task.CompletedTask;
         }
+
+        public Task DeleteWorldAsync(string worldId)
+        {
+            _worldIdToRegionIdToSnapshot.TryRemove(worldId, out _);
+            _worldIdToRegionIdToDeltas.TryRemove(worldId, out _);
+            _worldIdToRegionIdToMapDeltas.TryRemove(worldId, out _);
+            return Task.CompletedTask;
+        }
     }
 }
 
