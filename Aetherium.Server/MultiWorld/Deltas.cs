@@ -1,5 +1,30 @@
 using Orleans;
 
+// ============================================================================
+// WIRE STABILITY CONTRACT
+// ============================================================================
+// Every type in this file is part of the persistence + SignalR wire format.
+// The [Id(n)] numbers on each field are SEMVER-relevant — they identify the
+// field across binary versions. The rules:
+//
+//   1. NEVER renumber an existing [Id]. Old persisted deltas reference the
+//      number; renumbering corrupts them.
+//   2. To ADD a field: pick the next unused [Id] number. Orleans's serializer
+//      treats unknown ids on read as "absent" and unknown ids on write as
+//      "ignored", so additive fields are backward+forward compatible.
+//   3. To REMOVE a field: keep the [Id] number reserved. Don't reuse it.
+//      Document the retired number in a comment so future contributors
+//      don't accidentally collide.
+//   4. To CHANGE a field's TYPE or SEMANTICS: bump the subtype's
+//      DeltaTypeVersion override. Cold-start replay refuses to load deltas
+//      whose stored delta_type_version exceeds this binary's value (see
+//      SqliteWorldSnapshotStore.GetMapDeltasSinceSequenceAsync).
+//
+// When you bump DeltaTypeVersion, also update Phase F's documentation in
+// openspec/changes/add-world-persistence/design.md so operators understand
+// the upgrade path.
+// ============================================================================
+
 namespace Aetherium.Server.MultiWorld
 {
     /// <summary>
@@ -27,6 +52,16 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Map ID the delta applies to. Sessions filter by this if they
         /// might be subscribed to multiple maps.</summary>
         [Id(1)] public string MapId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Persistence schema version for this delta subtype. Stored alongside the
+        /// serialized payload so cold-start replay can detect downgrade attempts —
+        /// a stored row with version N+1 cannot be safely replayed by a binary
+        /// that only knows version N. Subclasses override when their semantics
+        /// (not just additive fields) change in a non-backward-compatible way.
+        /// Not serialized on the wire — this is an intrinsic property of the type.
+        /// </summary>
+        public virtual int DeltaTypeVersion => 1;
     }
 
     /// <summary>

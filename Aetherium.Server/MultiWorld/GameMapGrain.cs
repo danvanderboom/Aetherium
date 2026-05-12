@@ -37,6 +37,11 @@ namespace Aetherium.Server.MultiWorld
         // resync mechanism yet; the sequence number is the wire-format hook).
         private long _nextSequence = 1;
 
+        // Highest WorldSnapshot.SnapshotVersion this binary knows how to hydrate.
+        // Bumping requires a deliberate schema migration; cold-start refuses to
+        // load snapshots written at a higher version. Phase F wire-stability hook.
+        private const int SupportedSnapshotVersion = 1;
+
         // Heat trail tracker — grain-authoritative per design D9. Heat is "objective
         // reality of the world" — a recently-walked cell is hot regardless of who's
         // looking. Sessions maintain a delta-driven local mirror.
@@ -250,6 +255,17 @@ namespace Aetherium.Server.MultiWorld
 
             // Snapshot blob is a full self-contained WorldSnapshot (recipe + entities).
             var worldSnapshot = serializer.Deserialize<WorldSnapshot>(regionSnapshot.SerializedEntities);
+
+            // Version guard: if the stored snapshot was written by a binary that
+            // understands a higher schema version, refuse to load rather than silently
+            // mis-applying state. Operators can downgrade by restoring an older snapshot.
+            if (worldSnapshot.SnapshotVersion > SupportedSnapshotVersion)
+            {
+                throw new Aetherium.Server.Persistence.PersistenceVersionMismatchException(
+                    $"Snapshot for {_mapState.State.WorldId}/{_mapState.State.MapId} has SnapshotVersion={worldSnapshot.SnapshotVersion}, " +
+                    $"but this binary only supports up to {SupportedSnapshotVersion}. " +
+                    "Upgrade the server or restore a compatible snapshot.");
+            }
 
             var builder = new Aetherium.WorldBuilders.SnapshotWorldBuilder(worldSnapshot, _generatorRegistry);
             var world = builder.Build();

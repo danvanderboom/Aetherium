@@ -61,15 +61,26 @@ CREATE TABLE IF NOT EXISTS region_delta_log (
 CREATE INDEX IF NOT EXISTS idx_region_delta_log_lookup
     ON region_delta_log(world_id, region_id, timestamp);
 CREATE TABLE IF NOT EXISTS map_delta_log (
-    world_id    TEXT NOT NULL,
-    region_id   TEXT NOT NULL,
-    sequence    INTEGER NOT NULL,
-    delta_type  TEXT NOT NULL,
-    delta_blob  BLOB NOT NULL,
-    recorded_at INTEGER NOT NULL,
+    world_id           TEXT NOT NULL,
+    region_id          TEXT NOT NULL,
+    sequence           INTEGER NOT NULL,
+    delta_type         TEXT NOT NULL,
+    delta_type_version INTEGER NOT NULL DEFAULT 1,
+    delta_blob         BLOB NOT NULL,
+    recorded_at        INTEGER NOT NULL,
     PRIMARY KEY (world_id, region_id, sequence)
 );";
             create.ExecuteNonQuery();
+
+            // Best-effort upgrade for databases created before Phase F. SQLite raises a
+            // "duplicate column name" error when the column already exists — safe to ignore.
+            try
+            {
+                using var alter = conn.CreateCommand();
+                alter.CommandText = "ALTER TABLE map_delta_log ADD COLUMN delta_type_version INTEGER NOT NULL DEFAULT 1;";
+                alter.ExecuteNonQuery();
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException) { /* already present */ }
 
             _logger.LogInformation("SqliteWorldSnapshotStore initialized at {ConnectionString}", _connectionString);
         }
@@ -253,12 +264,13 @@ ON CONFLICT (world_id, region_id) DO UPDATE SET
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
-INSERT INTO map_delta_log (world_id, region_id, sequence, delta_type, delta_blob, recorded_at)
-VALUES ($w, $r, $s, $dt, $b, $t);";
+INSERT INTO map_delta_log (world_id, region_id, sequence, delta_type, delta_type_version, delta_blob, recorded_at)
+VALUES ($w, $r, $s, $dt, $dv, $b, $t);";
             cmd.Parameters.AddWithValue("$w", worldId);
             cmd.Parameters.AddWithValue("$r", regionId);
             cmd.Parameters.AddWithValue("$s", delta.Sequence);
             cmd.Parameters.AddWithValue("$dt", delta.GetType().Name);
+            cmd.Parameters.AddWithValue("$dv", delta.DeltaTypeVersion);
             cmd.Parameters.AddWithValue("$b", bytes);
             cmd.Parameters.AddWithValue("$t", now);
             cmd.ExecuteNonQuery();
@@ -270,7 +282,7 @@ VALUES ($w, $r, $s, $dt, $b, $t);";
             Initialize();
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"SELECT delta_blob FROM map_delta_log
+            cmd.CommandText = @"SELECT delta_type, delta_type_version, delta_blob FROM map_delta_log
 WHERE world_id = $w AND region_id = $r AND sequence > $s
 ORDER BY sequence ASC;";
             cmd.Parameters.AddWithValue("$w", worldId);
@@ -280,8 +292,24 @@ ORDER BY sequence ASC;";
             var result = new List<MapDelta>();
             while (reader.Read())
             {
+                var storedVersion = Convert.ToInt32(reader["delta_type_version"]);
+                var deltaTypeName = (string)reader["delta_type"];
                 var bytes = (byte[])reader["delta_blob"];
-                result.Add(_serializer.Deserialize<MapDelta>(bytes));
+                var delta = _serializer.Deserialize<MapDelta>(bytes);
+
+                // Version guard: if the stored row was written by a newer binary that
+                // understands a higher version of this delta subtype, refuse to load
+                // rather than silently mis-applying. Old binaries' deltas (storedVersion
+                // less than or equal to current) are always readable thanks to Orleans's
+                // [Id] forward-compatibility.
+                if (storedVersion > delta.DeltaTypeVersion)
+                {
+                    throw new PersistenceVersionMismatchException(
+                        $"Cannot replay map delta seq={delta.Sequence} type={deltaTypeName}: " +
+                        $"stored version {storedVersion} exceeds this binary's supported version {delta.DeltaTypeVersion}. " +
+                        "Upgrade the server binary or restore from a compatible snapshot.");
+                }
+                result.Add(delta);
             }
             return Task.FromResult(result.ToArray());
         }
