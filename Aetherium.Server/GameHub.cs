@@ -11,11 +11,18 @@ using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Management;
 using Aetherium.Server.MultiWorld;
 using Aetherium.Server.Narrative.Consequence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using Orleans;
 
 namespace Aetherium.Server
 {
+    // Policy-gated rather than attribute-bare: the "GameClient" policy is registered
+    // unconditionally in Program.cs but adapts to deployment — RequireAuthenticatedUser
+    // when Azure AD B2C is configured, allow-anonymous otherwise. This means production
+    // deployments with B2C automatically enforce auth; dev runs without B2C still work.
+    [Authorize(Policy = "GameClient")]
     public class GameHub : Hub
     {
         private readonly GameSessionManager sessionManager;
@@ -132,6 +139,30 @@ namespace Aetherium.Server
             var perception = session.GetPerception();
             await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
 
+            // Phase 1 hub-grain bridge: if the client included ?worldId= in the SignalR
+            // connection query string, auto-join that world now. This swaps the session's
+            // World from the legacy private FovDiagnosticWorldBuilder world to one
+            // hydrated from the grain's snapshot. Failure here is logged but doesn't
+            // refuse the connection — the client is left in the legacy private world.
+            try
+            {
+                var http = Context.GetHttpContext();
+                var requestedWorldId = http?.Request.Query["worldId"].ToString();
+                if (!string.IsNullOrEmpty(requestedWorldId))
+                {
+                    var requestedMapId = http?.Request.Query["mapId"].ToString();
+                    var joinResult = await JoinWorld(
+                        requestedWorldId!,
+                        string.IsNullOrEmpty(requestedMapId) ? null : requestedMapId);
+                    if (!joinResult.Success)
+                        Console.WriteLine($"[GameHub] Auto-join '{requestedWorldId}' failed: {joinResult.Reason}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Auto-join from query string threw: {ex.Message}");
+            }
+
             await base.OnConnectedAsync();
         }
 
@@ -160,230 +191,36 @@ namespace Aetherium.Server
                 }
             }
 
+            // Phase 2c: if the session was grain-bound, tell the map grain to drop
+            // the player Character and emit an EntityRemovedDelta so other joined
+            // sessions see them leave. Phase-2 player persistence (deferred) will
+            // replace this with a snapshot-and-detach flow that lets players resume.
+            if (sessionId != null && session?.MapId != null && clusterClient != null)
+            {
+                try
+                {
+                    var mapGrain = clusterClient.GetGrain<IGameMapGrain>(session.MapId);
+                    await mapGrain.LeavePlayerAsync(sessionId);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[GameHub] Failed to leave map grain: {ex.Message}");
+                }
+            }
+
             sessionManager.RemoveSession(Context.ConnectionId);
             await base.OnDisconnectedAsync(exception);
         }
 
-        /// <summary>
-        /// Moves the player in the specified direction.
-        /// </summary>
-        [Obsolete("Use ExecuteTool(\"move\", args) instead. This method will be removed in a future version.")]
-        public async Task MovePlayer(Aetherium.Model.RelativeDirection direction, int distance)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return;
-
-            session.MoveView(direction, distance);
-
-            // Send updated perception
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-        }
-
-        /// <summary>
-        /// Rotates the player's view.
-        /// </summary>
-        [Obsolete("Use ExecuteTool(\"rotate\", args) instead. This method will be removed in a future version.")]
-        public async Task RotatePlayer(bool clockwise)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return;
-
-            session.RotateView(clockwise);
-
-            // Send updated perception
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-        }
-
-        /// <summary>
-        /// Rotates the player by a specific number of degrees.
-        /// Positive values rotate clockwise, negative values rotate counter-clockwise.
-        /// </summary>
-        [Obsolete("Use ExecuteTool(\"rotate\", args) instead. This method will be removed in a future version.")]
-        public async Task RotatePlayerDegrees(int degrees)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return;
-
-            session.RotateView(degrees);
-
-            // Send updated perception
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-        }
-
-        /// <summary>
-        /// Toggles directional vision mode on or off.
-        /// When enabled, the player can only see within a forward-facing cone.
-        /// </summary>
-        [Obsolete("Use ExecuteTool(\"toggledirectionalvision\", args) instead. This method will be removed in a future version.")]
-        public async Task ToggleDirectionalVision()
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return;
-
-            session.DirectionalVisionMode = !session.DirectionalVisionMode;
-            Console.WriteLine($"Directional vision mode: {(session.DirectionalVisionMode ? "ON" : "OFF")}");
-
-            // Send updated perception with new vision mode
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-        }
-
-        [Obsolete("Use ExecuteTool(\"changelevel\", args) instead. This method will be removed in a future version.")]
-        public async Task ChangeLevel(int deltaZ)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return;
-
-            session.ChangeLevel(deltaZ);
-
-            // Send updated perception
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-        }
-
-        [Obsolete("Use ExecuteTool(\"jumptolocation\", args) instead. This method will be removed in a future version.")]
-        public async Task JumpToRandomLocation()
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return;
-
-            session.JumpToRandomLocation();
-
-            // Send updated perception
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-        }
-
-        [Obsolete("Use ExecuteTool(\"pickup\", args) instead. This method will be removed in a future version.")]
-        public async Task<InteractionResultDto> Pickup(string targetEntityId)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return new InteractionResultDto { Success = false, Reason = "No session" };
-
-            var result = interactionSystem.TryPickup(session, targetEntityId);
-            
-            // Process narrative consequences if successful
-            if (result.Success && clusterClient != null && session.WorldId != null)
-            {
-                await ProcessNarrativeEventAsync(session, "item_collected", new Dictionary<string, object>
-                {
-                    ["itemId"] = targetEntityId
-                });
-            }
-            
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
-        }
-
-        [Obsolete("Use ExecuteTool(\"drop\", args) instead. This method will be removed in a future version.")]
-        public async Task<InteractionResultDto> Drop(string itemEntityId)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return new InteractionResultDto { Success = false, Reason = "No session" };
-
-            var result = interactionSystem.TryDrop(session, itemEntityId);
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
-        }
-
-        [Obsolete("Use ExecuteTool(\"use\", args) instead. This method will be removed in a future version.")]
-        public async Task<InteractionResultDto> Use(string itemEntityId, string onEntityId, string? usageId = null)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return new InteractionResultDto { Success = false, Reason = "No session" };
-
-            var result = interactionSystem.TryUse(session, itemEntityId, onEntityId, usageId);
-            
-            // Handle reactive disambiguation: if options are returned, return them in the DTO
-            if (result.Options != null && result.Options.Count > 0)
-            {
-                return new InteractionResultDto 
-                { 
-                    Success = false, 
-                    Reason = result.Reason,
-                    Options = result.Options.Select(opt => new UsageOptionDto
-                    {
-                        UsageId = opt.UsageId,
-                        Label = opt.Label,
-                        Description = opt.Description
-                    }).ToList()
-                };
-            }
-            
-            // Process narrative consequences if successful
-            if (result.Success && clusterClient != null && session.WorldId != null)
-            {
-                await ProcessNarrativeEventAsync(session, "item_used", new Dictionary<string, object>
-                {
-                    ["itemId"] = itemEntityId,
-                    ["targetId"] = onEntityId
-                });
-            }
-            
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
-        }
-
-        [Obsolete("Use ExecuteTool(\"open\", args) instead. This method will be removed in a future version.")]
-        public async Task<InteractionResultDto> Open(string targetEntityId)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return new InteractionResultDto { Success = false, Reason = "No session" };
-
-            var result = interactionSystem.TryOpen(session, targetEntityId);
-            
-            // Process narrative consequences if successful
-            if (result.Success && clusterClient != null && session.WorldId != null)
-            {
-                await ProcessNarrativeEventAsync(session, "door_opened", new Dictionary<string, object>
-                {
-                    ["doorId"] = targetEntityId
-                });
-            }
-            
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
-        }
-
-        [Obsolete("Use ExecuteTool(\"close\", args) instead. This method will be removed in a future version.")]
-        public async Task<InteractionResultDto> Close(string targetEntityId)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return new InteractionResultDto { Success = false, Reason = "No session" };
-
-            var result = interactionSystem.TryClose(session, targetEntityId);
-            
-            // Process narrative consequences if successful
-            if (result.Success && clusterClient != null && session.WorldId != null)
-            {
-                await ProcessNarrativeEventAsync(session, "door_closed", new Dictionary<string, object>
-                {
-                    ["doorId"] = targetEntityId
-                });
-            }
-            
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-            return new InteractionResultDto { Success = result.Success, Reason = result.Reason };
-        }
+        // ----------------------------------------------------------------
+        // Phase 2d: the per-verb [Obsolete] hub methods (MovePlayer, Rotate*,
+        // Pickup, Drop, Use, Open, Close, ChangeLevel, JumpToRandomLocation,
+        // ToggleDirectionalVision, SetLightingMode, SetVisionMode) are gone.
+        // Clients use ExecuteTool("move", args) etc. for every gameplay verb.
+        // The narrative-consequence emission for door/item events that used to
+        // live in those obsolete hub methods is preserved in ExecuteTool's
+        // post-dispatch branch below.
+        // ----------------------------------------------------------------
 
         public async Task<InteractionResultDto> UsePortal(string portalEntityId)
         {
@@ -544,33 +381,8 @@ namespace Aetherium.Server
             }
         }
 
-        [Obsolete("Use ExecuteTool(\"setlightingmode\", args) instead. This method will be removed in a future version.")]
-        public async Task SetLightingMode(LightingMode mode)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return;
-
-            session.CurrentLightingMode = mode;
-
-            // Send updated perception with new lighting mode
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-        }
-
-        [Obsolete("Use ExecuteTool(\"setvisionmode\", args) instead. This method will be removed in a future version.")]
-        public async Task SetVisionMode(VisionMode mode)
-        {
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            if (session == null)
-                return;
-
-            session.CurrentVisionMode = mode;
-
-            // Send updated perception with new vision mode
-            var perception = session.GetPerception();
-            await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-        }
+        // (SetLightingMode / SetVisionMode also removed in phase 2d; clients
+        // use ExecuteTool("setlightingmode", args) and ExecuteTool("setvisionmode", args).)
 
         // ============================================================
         // Multi-World Management Methods
@@ -617,57 +429,89 @@ namespace Aetherium.Server
         }
 
         /// <summary>
-        /// Joins a specific world by ID.
-        /// If the client is already in a world, they will be moved to the new world.
+        /// Binds the caller's session to the given world by hydrating its
+        /// <see cref="GameSession.World"/> from a snapshot served by
+        /// <see cref="IGameMapGrain"/>.
+        ///
+        /// <para>
+        /// PHASE 1 semantics: the resulting World is independent per-session.
+        /// Two clients calling JoinWorld with the same id see identical initial
+        /// layouts and identical entity IDs, but mutations are local — picking
+        /// up an item in one session is not visible in the other. Live shared
+        /// mutation is deferred to phase 2.
+        /// </para>
         /// </summary>
-        public async Task<OperationResult> JoinWorld(string worldId)
+        public async Task<JoinWorldResult> JoinWorld(string worldId, string? mapId = null)
         {
             try
             {
-                // Remove existing session if any
-                var existingSession = sessionManager.GetSession(Context.ConnectionId);
-                if (existingSession != null)
-                {
-                    sessionManager.RemoveSession(Context.ConnectionId);
-                }
+                if (string.IsNullOrEmpty(worldId))
+                    return JoinWorldResult.Fail("worldId required");
 
-                var managementGrain = GetManagementGrain();
-                if (managementGrain == null)
-                {
-                    return OperationResult.Error("Orleans is not available");
-                }
-
-                // Get world grain
                 if (clusterClient == null)
-                {
-                    return OperationResult.Error("Cluster client not available");
-                }
+                    return JoinWorldResult.Fail("Cluster client not available");
 
+                var session = sessionManager.GetSession(Context.ConnectionId);
+                if (session == null)
+                    return JoinWorldResult.Fail("No active session");
+
+                // Resolve world + state.
                 var worldGrain = clusterClient.GetGrain<IWorldGrain>(worldId);
+                var worldInfo = await worldGrain.GetInfoAsync();
+                if (worldInfo == null)
+                    return JoinWorldResult.Fail("World not found");
+
                 var worldState = await worldGrain.GetStateAsync();
-
                 if (worldState != WorldState.Active)
+                    return JoinWorldResult.Fail($"World is not active (state: {worldState})");
+
+                // Resolve map.
+                string? resolvedMapId = mapId;
+                if (string.IsNullOrEmpty(resolvedMapId))
                 {
-                    return OperationResult.Error($"World {worldId} is not available (state: {worldState})");
+                    resolvedMapId = worldInfo.MapIds?.FirstOrDefault();
+                    if (string.IsNullOrEmpty(resolvedMapId))
+                        return JoinWorldResult.Fail("World has no maps");
                 }
 
-                // Get the world's primary map (for now, assume map ID = worldId)
-                // TODO: Support multiple maps per world
-                var mapGrain = clusterClient.GetGrain<IGameMapGrain>(worldId);
-                var worldData = await mapGrain.GetWorldAsync();
+                // Register on the map grain and grab the spawn assignment.
+                var mapGrain = clusterClient.GetGrain<IGameMapGrain>(resolvedMapId);
+                var joinResult = await mapGrain.JoinPlayerAsync(session.SessionId);
+                if (!joinResult.Success)
+                    return JoinWorldResult.Fail(joinResult.Reason ?? "Join failed");
 
-                if (worldData == null)
-                {
-                    return OperationResult.Error($"World {worldId} has no active map");
-                }
+                // Fetch a snapshot of the canonical world, omitting the joiner's own
+                // Character so they don't see themselves twice. Their local session
+                // creates a fresh Player on hydration with EntityId == SessionId.
+                var snapshot = await mapGrain.GetWorldSnapshotForJoinerAsync(session.SessionId);
 
-                // TODO: Deserialize worldData when serialization is implemented
-                return OperationResult.Error("Joining worlds via GameHub is not yet supported.");
+                var generatorRegistry = Context.GetHttpContext()?.RequestServices
+                    .GetService<Aetherium.WorldGen.MapGeneratorRegistry>();
+                if (generatorRegistry == null)
+                    return JoinWorldResult.Fail("Generator registry not available");
+
+                var builder = new Aetherium.WorldBuilders.SnapshotWorldBuilder(snapshot, generatorRegistry);
+                sessionManager.ReplaceSessionWorld(
+                    session, builder, worldId, resolvedMapId, joinResult.SpawnLocation());
+
+                // Phase 2c: swap the session's mutation gateway to a grain-routed one.
+                // From here on, every gameplay verb on this session's tools dispatches
+                // to the grain, which mutates canonical state and pushes deltas back
+                // to every joined session via NotifyMapMutationAsync.
+                session.Gateway = new Aetherium.Server.MultiWorld.GrainMutationGateway(
+                    clusterClient, resolvedMapId, session.SessionId);
+
+                // Push the first perception of the new world to the caller.
+                var perception = session.GetPerception();
+                await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+
+                return JoinWorldResult.Ok(worldId, resolvedMapId, joinResult.SpawnLocation());
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[GameHub] Error joining world: {ex.Message}");
-                return OperationResult.Error($"Failed to join world: {ex.Message}");
+                // Log server-side detail; return sanitized reason to the client.
+                Console.WriteLine($"[GameHub] JoinWorld({worldId}) threw: {ex}");
+                return JoinWorldResult.Fail("Join failed");
             }
         }
         
@@ -705,26 +549,47 @@ namespace Aetherium.Server
                 var tool = toolRegistry.GetTool(toolId);
                 if (tool == null)
                 {
-                    return new ToolExecutionResultDto 
-                    { 
-                        Success = false, 
-                        Message = $"Tool not found: {toolId}" 
+                    return new ToolExecutionResultDto
+                    {
+                        Success = false,
+                        Message = $"Tool not found: {toolId}"
                     };
                 }
-                
-                // Create execution context for player
+
+                // Enforce the Player profile at the hub boundary so a missing or
+                // forgotten in-tool capability check can't silently grant world-builder
+                // or admin tools to a human client. The tool itself still re-checks via
+                // HasCapability for defense in depth.
+                var profile = Aetherium.Server.Agents.Tools.AgentToolProfile.Player;
+                if (!profile.IsToolAllowed(tool))
+                {
+                    return new ToolExecutionResultDto
+                    {
+                        Success = false,
+                        Message = $"Tool '{toolId}' is not available for this profile"
+                    };
+                }
+
+                // Create execution context for player. The MutationGateway is the contract
+                // tools mutate through.
+                //   * Phase 2a: LocalMutationGateway (in-process, session-local mutation)
+                //   * Phase 2c: when the session is grain-bound (via JoinWorld),
+                //     session.Gateway is a GrainMutationGateway and we use it. The grain
+                //     applies the mutation to canonical state and the host-side delta
+                //     broker fans perception updates to every joined session.
+                var gateway = session.Gateway
+                    ?? (Aetherium.Server.MultiWorld.IMapMutationGateway)new Aetherium.Server.MultiWorld.LocalMutationGateway(session, interactionSystem);
+
                 var context = new Aetherium.Server.Agents.Tools.ToolExecutionContext
                 {
                     SessionId = session.SessionId,
                     ConnectionId = Context.ConnectionId,
                     Session = session,
-                    InteractionSystem = interactionSystem,
+                    MutationGateway = gateway,
                     ManagementGrain = GetManagementGrain(),
-                    GrantedCapabilities = new HashSet<string> 
-                    { 
-                        // Players get full access to player-level capabilities
-                        "basic_movement", "inventory_access", "interaction", "vision" 
-                    },
+                    // Capabilities come from the enforced profile, not a hardcoded literal,
+                    // so any future profile changes flow through automatically.
+                    GrantedCapabilities = new HashSet<string>(profile.GrantedCapabilities),
                     ServiceProvider = Context.GetHttpContext()?.RequestServices ?? throw new InvalidOperationException("Service provider not available")
                 };
                 
@@ -758,15 +623,17 @@ namespace Aetherium.Server
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[GameHub] Error executing tool {toolId}: {ex.Message}");
-                return new ToolExecutionResultDto 
-                { 
-                    Success = false, 
-                    Message = $"Error executing tool: {ex.Message}" 
+                // Log full detail server-side; return an opaque message to the client so
+                // internal exception text (paths, types, grain identifiers) isn't leaked.
+                Console.WriteLine($"[GameHub] Error executing tool {toolId}: {ex}");
+                return new ToolExecutionResultDto
+                {
+                    Success = false,
+                    Message = "Tool execution failed"
                 };
             }
         }
-        
+
         /// <summary>
         /// Lists all available tools for the current player.
         /// </summary>

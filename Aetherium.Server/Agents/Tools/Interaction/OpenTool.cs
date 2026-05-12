@@ -53,15 +53,15 @@ namespace Aetherium.Server.Agents.Tools.Interaction
                     : ToolExecutionResult.Error(result.Message);
             }
             
-            // Use interaction system directly (for synchronous player execution)
-            if (context.InteractionSystem != null && context.Session != null)
+            // Route through the gateway (phase 2a: local; phase 2b+c: grain-routed).
+            if (context.MutationGateway != null)
             {
-                var result = context.InteractionSystem.TryOpen(context.Session, entityId);
+                var result = await context.MutationGateway.OpenAsync(entityId);
                 return result.Success
                     ? ToolExecutionResult.Ok($"Opened {entityId}")
                     : ToolExecutionResult.Error(result.Reason);
             }
-            
+
             return ToolExecutionResult.Error("No execution context available");
         }
     }

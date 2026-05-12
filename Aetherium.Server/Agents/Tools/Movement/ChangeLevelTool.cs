@@ -51,13 +51,15 @@ namespace Aetherium.Server.Agents.Tools.Movement
             if (delta < -100 || delta > 100)
                 return ToolExecutionResult.Error("Delta must be between -100 and 100");
             
-            // Use session directly
-            if (context.Session != null)
+            // Route through the gateway.
+            if (context.MutationGateway != null)
             {
-                context.Session.ChangeLevel(delta);
-                return ToolExecutionResult.Ok($"Changed level by {delta}");
+                var result = await context.MutationGateway.ChangeLevelAsync(delta);
+                return result.Success
+                    ? ToolExecutionResult.Ok($"Changed level by {delta}")
+                    : ToolExecutionResult.Error(result.Reason ?? "Change level failed");
             }
-            
+
             return ToolExecutionResult.Error("No execution context available");
         }
     }

@@ -1,0 +1,123 @@
+using System.Collections.Generic;
+using System.Linq;
+using Aetherium.Core;
+using Aetherium.Entities;
+using Aetherium.Server.MultiWorld;
+using Aetherium.WorldGen;
+using Passes = Aetherium.WorldGen.Passes;
+
+namespace Aetherium.WorldBuilders
+{
+    /// <summary>
+    /// Hydrates a <see cref="World"/> from a <see cref="WorldSnapshot"/>.
+    ///
+    /// <para>
+    /// Phase 1: regenerate the world by replaying the snapshot's
+    /// <see cref="WorldRecipe"/> through <see cref="WorldGenerationOrchestrator"/>,
+    /// then replace the generator-placed entities with the snapshot's entity
+    /// placements (so entity IDs match the grain's canonical world). Terrain comes
+    /// from the recipe; everything else comes from the snapshot.
+    /// </para>
+    ///
+    /// <para>
+    /// Phase 1 semantics: the resulting <see cref="World"/> is an independent
+    /// instance. Mutations to it do NOT propagate to the grain's canonical world
+    /// or to other sessions hydrated from the same snapshot. Phase 2 will replace
+    /// this with grain-authoritative mutation and delta-based session mirrors.
+    /// </para>
+    /// </summary>
+    public sealed class SnapshotWorldBuilder : WorldBuilder
+    {
+        private readonly WorldSnapshot _snapshot;
+        private readonly MapGeneratorRegistry _generatorRegistry;
+
+        public SnapshotWorldBuilder(WorldSnapshot snapshot, MapGeneratorRegistry generatorRegistry)
+        {
+            _snapshot = snapshot;
+            _generatorRegistry = generatorRegistry;
+        }
+
+        public override World Build()
+        {
+            var recipe = _snapshot.Recipe;
+
+            var request = new WorldGenerationRequest
+            {
+                LayoutGenerator = recipe.GeneratorType,
+                Width = recipe.Width > 0 ? recipe.Width : _snapshot.Size.Width,
+                Height = recipe.Height > 0 ? recipe.Height : _snapshot.Size.Height,
+                Levels = recipe.Levels > 0 ? recipe.Levels : _snapshot.Size.Depth,
+                Seed = recipe.Seed,
+                GeneratorVersion = recipe.GeneratorVersion,
+                Template = recipe.Template,
+                Parameters = new System.Collections.Generic.Dictionary<string, string>(recipe.Parameters, System.StringComparer.OrdinalIgnoreCase),
+            };
+
+            var passes = BuildPasses(recipe.Template);
+            var orchestrator = new WorldGenerationOrchestrator(_generatorRegistry, passes);
+            var result = orchestrator.Generate(request);
+
+            if (!result.Success || result.World is null)
+            {
+                var details = new List<string>(result.Errors);
+                if (result.Validation?.Errors != null)
+                    details.AddRange(result.Validation.Errors);
+                throw new System.InvalidOperationException(
+                    $"Snapshot hydration failed during terrain regeneration: {string.Join(", ", details)}");
+            }
+
+            var world = result.World;
+
+            // Strip generator-placed non-terrain entities. They were re-rolled with fresh
+            // Guid IDs; we overlay the snapshot's entities (with the grain's authoritative
+            // IDs) immediately after.
+            var stripIds = world.Entities.Values
+                .Where(e => e is not Terrain && e is not Character)
+                .Select(e => e.EntityId)
+                .ToList();
+            foreach (var id in stripIds)
+                world.TryRemoveEntity(id);
+
+            // Overlay snapshot entities with their captured IDs and component state.
+            var factory = new EntityFactory(world);
+            foreach (var placement in _snapshot.Entities)
+            {
+                var entity = factory.Create(placement);
+                if (entity is null)
+                    continue;
+
+                // The factory has already overridden the EntityId and set the location.
+                // AddEntity will throw if the ID is somehow already taken — which would
+                // be a real bug (duplicate IDs in snapshot) and we want it loud.
+                world.AddEntity(entity);
+            }
+
+            World = world;
+            return world;
+        }
+
+        // Mirror of GameMapGrain.BuildPasses so regeneration uses the same pipeline the
+        // grain used originally. Kept in sync manually for phase 1; if the pass list
+        // grows we should consolidate into one place.
+        private static IWorldGenerationPass[] BuildPasses(WorldGenerationTemplate template)
+        {
+            return template switch
+            {
+                WorldGenerationTemplate.Outdoor => new IWorldGenerationPass[]
+                {
+                    new Passes.OutdoorLayoutPass(),
+                    new Passes.OutdoorInteractionsPass(),
+                    new Passes.PortalNetworkPass(),
+                    new Passes.OutdoorValidationPass()
+                },
+                _ => new IWorldGenerationPass[]
+                {
+                    new Passes.DungeonLayoutPass(),
+                    new Passes.DungeonInteractionsPass(),
+                    new Passes.PortalNetworkPass(),
+                    new Passes.DungeonValidationPass()
+                }
+            };
+        }
+    }
+}

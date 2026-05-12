@@ -65,101 +65,129 @@ namespace Aetherium.Client
             Console.WriteLine($"Connected to server at {serverUrl}");
         }
 
+        // ============================================================
+        // Player verbs.
+        //
+        // As of phase 2d, the server's legacy per-verb hub methods
+        // (MovePlayer, Pickup, Open, etc.) are removed. These client wrappers
+        // now route through the unified ExecuteTool API. The CALLER surface
+        // (this class's public methods) is unchanged — only the wire protocol
+        // and the server-side dispatch path changed.
+        // ============================================================
+
         public async Task MovePlayerAsync(RelativeDirection direction, int distance)
         {
-            if (connection == null || !IsConnected)
-                return;
-
-            await connection.InvokeAsync("MovePlayer", direction, distance);
+            var dirString = direction switch
+            {
+                RelativeDirection.Forward => "FORWARD",
+                RelativeDirection.Backward => "BACKWARD",
+                RelativeDirection.Left => "LEFT",
+                RelativeDirection.Right => "RIGHT",
+                _ => "FORWARD",
+            };
+            await ExecuteToolAsync("move", new Dictionary<string, object>
+            {
+                ["direction"] = dirString,
+                ["distance"] = distance,
+            });
         }
 
         public async Task RotatePlayerAsync(bool clockwise)
         {
-            if (connection == null || !IsConnected)
-                return;
-
-            await connection.InvokeAsync("RotatePlayer", clockwise);
+            await ExecuteToolAsync("rotate", new Dictionary<string, object>
+            {
+                ["clockwise"] = clockwise,
+            });
         }
 
         public async Task RotatePlayerDegreesAsync(int degrees)
         {
-            if (connection == null || !IsConnected)
-                return;
-
-            await connection.InvokeAsync("RotatePlayerDegrees", degrees);
+            await ExecuteToolAsync("rotate", new Dictionary<string, object>
+            {
+                ["degrees"] = degrees,
+            });
         }
 
         public async Task ToggleDirectionalVisionAsync()
         {
-            if (connection == null || !IsConnected)
-                return;
-
-            await connection.InvokeAsync("ToggleDirectionalVision");
+            await ExecuteToolAsync("toggledirectionalvision", new Dictionary<string, object>());
         }
 
         public async Task ChangeLevelAsync(int deltaZ)
         {
-            if (connection == null || !IsConnected)
-                return;
-
-            await connection.InvokeAsync("ChangeLevel", deltaZ);
+            await ExecuteToolAsync("changelevel", new Dictionary<string, object>
+            {
+                ["delta"] = deltaZ,
+            });
         }
 
         public async Task JumpToRandomLocationAsync()
         {
-            if (connection == null || !IsConnected)
-                return;
-
-            await connection.InvokeAsync("JumpToRandomLocation");
+            await ExecuteToolAsync("jumptolocation", new Dictionary<string, object>());
         }
 
         public async Task<InteractionResultDto?> PickupAsync(string targetEntityId)
         {
-            if (connection == null || !IsConnected)
-                return null;
-            return await connection.InvokeAsync<InteractionResultDto>("Pickup", targetEntityId);
+            var result = await ExecuteToolAsync("pickup", new Dictionary<string, object>
+            {
+                ["targetEntityId"] = targetEntityId,
+            });
+            return new InteractionResultDto { Success = result.Success, Reason = result.Message ?? string.Empty };
         }
 
         public async Task<InteractionResultDto?> DropAsync(string itemEntityId)
         {
-            if (connection == null || !IsConnected)
-                return null;
-            return await connection.InvokeAsync<InteractionResultDto>("Drop", itemEntityId);
+            var result = await ExecuteToolAsync("drop", new Dictionary<string, object>
+            {
+                ["itemEntityId"] = itemEntityId,
+            });
+            return new InteractionResultDto { Success = result.Success, Reason = result.Message ?? string.Empty };
         }
 
         public async Task<InteractionResultDto?> UseAsync(string itemEntityId, string onEntityId, string? usageId = null)
         {
-            if (connection == null || !IsConnected)
-                return null;
-            return await connection.InvokeAsync<InteractionResultDto>("Use", itemEntityId, onEntityId, usageId);
+            var args = new Dictionary<string, object>
+            {
+                ["itemEntityId"] = itemEntityId,
+                ["onEntityId"] = onEntityId,
+            };
+            if (!string.IsNullOrEmpty(usageId)) args["usageId"] = usageId;
+            var result = await ExecuteToolAsync("use", args);
+            return new InteractionResultDto { Success = result.Success, Reason = result.Message ?? string.Empty };
         }
 
         public async Task<InteractionResultDto?> OpenAsync(string targetEntityId)
         {
-            if (connection == null || !IsConnected)
-                return null;
-            return await connection.InvokeAsync<InteractionResultDto>("Open", targetEntityId);
+            var result = await ExecuteToolAsync("open", new Dictionary<string, object>
+            {
+                ["targetEntityId"] = targetEntityId,
+            });
+            return new InteractionResultDto { Success = result.Success, Reason = result.Message ?? string.Empty };
         }
 
         public async Task<InteractionResultDto?> CloseAsync(string targetEntityId)
         {
-            if (connection == null || !IsConnected)
-                return null;
-            return await connection.InvokeAsync<InteractionResultDto>("Close", targetEntityId);
+            var result = await ExecuteToolAsync("close", new Dictionary<string, object>
+            {
+                ["targetEntityId"] = targetEntityId,
+            });
+            return new InteractionResultDto { Success = result.Success, Reason = result.Message ?? string.Empty };
         }
 
         public async Task SetLightingModeAsync(LightingMode mode)
         {
-            if (connection == null || !IsConnected)
-                return;
-            await connection.InvokeAsync("SetLightingMode", mode);
+            await ExecuteToolAsync("setlightingmode", new Dictionary<string, object>
+            {
+                ["mode"] = mode.ToString(),
+            });
         }
 
         public async Task SetVisionModeAsync(VisionMode mode)
         {
-            if (connection == null || !IsConnected)
-                return;
-            await connection.InvokeAsync("SetVisionMode", mode);
+            await ExecuteToolAsync("setvisionmode", new Dictionary<string, object>
+            {
+                ["mode"] = mode.ToString(),
+            });
         }
         
         // ============================================================

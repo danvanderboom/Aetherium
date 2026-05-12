@@ -83,13 +83,16 @@ namespace Aetherium.Server.Agents.Tools.Movement
             if (Math.Abs(degrees) > 360)
                 return ToolExecutionResult.Error("Degrees must be between -360 and 360");
             
-            // Use session directly (rotation is synchronous)
-            if (context.Session != null)
+            // Route through the gateway so phase 2b+c can replace the in-process
+            // implementation with a grain-routed one without touching this tool.
+            if (context.MutationGateway != null)
             {
-                context.Session.RotateView(degrees);
-                return ToolExecutionResult.Ok($"Rotated {degrees} degrees");
+                var result = await context.MutationGateway.RotateAsync(degrees);
+                return result.Success
+                    ? ToolExecutionResult.Ok($"Rotated {degrees} degrees")
+                    : ToolExecutionResult.Error(result.Reason ?? "Rotate failed");
             }
-            
+
             return ToolExecutionResult.Error("No execution context available");
         }
     }

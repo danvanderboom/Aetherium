@@ -952,13 +952,15 @@ namespace Aetherium.Server.Management
                 if (!profile.IsToolAllowed(tool))
                     return new ToolExecutionResultDto { Success = false, Message = $"Tool '{toolId}' is not allowed for the Player profile" };
 
-                // Create execution context
+                // Create execution context. Phase 2d: the InteractionSystem field
+                // is removed from ToolExecutionContext; the MutationGateway is the
+                // single mutation entry point and auto-falls-back to LocalMutationGateway
+                // when Session is set (which it is here for agent-driven sessions).
                 var context = new Aetherium.Server.Agents.Tools.ToolExecutionContext
                 {
                     SessionId = sessionId,
                     ConnectionId = metadata.ConnectionId,
                     Session = session,
-                    InteractionSystem = _interactionSystem,
                     ManagementGrain = this,
                     GrantedCapabilities = new HashSet<string>(profile.GrantedCapabilities),
                     ServiceProvider = ServiceProvider

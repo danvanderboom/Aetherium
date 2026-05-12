@@ -44,24 +44,25 @@ namespace Aetherium.Server.Agents.Tools.Interaction
             if (string.IsNullOrWhiteSpace(entityId))
                 return ToolExecutionResult.Error("Entity ID cannot be empty");
             
-            // Use management grain if available (for agent execution)
+            // Use management grain if available (for agent execution via IGameManagementGrain)
             if (context.ManagementGrain != null)
             {
                 var result = await context.ManagementGrain.PickupAsync(context.SessionId, entityId);
-                return result.Success 
+                return result.Success
                     ? ToolExecutionResult.Ok($"Picked up {entityId}")
                     : ToolExecutionResult.Error(result.Message);
             }
-            
-            // Use interaction system directly (for synchronous player execution)
-            if (context.InteractionSystem != null && context.Session != null)
+
+            // Route through the gateway. Phase 2a: LocalMutationGateway → InteractionSystem.
+            // Phase 2b+c: GrainMutationGateway → IGameMapGrain.PickupAsync.
+            if (context.MutationGateway != null)
             {
-                var result = context.InteractionSystem.TryPickup(context.Session, entityId);
+                var result = await context.MutationGateway.PickupAsync(entityId);
                 return result.Success
                     ? ToolExecutionResult.Ok($"Picked up {entityId}")
                     : ToolExecutionResult.Error(result.Reason);
             }
-            
+
             return ToolExecutionResult.Error("No execution context available");
         }
     }

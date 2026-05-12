@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -53,7 +53,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
                 SessionId = "test",
                 AgentId = "agent1",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = profile.GrantedCapabilities,
                 ServiceProvider = _serviceProvider
             };
@@ -231,7 +230,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
                 SessionId = "test",
                 ConnectionId = "conn1",
                 Session = session,
-                InteractionSystem = new InteractionSystem(),
                 ServiceProvider = _serviceProvider,
                 GrantedCapabilities = new HashSet<string> { "basic_movement" } // Need capability
             };
@@ -281,7 +279,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
             {
                 SessionId = "test",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = new HashSet<string> { "interaction" },
                 ServiceProvider = _serviceProvider
             };
@@ -318,7 +315,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
             {
                 SessionId = "test",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = new HashSet<string> { "interaction" },
                 ServiceProvider = _serviceProvider
             };
@@ -358,7 +354,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
             {
                 SessionId = "test",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = new HashSet<string> { "inventory_access", "interaction" },
                 ServiceProvider = _serviceProvider
             };
@@ -392,7 +387,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
             {
                 SessionId = "test",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = new HashSet<string> { "inventory_access" },
                 ServiceProvider = _serviceProvider
             };
@@ -604,7 +598,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
             {
                 SessionId = "test",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = AgentToolProfile.FullAccess.GrantedCapabilities,
                 ServiceProvider = _serviceProvider
             };
@@ -831,7 +824,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
             {
                 SessionId = "test",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = new HashSet<string> { "inventory_access" },
                 ServiceProvider = _serviceProvider
             };
@@ -882,7 +874,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
             {
                 SessionId = "test",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = new HashSet<string> { "interaction" },
                 ServiceProvider = _serviceProvider
             };
@@ -914,7 +905,6 @@ namespace Aetherium.Test.Agents.Tools.Integration
             {
                 SessionId = "test",
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = new HashSet<string> { "inventory_access", "interaction" },
                 ServiceProvider = _serviceProvider
             };

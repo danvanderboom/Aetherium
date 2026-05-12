@@ -16,14 +16,53 @@ namespace Aetherium.Server
 		public string SessionId { get; set; } = Guid.NewGuid().ToString();
 		public string ConnectionId { get; set; } = string.Empty;
 		public string? WorldId { get; set; } // Multi-world support - which world is this session in?
+		public string? MapId { get; set; }  // Phase 2c: which map within that world
+
+		/// <summary>
+		/// The mutation gateway this session uses for gameplay verbs. Set by
+		/// <c>GameHub.JoinWorld</c> to a <see cref="Aetherium.Server.MultiWorld.GrainMutationGateway"/>
+		/// when the session is grain-bound; left null for legacy sessions, in which case
+		/// <c>GameHub.ExecuteTool</c> builds a <see cref="Aetherium.Server.MultiWorld.LocalMutationGateway"/>
+		/// on demand.
+		/// </summary>
+		public Aetherium.Server.MultiWorld.IMapMutationGateway? Gateway { get; set; }
 		public World World { get; set; }
 		public Character? Player { get; set; }
 		public WorldLocation? ViewLocation { get; set; }
 		
 		/// <summary>
 		/// Heading in degrees (0-359). 0 = North, 90 = East, 180 = South, 270 = West.
+		///
+		/// <para>
+		/// As of phase 2, heading is server-authoritative on the player's
+		/// <c>Character</c> entity (the <c>HasHeading</c> component). This property
+		/// reads through to <c>Player.Get&lt;HasHeading&gt;().Heading</c> when a
+		/// Player is bound; otherwise it falls back to the local
+		/// <see cref="_fallbackHeadingDegrees"/> for sessions that haven't yet
+		/// initialized a Player. The change keeps the perception-pure design
+		/// principle: a character's facing direction is objective reality of the
+		/// world, not session-local rendering state.
+		/// </para>
 		/// </summary>
-		public int HeadingDegrees { get; set; } = 0;
+		public int HeadingDegrees
+		{
+			get => Player?.Get<Aetherium.Components.HasHeading>()?.Heading ?? _fallbackHeadingDegrees;
+			set
+			{
+				var heading = Player?.Get<Aetherium.Components.HasHeading>();
+				if (heading is not null)
+					heading.Heading = value;
+				else
+					_fallbackHeadingDegrees = ((value % 360) + 360) % 360;
+			}
+		}
+
+		/// <summary>
+		/// Stores the heading for sessions that don't yet have a Player Character
+		/// (during construction, or in tests that build sessions without players).
+		/// Once a Player is attached, reads/writes route to its HasHeading component.
+		/// </summary>
+		private int _fallbackHeadingDegrees = 0;
 		
 		/// <summary>
 		/// Legacy cardinal direction property for backwards compatibility.
@@ -59,12 +98,24 @@ namespace Aetherium.Server
 	private readonly Random rand = new Random();
 
 	/// <summary>
+	/// Serializes state-mutating operations on this session. SignalR can invoke hub
+	/// methods in parallel for a single connection, so without this lock concurrent
+	/// MoveView/RotateView/GetPerception calls would interleave reads and writes of
+	/// ViewLocation/HeadingDegrees/HeatTracker. We deliberately use a coarse lock
+	/// rather than per-field synchronization: the critical sections are short, the
+	/// reads (GetPerception) and writes (move/rotate/level) need consistent snapshots,
+	/// and this becomes free once GameMapGrain takes over (grains are single-threaded
+	/// by Orleans contract).
+	/// </summary>
+	private readonly object _stateLock = new();
+
+	/// <summary>
 	/// Creates a session with a world builder (legacy single-world mode).
 	/// </summary>
-	public GameSession(string connectionId, WorldBuilder worldBuilder)
+	public GameSession(string connectionId, WorldBuilder worldBuilder, PerceptionService? perceptionService = null)
 	{
 		ConnectionId = connectionId;
-		perceptionService = new PerceptionService();
+		this.perceptionService = perceptionService ?? new PerceptionService();
 		GameStartTime = DateTime.UtcNow;
 		HeatTracker = new HeatTrailTracker();
 
@@ -77,16 +128,227 @@ namespace Aetherium.Server
 	/// <summary>
 	/// Creates a session with an existing world (multi-world mode).
 	/// </summary>
-	public GameSession(string connectionId, string worldId, World world, WorldLocation? startLocation = null)
+	public GameSession(string connectionId, string worldId, World world, WorldLocation? startLocation = null, PerceptionService? perceptionService = null)
 	{
 		ConnectionId = connectionId;
 		WorldId = worldId;
 		World = world;
-		perceptionService = new PerceptionService();
+		this.perceptionService = perceptionService ?? new PerceptionService();
 		GameStartTime = DateTime.UtcNow;
 		HeatTracker = new HeatTrailTracker();
 
 		InitializePlayer(null, startLocation);
+	}
+
+	/// <summary>
+	/// Atomically swap the session's <see cref="World"/> to a freshly hydrated one
+	/// (typically from <see cref="WorldBuilders.SnapshotWorldBuilder"/>). Re-initializes
+	/// the player at <paramref name="spawnLocation"/>, clears the heat tracker, and
+	/// re-anchors <see cref="ViewLocation"/>. Holds the session state lock so no
+	/// in-flight gameplay call sees a torn view of the swap.
+	///
+	/// <para>
+	/// PHASE 1 semantics: the new World is independent of the grain's canonical
+	/// world. Mutations on it do not propagate to the grain or to other sessions
+	/// hydrated from the same snapshot. Phase 2 will replace this with grain-
+	/// authoritative mutation and per-session delta-based mirrors.
+	/// </para>
+	/// </summary>
+	public void ReplaceWorld(WorldBuilder builder, string worldId, string mapId, WorldLocation spawnLocation)
+	{
+		if (builder is null) throw new ArgumentNullException(nameof(builder));
+		if (worldId is null) throw new ArgumentNullException(nameof(worldId));
+		if (spawnLocation is null) throw new ArgumentNullException(nameof(spawnLocation));
+
+		// Build outside the lock so we don't block in-flight calls during the
+		// (potentially millisecond-scale) regen; swap under the lock.
+		var newWorld = builder.Build();
+
+		lock (_stateLock)
+		{
+			World = newWorld;
+			WorldId = worldId;
+			MapId = mapId;
+
+			HeatTracker = new HeatTrailTracker();
+			ViewLocation = new WorldLocation(spawnLocation.X, spawnLocation.Y, spawnLocation.Z);
+
+			// Phase 2c: the player Character is grain-owned. The grain creates it
+			// with EntityId == SessionId at JoinPlayerAsync time. The session's local
+			// mirror needs a matching Character so perception and inventory work.
+			Player = new Character { EntityId = SessionId };
+			Player.Set(new WorldLocation(spawnLocation.X, spawnLocation.Y, spawnLocation.Z));
+			Player.Set(new Inventory());
+			Player.Set(new HasHeading { Heading = 0 });
+			World.AddEntity(Player);
+		}
+	}
+
+	/// <summary>
+	/// Reconciles the session's local <see cref="World"/> mirror to reflect a
+	/// grain-emitted <see cref="Aetherium.Server.MultiWorld.MapDelta"/>. Holds
+	/// the session's existing state lock so applying a delta is consistent with
+	/// concurrent perception reads.
+	///
+	/// <para>
+	/// Phase 2c: delta types are dispatched on runtime type. Unknown delta types
+	/// or missing entities are logged and dropped — the next periodic perception
+	/// resync will heal any divergence.
+	/// </para>
+	/// </summary>
+	public void ApplyDelta(Aetherium.Server.MultiWorld.MapDelta delta)
+	{
+		if (delta is null) return;
+
+		lock (_stateLock)
+		{
+			switch (delta)
+			{
+				case Aetherium.Server.MultiWorld.EntityMovedDelta moved:
+					ApplyEntityMoved(moved);
+					break;
+
+				case Aetherium.Server.MultiWorld.EntityRemovedDelta removed:
+					ApplyEntityRemoved(removed);
+					break;
+
+				case Aetherium.Server.MultiWorld.EntityAddedDelta added:
+					ApplyEntityAdded(added);
+					break;
+
+				case Aetherium.Server.MultiWorld.EntityHeadingChangedDelta headingChanged:
+					ApplyHeadingChanged(headingChanged);
+					break;
+
+				case Aetherium.Server.MultiWorld.DoorStateChangedDelta doorChanged:
+					ApplyDoorStateChanged(doorChanged);
+					break;
+
+				case Aetherium.Server.MultiWorld.ItemTransferredDelta transfer:
+					ApplyItemTransferred(transfer);
+					break;
+
+				case Aetherium.Server.MultiWorld.HeatRecordedDelta heat:
+					// Look up the entity in the local mirror for its HeatSignature
+					// (which has the Duration we need for fade calculations). If the
+					// entity isn't in the mirror (e.g. another player out of FOV), use
+					// the delta's intensity with a default duration. Heat data is
+					// observable independently of entity visibility.
+					var heatLoc = new WorldLocation(heat.X, heat.Y, heat.Z);
+					var heatTimestamp = GameStartTime.AddHours(heat.GameTimeHours);
+					if (World.Entities.TryGetValue(heat.EntityId, out var heatEntity))
+					{
+						HeatTracker.RecordEntityPosition(heatEntity, heatLoc, heatTimestamp);
+					}
+					else
+					{
+						HeatTracker.RecordRaw(
+							heat.EntityId,
+							heatLoc,
+							heatTimestamp,
+							heat.Intensity,
+							TimeSpan.FromSeconds(10)); // default duration when source entity isn't mirrored
+					}
+					break;
+
+				case Aetherium.Server.MultiWorld.HeatExpiredDelta expired:
+					HeatTracker.RemoveTrailsAt(new WorldLocation(expired.X, expired.Y, expired.Z));
+					break;
+
+				default:
+					Console.WriteLine($"[GameSession] Ignoring unknown delta type {delta.GetType().Name}");
+					break;
+			}
+		}
+	}
+
+	private void ApplyEntityMoved(Aetherium.Server.MultiWorld.EntityMovedDelta delta)
+	{
+		// Skip the player's own move — the gateway-route already advanced ViewLocation
+		// (in legacy mode) or this is a no-op (in grain mode the entity moves via the
+		// grain; the local mirror just needs the index update).
+		if (!World.Entities.TryGetValue(delta.EntityId, out _))
+			return;
+		World.MoveEntity(delta.EntityId, new WorldLocation(delta.NewX, delta.NewY, delta.NewZ));
+
+		// If this delta concerns the player Character, keep ViewLocation in sync.
+		if (Player is not null && delta.EntityId == Player.EntityId)
+			ViewLocation = new WorldLocation(delta.NewX, delta.NewY, delta.NewZ);
+	}
+
+	private void ApplyEntityRemoved(Aetherium.Server.MultiWorld.EntityRemovedDelta delta)
+	{
+		World.TryRemoveEntity(delta.EntityId);
+	}
+
+	private void ApplyEntityAdded(Aetherium.Server.MultiWorld.EntityAddedDelta delta)
+	{
+		if (delta.Placement is null) return;
+		if (World.Entities.ContainsKey(delta.Placement.EntityId))
+			return; // already present (e.g. our own add); idempotent
+
+		var factory = new Aetherium.Server.MultiWorld.EntityFactory(World);
+		var entity = factory.Create(delta.Placement);
+		if (entity is not null)
+			World.AddEntity(entity);
+	}
+
+	private void ApplyHeadingChanged(Aetherium.Server.MultiWorld.EntityHeadingChangedDelta delta)
+	{
+		// Heading deltas are sent only to the actor's own session. Update the local
+		// mirror Character's HasHeading so the actor's perception cone reflects it.
+		if (!World.Entities.TryGetValue(delta.EntityId, out var entity))
+			return;
+		var heading = entity.Get<HasHeading>();
+		if (heading is not null)
+			heading.Heading = delta.Degrees;
+	}
+
+	private void ApplyDoorStateChanged(Aetherium.Server.MultiWorld.DoorStateChangedDelta delta)
+	{
+		if (!World.Entities.TryGetValue(delta.EntityId, out var entity))
+			return;
+		var oc = entity.Get<OpensAndCloses>();
+		if (oc is not null)
+		{
+			oc.IsOpen = delta.IsOpen;
+			oc.IsLocked = delta.IsLocked;
+		}
+	}
+
+	private void ApplyItemTransferred(Aetherium.Server.MultiWorld.ItemTransferredDelta delta)
+	{
+		if (delta.IntoInventory)
+		{
+			// World → inventory. Remove from world, add to owner's inventory.
+			World.TryRemoveEntity(delta.ItemEntityId);
+			if (Player is not null && delta.OwnerEntityId == Player.EntityId)
+			{
+				var inv = Player.Get<Inventory>();
+				if (inv is not null && delta.ItemPlacement is not null)
+				{
+					var factory = new Aetherium.Server.MultiWorld.EntityFactory(World);
+					var item = factory.Create(delta.ItemPlacement);
+					if (item is not null)
+						inv.TryAdd(item.EntityId, item);
+				}
+			}
+		}
+		else
+		{
+			// Inventory → world. Remove from owner's inventory (if it's us), add to world.
+			if (Player is not null && delta.OwnerEntityId == Player.EntityId)
+			{
+				var inv = Player.Get<Inventory>();
+				if (inv is not null && inv.Items.TryGetValue(delta.ItemEntityId, out var item))
+				{
+					inv.Remove(delta.ItemEntityId);
+					item.Set(new WorldLocation(delta.X, delta.Y, delta.Z));
+					if (!World.Entities.ContainsKey(item.EntityId))
+						World.AddEntity(item);
+				}
+			}
+		}
 	}
 
 	/// <summary>
@@ -145,33 +407,37 @@ namespace Aetherium.Server
 
 	public Aetherium.Model.PerceptionDto GetPerception()
 	{
-		if (ViewLocation == null)
-			throw new InvalidOperationException("ViewLocation is null");
-
-		// Update heat tracker before computing perception
-		UpdateHeatTracker();
-
-		// Determine FOV degrees for directional vision
-		int? fovDegrees = null;
-		if (DirectionalVisionMode && Player != null)
+		lock (_stateLock)
 		{
-			// Try to get FOV from player's HasHeading component, or use default
-			var hasHeading = Player.Get<HasHeading>();
-			fovDegrees = hasHeading?.FieldOfViewDegrees ?? 120; // Default 120 for humans
-		}
+			if (ViewLocation == null)
+				throw new InvalidOperationException("ViewLocation is null");
 
-		return perceptionService.ComputePerception(
-			World, 
-			ViewLocation, 
-			Heading, 
-			ViewportSize,
-			CurrentLightingMode,
-			CurrentVisionMode,
-			HeatTracker,
-			GetCurrentGameTime(),
-			DirectionalVisionMode,
-			DirectionalVisionMode ? (int?)HeadingDegrees : null,
-			fovDegrees);
+			// Heat is grain-authoritative and flows in via ApplyDelta. No per-perception
+			// iteration here — the local mirror is kept up to date by the host-side
+			// delta broker.
+
+			// Determine FOV degrees for directional vision
+			int? fovDegrees = null;
+			if (DirectionalVisionMode && Player != null)
+			{
+				// Try to get FOV from player's HasHeading component, or use default
+				var hasHeading = Player.Get<HasHeading>();
+				fovDegrees = hasHeading?.FieldOfViewDegrees ?? 120; // Default 120 for humans
+			}
+
+			return perceptionService.ComputePerception(
+				World,
+				ViewLocation,
+				Heading,
+				ViewportSize,
+				CurrentLightingMode,
+				CurrentVisionMode,
+				HeatTracker,
+				GetCurrentGameTime(),
+				DirectionalVisionMode,
+				DirectionalVisionMode ? (int?)HeadingDegrees : null,
+				fovDegrees);
+		}
 	}
 
 		/// <summary>
@@ -193,64 +459,43 @@ namespace Aetherium.Server
 			return gameTime.TimeOfDay.TotalHours % 24.0;
 		}
 
-	/// <summary>
-	/// Updates heat tracker with current entity positions
-	/// </summary>
-	private void UpdateHeatTracker()
-	{
-		var currentTime = GetCurrentGameTime();
-
-		// Record heat signatures for all entities with HeatSignature component
-		foreach (var entity in World.Entities.Values)
-		{
-			// Skip entities that don't have required components
-			if (!entity.Has<WorldLocation>() || !entity.Has<HeatSignature>())
-				continue;
-
-			var location = entity.Get<WorldLocation>();
-			var heatSig = entity.Get<HeatSignature>();
-			
-			HeatTracker.RecordEntityPosition(entity, location, currentTime);
-		}
-
-		// Cleanup old trails (remove those older than 60 seconds)
-		HeatTracker.CleanupOldTrails(currentTime.AddSeconds(-60));
-	}
-
 		public void MoveView(Aetherium.Model.RelativeDirection direction, int distance = 1)
 		{
-			if (ViewLocation == null)
-				return;
-
-			var engineDirection = direction.ToEngineRelativeDirection();
-
-			var rightAngleRotationsCounterclockwise = engineDirection switch
+			lock (_stateLock)
 			{
-				Aetherium.RelativeDirection.Forward => 0,
-				Aetherium.RelativeDirection.Left => 1,
-				Aetherium.RelativeDirection.Backward => 2,
-				Aetherium.RelativeDirection.Right => 3,
-				_ => 0
-			};
+				if (ViewLocation == null)
+					return;
 
-			var bearing = Heading;
-			for (int i = 0; i < rightAngleRotationsCounterclockwise; i++)
-				bearing = bearing.RotateLeft();
+				var engineDirection = direction.ToEngineRelativeDirection();
 
-			ViewLocation = bearing switch
-			{
-				Aetherium.WorldDirection.North => ViewLocation.FromDelta(0, -distance, 0),
-				Aetherium.WorldDirection.East => ViewLocation.FromDelta(distance, 0, 0),
-				Aetherium.WorldDirection.South => ViewLocation.FromDelta(0, distance, 0),
-				Aetherium.WorldDirection.West => ViewLocation.FromDelta(-distance, 0, 0),
-				_ => ViewLocation
-			};
+				var rightAngleRotationsCounterclockwise = engineDirection switch
+				{
+					Aetherium.RelativeDirection.Forward => 0,
+					Aetherium.RelativeDirection.Left => 1,
+					Aetherium.RelativeDirection.Backward => 2,
+					Aetherium.RelativeDirection.Right => 3,
+					_ => 0
+				};
 
-			if (Player != null)
-			{
-				// Keep player entity co-located with the view
-				var destination = new WorldLocation(ViewLocation.X, ViewLocation.Y, ViewLocation.Z);
-				World.MoveEntity(Player.EntityId, destination);
+				var bearing = Heading;
+				for (int i = 0; i < rightAngleRotationsCounterclockwise; i++)
+					bearing = bearing.RotateLeft();
+
+				ViewLocation = bearing switch
+				{
+					Aetherium.WorldDirection.North => ViewLocation.FromDelta(0, -distance, 0),
+					Aetherium.WorldDirection.East => ViewLocation.FromDelta(distance, 0, 0),
+					Aetherium.WorldDirection.South => ViewLocation.FromDelta(0, distance, 0),
+					Aetherium.WorldDirection.West => ViewLocation.FromDelta(-distance, 0, 0),
+					_ => ViewLocation
+				};
+
+				if (Player != null)
+				{
+					// Keep player entity co-located with the view
+					var destination = new WorldLocation(ViewLocation.X, ViewLocation.Y, ViewLocation.Z);
+					World.MoveEntity(Player.EntityId, destination);
+				}
 			}
 		}
 
@@ -266,9 +511,12 @@ namespace Aetherium.Server
 		/// </summary>
 		public void RotateView(int degrees)
 		{
-			HeadingDegrees = (HeadingDegrees + degrees) % 360;
-			if (HeadingDegrees < 0)
-				HeadingDegrees += 360;
+			lock (_stateLock)
+			{
+				HeadingDegrees = (HeadingDegrees + degrees) % 360;
+				if (HeadingDegrees < 0)
+					HeadingDegrees += 360;
+			}
 		}
 
 		/// <summary>
@@ -306,25 +554,31 @@ namespace Aetherium.Server
 
 		public void ChangeLevel(int deltaZ)
 		{
-			if (ViewLocation != null)
+			lock (_stateLock)
 			{
-				ViewLocation = ViewLocation.FromDelta(0, 0, deltaZ);
-				if (Player != null)
+				if (ViewLocation != null)
 				{
-					var destination = new WorldLocation(ViewLocation.X, ViewLocation.Y, ViewLocation.Z);
-					World.MoveEntity(Player.EntityId, destination);
+					ViewLocation = ViewLocation.FromDelta(0, 0, deltaZ);
+					if (Player != null)
+					{
+						var destination = new WorldLocation(ViewLocation.X, ViewLocation.Y, ViewLocation.Z);
+						World.MoveEntity(Player.EntityId, destination);
+					}
 				}
 			}
 		}
 
 		public void JumpToRandomLocation()
 		{
-			var locationCount = World.EntitiesByLocation.Keys.Count;
-			if (locationCount == 0)
-				return;
+			lock (_stateLock)
+			{
+				var locationCount = World.EntitiesByLocation.Keys.Count;
+				if (locationCount == 0)
+					return;
 
-			var locations = new System.Collections.Generic.List<WorldLocation>(World.EntitiesByLocation.Keys);
-			ViewLocation = locations[rand.Next(0, locationCount)];
+				var locations = new System.Collections.Generic.List<WorldLocation>(World.EntitiesByLocation.Keys);
+				ViewLocation = locations[rand.Next(0, locationCount)];
+			}
 		}
 	}
 }

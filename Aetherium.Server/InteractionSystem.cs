@@ -7,6 +7,21 @@ using Aetherium.Entities;
 
 namespace Aetherium.Server
 {
+    /// <summary>
+    /// Minimum context needed to apply any gameplay verb to a world. The same
+    /// three components that <see cref="GameSession"/> exposes (World, the actor
+    /// Character, the actor's current ViewLocation), packaged so non-session
+    /// callers (e.g. <c>IGameMapGrain</c>) can drive <see cref="InteractionSystem"/>
+    /// without owning a full session.
+    ///
+    /// <para>
+    /// Every public <c>InteractionSystem.Try*</c> method has an overload that
+    /// takes this record. The legacy session-taking overloads are thin
+    /// forwarders. Phase 2d's deferred refactor — completed here.
+    /// </para>
+    /// </summary>
+    public sealed record class ActionContext(World World, Character Player, WorldLocation ViewLocation);
+
     public class InteractionResult
     {
         public bool Success { get; set; }
@@ -36,75 +51,98 @@ namespace Aetherium.Server
 
     public class InteractionSystem
     {
+        // Session-taking overloads (legacy / LocalMutationGateway callers) forward
+        // to the ActionContext canonical implementations below.
         public InteractionResult TryPickup(GameSession session, string targetEntityId)
         {
             if (session.Player == null || session.ViewLocation == null)
                 return InteractionResult.Fail("No player or view location");
-
-            var world = session.World;
-            if (!world.Entities.TryGetValue(targetEntityId, out var target))
-                return InteractionResult.Fail("Entity not found");
-
-            var carriable = target.AllComponents.OfType<Carriable>().FirstOrDefault();
-            if (carriable == null)
-                return InteractionResult.Fail("Not carriable");
-
-            if (target.Get<WorldLocation>() != session.ViewLocation)
-                return InteractionResult.Fail("Not at same location");
-
-            var inventory = session.Player.Get<Inventory>();
-            if (inventory == null)
-                return InteractionResult.Fail("No inventory");
-
-            if (!inventory.TryAdd(target.EntityId, target))
-                return InteractionResult.Fail("Inventory full");
-
-            world.RemoveEntity(target.EntityId);
-            
-            // Emit world event for item pickup
-            world.EmitEvent(new WorldEvent
-            {
-                EventType = WorldEventType.ItemPickedUp,
-                Location = session.ViewLocation,
-                Entity = target
-            });
-            
-            return InteractionResult.Ok();
+            return TryPickup(new ActionContext(session.World, session.Player, session.ViewLocation), targetEntityId);
         }
 
         public InteractionResult TryDrop(GameSession session, string itemEntityId)
         {
             if (session.Player == null || session.ViewLocation == null)
                 return InteractionResult.Fail("No player or view location");
+            return TryDrop(new ActionContext(session.World, session.Player, session.ViewLocation), itemEntityId);
+        }
 
-            var inventory = session.Player.Get<Inventory>();
+        public InteractionResult TryOpen(GameSession session, string targetEntityId)
+        {
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+            return TryOpen(new ActionContext(session.World, session.Player, session.ViewLocation), targetEntityId);
+        }
+
+        public InteractionResult TryClose(GameSession session, string targetEntityId)
+        {
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+            return TryClose(new ActionContext(session.World, session.Player, session.ViewLocation), targetEntityId);
+        }
+
+        // ============================================================
+        // ActionContext canonical implementations — grain-callable.
+        // ============================================================
+
+        public InteractionResult TryPickup(ActionContext ctx, string targetEntityId)
+        {
+            if (!ctx.World.Entities.TryGetValue(targetEntityId, out var target))
+                return InteractionResult.Fail("Entity not found");
+
+            var carriable = target.AllComponents.OfType<Carriable>().FirstOrDefault();
+            if (carriable == null)
+                return InteractionResult.Fail("Not carriable");
+
+            if (target.Get<WorldLocation>() != ctx.ViewLocation)
+                return InteractionResult.Fail("Not at same location");
+
+            var inventory = ctx.Player.Get<Inventory>();
+            if (inventory == null)
+                return InteractionResult.Fail("No inventory");
+
+            // Reserve via atomic remove (closes the TOCTOU window between two
+            // concurrent pickups of the same item).
+            if (!ctx.World.TryRemoveEntity(target.EntityId))
+                return InteractionResult.Fail("Already picked up");
+
+            if (!inventory.TryAdd(target.EntityId, target))
+            {
+                ctx.World.AddEntity(target); // rollback
+                return InteractionResult.Fail("Inventory full");
+            }
+
+            ctx.World.EmitEvent(new WorldEvent
+            {
+                EventType = WorldEventType.ItemPickedUp,
+                Location = ctx.ViewLocation,
+                Entity = target
+            });
+
+            return InteractionResult.Ok();
+        }
+
+        public InteractionResult TryDrop(ActionContext ctx, string itemEntityId)
+        {
+            var inventory = ctx.Player.Get<Inventory>();
             if (inventory == null)
                 return InteractionResult.Fail("No inventory");
 
             if (!inventory.Items.TryGetValue(itemEntityId, out var entity))
                 return InteractionResult.Fail("Item not in inventory");
 
-            var world = session.World;
-
-            // Place entity at player's location
-            entity.Set(new WorldLocation(session.ViewLocation.X, session.ViewLocation.Y, session.ViewLocation.Z));
-            world.AddEntity(entity);
+            entity.Set(new WorldLocation(ctx.ViewLocation.X, ctx.ViewLocation.Y, ctx.ViewLocation.Z));
+            ctx.World.AddEntity(entity);
 
             inventory.Remove(itemEntityId);
             return InteractionResult.Ok();
         }
 
-        public InteractionResult TryOpen(GameSession session, string targetEntityId)
-        {
-            var result = ToggleDoor(session, targetEntityId, open: true);
-            return result;
-        }
+        public InteractionResult TryOpen(ActionContext ctx, string targetEntityId)
+            => ToggleDoor(ctx, targetEntityId, open: true);
 
-        public InteractionResult TryClose(GameSession session, string targetEntityId)
-        {
-            var result = ToggleDoor(session, targetEntityId, open: false);
-            return result;
-        }
+        public InteractionResult TryClose(ActionContext ctx, string targetEntityId)
+            => ToggleDoor(ctx, targetEntityId, open: false);
 
         public InteractionResult TryUse(GameSession session, string itemEntityId, string onEntityId, string? usageId = null)
         {
@@ -306,9 +344,9 @@ namespace Aetherium.Server
             }
         }
 
-        private InteractionResult ToggleDoor(GameSession session, string targetEntityId, bool open)
+        private InteractionResult ToggleDoor(ActionContext ctx, string targetEntityId, bool open)
         {
-            if (!session.World.Entities.TryGetValue(targetEntityId, out var target))
+            if (!ctx.World.Entities.TryGetValue(targetEntityId, out var target))
                 return InteractionResult.Fail("Entity not found");
 
             var door = target.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
@@ -319,7 +357,7 @@ namespace Aetherium.Server
                 return InteractionResult.Fail("Locked");
 
             door.IsOpen = open;
-            var world = session.World;
+            var world = ctx.World;
             if (open)
             {
                 target.Clear<ObstructsView>();
@@ -327,8 +365,7 @@ namespace Aetherium.Server
                 var tile = target.Get<Tile>();
                 if (tile != null && world.TileTypes.ContainsKey("Indoors"))
                     tile.Type = world.TileTypes["Indoors"];
-                
-                // Emit world event for door opened
+
                 world.EmitEvent(new WorldEvent
                 {
                     EventType = WorldEventType.DoorOpened,
@@ -343,8 +380,7 @@ namespace Aetherium.Server
                 var tile = target.Get<Tile>();
                 if (tile != null && world.TileTypes.ContainsKey("Wall"))
                     tile.Type = world.TileTypes["Wall"];
-                
-                // Emit world event for door closed
+
                 world.EmitEvent(new WorldEvent
                 {
                     EventType = WorldEventType.DoorClosed,
@@ -396,7 +432,7 @@ namespace Aetherium.Server
                         door.IsLocked = false;
                         if (!door.IsOpen)
                         {
-                            ToggleDoor(session, targetId, open: true);
+                            ToggleDoor(new ActionContext(session.World, session.Player!, session.ViewLocation!), targetId, open: true);
                         }
                     }
 
@@ -552,7 +588,7 @@ namespace Aetherium.Server
                 doorComp.IsLocked = false;
                 if (!doorComp.IsOpen)
                 {
-                    ToggleDoor(session, doorId, open: true);
+                    ToggleDoor(new ActionContext(session.World, session.Player!, session.ViewLocation!), doorId, open: true);
                 }
 
                 // Reduce durability

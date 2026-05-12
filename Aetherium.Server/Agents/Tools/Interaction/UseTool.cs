@@ -71,12 +71,14 @@ namespace Aetherium.Server.Agents.Tools.Interaction
                 usageId = usageIdObj?.ToString();
             }
             
-            // Use interaction system directly (for synchronous player execution)
-            if (context.InteractionSystem != null && context.Session != null)
+            // Route through the gateway (phase 2a: local; phase 2b+c: grain-routed).
+            // The gateway preserves the reactive-disambiguation contract: when an
+            // InteractionResultDto comes back with .Options populated, the caller
+            // gets the same option-list shape.
+            if (context.MutationGateway != null)
             {
-                var result = context.InteractionSystem.TryUse(context.Session, itemId, targetId, usageId);
-                
-                // If result contains options (reactive disambiguation), return them
+                var result = await context.MutationGateway.UseAsync(itemId, targetId, usageId);
+
                 if (result.Options != null && result.Options.Count > 0)
                 {
                     var optionsData = new Dictionary<string, object>
@@ -88,25 +90,25 @@ namespace Aetherium.Server.Agents.Tools.Interaction
                             ["description"] = opt.Description
                         }).ToList()
                     };
-                    
+
                     return ToolExecutionResult.Ok(result.Reason, optionsData);
                 }
-                
+
                 return result.Success
                     ? ToolExecutionResult.Ok($"Used {itemId} on {targetId}")
                     : ToolExecutionResult.Error(result.Reason);
             }
-            
-            // Use management grain if available (for agent execution)
-            // Note: ManagementGrain UseAsync doesn't support usageId yet, so this falls back to default behavior
+
+            // Use management grain if available (for agent execution).
+            // Note: ManagementGrain.UseAsync doesn't support usageId; falls back to default behaviour.
             if (context.ManagementGrain != null)
             {
                 var result = await context.ManagementGrain.UseAsync(context.SessionId, itemId, targetId);
-                return result.Success 
+                return result.Success
                     ? ToolExecutionResult.Ok($"Used {itemId} on {targetId}")
                     : ToolExecutionResult.Error(result.Message);
             }
-            
+
             return ToolExecutionResult.Error("No execution context available");
         }
     }

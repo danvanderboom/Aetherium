@@ -35,6 +35,8 @@ namespace Aetherium
             //    SetGoal();
 
             var validDirections = GetValidDirections();
+            if (validDirections.Count == 0)
+                return; // boxed in — wait it out rather than crash
 
             var r = rand.NextDouble();
             if (PreviousDirection.HasValue && validDirections.Contains(PreviousDirection.Value) && r < 0.5)
@@ -72,8 +74,9 @@ namespace Aetherium
             {
                 var target = direction switch
                 {
-                    WorldDirection.North => location.FromDelta(0, +1, 0),
-                    WorldDirection.South => location.FromDelta(0, -1, 0),
+                    // Canonical engine convention: North = -Y, South = +Y.
+                    WorldDirection.North => location.FromDelta(0, -1, 0),
+                    WorldDirection.South => location.FromDelta(0, +1, 0),
                     WorldDirection.East => location.FromDelta(+1, 0, 0),
                     WorldDirection.West => location.FromDelta(-1, 0, 0),
                     WorldDirection.Up => location.FromDelta(0, 0, +1),

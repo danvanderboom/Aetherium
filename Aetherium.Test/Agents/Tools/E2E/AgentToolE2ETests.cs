@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -55,7 +55,6 @@ namespace Aetherium.Test.Agents.Tools.E2E
                 SessionId = "e2e-test",
                 AgentId = "explorer-1",
                 Session = _session,
-                InteractionSystem = _interactionSystem,
                 GrantedCapabilities = profile.GrantedCapabilities,
                 ServiceProvider = _serviceProvider
             };
@@ -116,7 +115,6 @@ namespace Aetherium.Test.Agents.Tools.E2E
                 SessionId = "e2e-test",
                 AgentId = "player-1",
                 Session = _session,
-                InteractionSystem = _interactionSystem,
                 GrantedCapabilities = profile.GrantedCapabilities,
                 ServiceProvider = _serviceProvider
             };
@@ -170,7 +168,6 @@ namespace Aetherium.Test.Agents.Tools.E2E
                 SessionId = "e2e-test",
                 AgentId = "player-1",
                 Session = _session,
-                InteractionSystem = _interactionSystem,
                 GrantedCapabilities = playerProfile.GrantedCapabilities,
                 ServiceProvider = _serviceProvider
             };

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -73,25 +73,30 @@ namespace Aetherium.Test.Agents.Tools
         }
 
         [Test]
-        public async Task ExecuteAsync_ShouldFailWithoutInteractionSystem()
+        public async Task ExecuteAsync_ShouldFailWithoutSessionOrGateway()
         {
-            var worldBuilder = new TorusWorldBuilder();
-            var session = new GameSession("test", worldBuilder);
+            // Phase 2a: a ToolExecutionContext with neither a Session nor an explicit
+            // MutationGateway nor a ManagementGrain has no way to dispatch the call,
+            // and the tool SHALL return a "No execution context" failure.
+            // (Previously this test asserted on a missing InteractionSystem; after
+            // phase 2a, the gateway auto-falls-back from Session if present, so the
+            // gating dependency is Session-OR-explicit-gateway, not InteractionSystem.)
             var context = new ToolExecutionContext
             {
-                Session = session,
-                InteractionSystem = null,
-                GrantedCapabilities = new HashSet<string> { "inventory_access" } // Need capability
+                Session = null,
+                MutationGateway = null,
+                ManagementGrain = null,
+                GrantedCapabilities = new HashSet<string> { "inventory_access" }
             };
             var args = new Dictionary<string, object>
             {
-                ["targetEntityId"] = "item1" // Changed from "target"
+                ["targetEntityId"] = "item1"
             };
 
             var result = await _tool.ExecuteAsync(context, args);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("execution context")); // Changed expectation
+            Assert.That(result.Message, Does.Contain("execution context"));
         }
 
         [Test]
@@ -104,7 +109,6 @@ namespace Aetherium.Test.Agents.Tools
             var context = new ToolExecutionContext
             {
                 Session = session,
-                InteractionSystem = interactionSystem,
                 GrantedCapabilities = new HashSet<string> { "inventory_access" } // Need capability
             };
             var args = new Dictionary<string, object>();

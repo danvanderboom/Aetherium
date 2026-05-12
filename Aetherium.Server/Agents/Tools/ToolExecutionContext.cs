@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Aetherium.Server.Management;
+using Aetherium.Server.MultiWorld;
 
 namespace Aetherium.Server.Agents.Tools
 {
@@ -35,9 +36,38 @@ namespace Aetherium.Server.Agents.Tools
         public GameSession? Session { get; init; }
         
         /// <summary>
-        /// Direct reference to the interaction system (optional, for efficiency).
+        /// The gateway that tools invoke to apply gameplay mutations. Tools SHALL
+        /// route mutation calls (move, rotate, pickup, drop, use, open, close,
+        /// change-level) through this gateway rather than reaching into
+        /// <see cref="Session"/> directly.
+        ///
+        /// <para>
+        /// When not explicitly set, this auto-falls-back to a
+        /// <see cref="LocalMutationGateway"/> bound to <see cref="Session"/>.
+        /// Phase 2c overrides the fallback for sessions joined to an Orleans
+        /// world (<c>GameHub.JoinWorld</c> sets <c>session.Gateway</c> to a
+        /// <c>GrainMutationGateway</c>). Phase 2d removed the field for an
+        /// explicitly-passed <c>InteractionSystem</c> — the gateway is the
+        /// only mutation entry point now.
+        /// </para>
         /// </summary>
-        public InteractionSystem? InteractionSystem { get; init; }
+        public IMapMutationGateway? MutationGateway
+        {
+            get
+            {
+                if (_mutationGateway is not null)
+                    return _mutationGateway;
+                if (Session is not null)
+                {
+                    // Cache the auto-fallback so successive reads return the same instance.
+                    _mutationGateway = new LocalMutationGateway(Session);
+                    return _mutationGateway;
+                }
+                return null;
+            }
+            init => _mutationGateway = value;
+        }
+        private IMapMutationGateway? _mutationGateway;
         
         /// <summary>
         /// Capabilities granted to this execution context.

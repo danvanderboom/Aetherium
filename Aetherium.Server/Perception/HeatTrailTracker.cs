@@ -30,7 +30,8 @@ namespace Aetherium.Server.Perception
         }
 
         /// <summary>
-        /// Records an entity's heat signature at a location
+        /// Records an entity's heat signature at a location. Reads the entity's
+        /// <see cref="HeatSignature"/> component to determine intensity and duration.
         /// </summary>
         public void RecordEntityPosition(Entity entity, WorldLocation location, DateTime timestamp)
         {
@@ -38,12 +39,26 @@ namespace Aetherium.Server.Perception
             if (heatSig == null || heatSig.Intensity <= 0.0)
                 return;
 
+            RecordRaw(entity.EntityId, location, timestamp, heatSig.Intensity, heatSig.Duration);
+        }
+
+        /// <summary>
+        /// Records a heat trail directly from explicit (entityId, intensity, duration)
+        /// values rather than from an <see cref="Entity"/> reference. Used by
+        /// session-side <c>ApplyDelta</c> handlers when the entity may not exist in
+        /// the local mirror but the grain-emitted delta carries the values directly.
+        /// </summary>
+        public void RecordRaw(string entityId, WorldLocation location, DateTime timestamp, double intensity, TimeSpan duration)
+        {
+            if (intensity <= 0.0)
+                return;
+
             var trail = new HeatTrail
             {
-                EntityId = entity.EntityId,
+                EntityId = entityId,
                 Timestamp = timestamp,
-                BaseIntensity = heatSig.Intensity,
-                Duration = heatSig.Duration
+                BaseIntensity = intensity,
+                Duration = duration,
             };
 
             heatTrails.AddOrUpdate(
@@ -51,7 +66,6 @@ namespace Aetherium.Server.Perception
                 new List<HeatTrail> { trail },
                 (key, existing) =>
                 {
-                    // Remove old trails from this entity at this location
                     existing.RemoveAll(t => t.EntityId == trail.EntityId);
                     existing.Add(trail);
                     return existing;
@@ -136,6 +150,27 @@ namespace Aetherium.Server.Perception
         public void Clear()
         {
             heatTrails.Clear();
+        }
+
+        /// <summary>
+        /// Removes every trail at the given location. Used to apply
+        /// <see cref="Aetherium.Server.MultiWorld.HeatExpiredDelta"/> from the
+        /// grain-authoritative side: when the grain reports a cell's last trail
+        /// has expired, sessions drop their mirror entry for that cell.
+        /// </summary>
+        public void RemoveTrailsAt(WorldLocation location)
+        {
+            heatTrails.TryRemove(location, out _);
+        }
+
+        /// <summary>
+        /// Returns a snapshot of the (location, trail-count) pairs currently
+        /// tracked. Intended for tests and diagnostics; the underlying lists are
+        /// not exposed by reference.
+        /// </summary>
+        public IReadOnlyDictionary<WorldLocation, int> SnapshotCounts()
+        {
+            return heatTrails.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count);
         }
     }
 }

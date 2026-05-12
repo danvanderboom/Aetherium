@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -12,8 +13,8 @@ namespace Aetherium.Server.Agents.Tools
     /// </summary>
     public class AgentToolRegistry
     {
-        private readonly Dictionary<string, Type> _toolTypes = new();
-        private readonly Dictionary<string, IAgentTool> _toolInstances = new();
+        private readonly ConcurrentDictionary<string, Type> _toolTypes = new();
+        private readonly ConcurrentDictionary<string, IAgentTool> _toolInstances = new();
         private readonly IServiceProvider _serviceProvider;
         
         public AgentToolRegistry(IServiceProvider serviceProvider)
@@ -62,15 +63,16 @@ namespace Aetherium.Server.Agents.Tools
             // Return cached instance if available
             if (_toolInstances.TryGetValue(toolId, out var cached))
                 return cached;
-            
-            // Create new instance using DI
+
+            // Create new instance using DI. GetOrAdd ensures we don't construct twice
+            // under concurrent first-access; if construction throws we propagate null.
             if (_toolTypes.TryGetValue(toolId, out var type))
             {
                 try
                 {
-                    var tool = (IAgentTool)ActivatorUtilities.CreateInstance(_serviceProvider, type);
-                    _toolInstances[toolId] = tool;
-                    return tool;
+                    return _toolInstances.GetOrAdd(
+                        toolId,
+                        _ => (IAgentTool)ActivatorUtilities.CreateInstance(_serviceProvider, type));
                 }
                 catch (Exception ex)
                 {
@@ -78,7 +80,7 @@ namespace Aetherium.Server.Agents.Tools
                     return null;
                 }
             }
-            
+
             return null;
         }
         

@@ -27,9 +27,60 @@ namespace Aetherium.Server.MultiWorld
         Task<MapMetadata?> GetMetadataAsync();
 
         /// <summary>
-        /// Adds a player to this map.
+        /// Adds a player to this map (legacy entry). Preserved for cross-map moves
+        /// triggered by IWorldGrain where spawn details aren't needed.
+        /// New code in GameHub should call <see cref="JoinPlayerAsync"/>.
         /// </summary>
         Task<bool> AddPlayerAsync(string playerId);
+
+        /// <summary>
+        /// Registers a player on this map and returns the joining context: a unique
+        /// spawn location and the player's authoritative entity ID. Used by
+        /// GameHub.JoinWorld to bind a session to this map.
+        /// </summary>
+        Task<JoinMapResult> JoinPlayerAsync(string playerId);
+
+        /// <summary>
+        /// Returns a snapshot of the map's canonical World sufficient to hydrate an
+        /// equivalent World instance locally. Phase 1: recipe + entity placements.
+        /// </summary>
+        Task<WorldSnapshot> GetWorldSnapshotAsync();
+
+        /// <summary>
+        /// Returns a snapshot, omitting the joining player's own Character so they
+        /// don't appear twice in their hydrated world. Phase 2 entry point.
+        /// </summary>
+        Task<WorldSnapshot> GetWorldSnapshotForJoinerAsync(string joinerPlayerId);
+
+        // ------------------------------------------------------------------
+        // Phase 2b+c — grain-authoritative mutation methods.
+        // Each method mutates the grain's _world for the player identified by
+        // sessionId, emits the appropriate MapDelta to the map's SignalR group,
+        // and returns a typed result for the caller. Orleans's single-threaded
+        // grain contract serializes concurrent invocations.
+        // ------------------------------------------------------------------
+
+        Task<MoveResult> MoveAsync(string sessionId, Aetherium.Model.RelativeDirection direction, int distance);
+
+        Task<RotateResult> RotateAsync(string sessionId, int degrees);
+
+        Task<ChangeLevelResult> ChangeLevelAsync(string sessionId, int deltaZ);
+
+        Task<Aetherium.Model.InteractionResultDto> PickupAsync(string sessionId, string targetEntityId);
+
+        Task<Aetherium.Model.InteractionResultDto> DropAsync(string sessionId, string itemEntityId);
+
+        Task<Aetherium.Model.InteractionResultDto> UseAsync(string sessionId, string itemEntityId, string onEntityId, string? usageId);
+
+        Task<Aetherium.Model.InteractionResultDto> OpenAsync(string sessionId, string targetEntityId);
+
+        Task<Aetherium.Model.InteractionResultDto> CloseAsync(string sessionId, string targetEntityId);
+
+        /// <summary>
+        /// Removes a player's Character from <c>_world</c> on disconnect or explicit
+        /// LeaveWorld. Emits an EntityRemovedDelta so other sessions see them leave.
+        /// </summary>
+        Task LeavePlayerAsync(string sessionId);
 
         /// <summary>
         /// Removes a player from this map.

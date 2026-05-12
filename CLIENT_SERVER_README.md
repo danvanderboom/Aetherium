@@ -78,6 +78,103 @@ Client API (`Aetherium.Console/Client/GameClient.cs`) exposes `PickupAsync`, `Dr
 - Orleans SignalR backplane for distributed scaling
 - Azure AD B2C authentication for management operations
 
+## Joining a Multi-World Map (Phase 1)
+
+By default a client that connects to `GameHub` lands in a private, session-local
+diagnostic world built by `FovDiagnosticWorldBuilder`. To bind a session to a
+real Orleans-hosted world instead, include a `worldId` (and optional `mapId`)
+query parameter on the SignalR connection URL:
+
+```
+ws://localhost:5000/gamehub?worldId=world-abc-123
+```
+
+The hub will:
+
+1. Resolve the world via `IGameManagementGrain` / `IWorldGrain`.
+2. Pick a map (the supplied `mapId`, or the world's first map).
+3. Call `IGameMapGrain.JoinPlayerAsync` to reserve a unique spawn cell.
+4. Fetch a `WorldSnapshot` from the grain and hydrate the session's `World`
+   from it via `SnapshotWorldBuilder`.
+
+Clients can also call `JoinWorld(worldId, mapId?)` explicitly after connect to
+re-bind their session to a different world.
+
+### Multiplayer model (phases 1, 2a, 2c)
+
+Sessions are bound to a grain-hosted world via the `?worldId=` query
+parameter or an explicit `JoinWorld(worldId, mapId?)` hub call. Once bound:
+
+- **Mutations are grain-authoritative.** Gameplay tools (`move`, `rotate`,
+  `pickup`, `drop`, `use`, `open`, `close`, `changelevel`) dispatch through
+  `IMapMutationGateway`. For grain-bound sessions, that gateway is a
+  `GrainMutationGateway` that routes calls to `IGameMapGrain` methods. The
+  grain mutates its canonical `_world` and emits a `MapDelta`.
+- **Other joiners see the change live.** The host-side `GameSessionManager`
+  receives the delta, applies it to each affected session's local `World`
+  mirror, and pushes a fresh `ReceivePerceptionUpdate` to each client over
+  SignalR.
+- **The wire is perception-pure.** Clients never receive raw deltas. They
+  only ever see filtered `PerceptionDto`s. This means cells outside a
+  player's FOV never reach the wire even when other players mutate them.
+- **Character heading is server-authoritative.** A character's facing
+  direction lives on the `HasHeading` component of the grain-owned
+  `Character` entity. Perception of *other* characters does not expose
+  their heading by default — discovering which way someone is facing
+  requires a future "compass-style" perception filter (not yet implemented).
+
+Legacy sessions (no `?worldId=`) continue to use a session-local
+`FovDiagnosticWorldBuilder` world with `LocalMutationGateway`. They behave
+exactly as they did pre-phase-2 and are unaffected by the multiplayer model.
+
+### What phase 2 does NOT yet do
+
+- **Heat trails on the grain.** Heat is still tracked client-side per
+  session today. The wire format includes `HeatRecordedDelta` /
+  `HeatExpiredDelta` and `GameSession.ApplyDelta` has placeholder handlers,
+  but the grain doesn't yet record heat or emit those deltas. Scheduled for
+  phase 2.1.
+- **Player persistence.** When a player disconnects, their `Character` is
+  removed from the grain's world via `LeavePlayerAsync` and other players
+  see them depart. Reconnect creates a fresh player. Persistence across
+  sessions — with placement policies (same location, repositioned, kept
+  visible-but-idle) — is scheduled for a future `add-player-persistence`
+  change.
+- **Complex `Use` interactions** (consume food, light torch, place crystal,
+  lockpick, climb) are only available in legacy mode. Grain-bound `Use`
+  supports the "key on locked door" pattern; other modes return a
+  "not supported in grain mode" failure. Resolving this requires refactoring
+  `InteractionSystem` to stateless `(World, Character, WorldLocation)`
+  overloads — a separate follow-up change. Phase 2d deliberately did not
+  bundle that work in with its hub-surface cleanup.
+
+## Wire protocol notes (post phase 2d)
+
+Phase 2d removed the per-verb hub methods from `GameHub` (`MovePlayer`,
+`Pickup`, `Open`, etc.). All gameplay verbs now go through a single
+`ExecuteTool(toolId, args)` invocation. The `Aetherium.Console` client
+preserves its method-level API surface (`MovePlayerAsync`, `PickupAsync`,
+etc.) — those methods now wrap `ExecuteToolAsync` internally. Other
+client implementations should follow the same pattern: send `ExecuteTool`
+with the appropriate tool ID and argument dictionary.
+
+Tool ID reference for legacy verb mappings:
+
+| Old hub method | Tool ID | Args |
+|---|---|---|
+| `MovePlayer(direction, distance)` | `"move"` | `direction` (string F/B/L/R/N/E/S/W), `distance` (int) |
+| `RotatePlayer(clockwise)` | `"rotate"` | `clockwise` (bool) OR `degrees` (int) |
+| `ChangeLevel(deltaZ)` | `"changelevel"` | `delta` (int) |
+| `JumpToRandomLocation()` | `"jumptolocation"` | (none) |
+| `ToggleDirectionalVision()` | `"toggledirectionalvision"` | (none) |
+| `Pickup(id)` | `"pickup"` | `targetEntityId` (string) |
+| `Drop(id)` | `"drop"` | `itemEntityId` (string) |
+| `Use(item, target, usage?)` | `"use"` | `itemEntityId`, `onEntityId`, `usageId?` |
+| `Open(id)` | `"open"` | `targetEntityId` |
+| `Close(id)` | `"close"` | `targetEntityId` |
+| `SetLightingMode(mode)` | `"setlightingmode"` | `mode` (string) |
+| `SetVisionMode(mode)` | `"setvisionmode"` | `mode` (string) |
+
 ## SignalR Configuration
 
 ### Orleans SignalR Backplane

@@ -52,11 +52,12 @@ namespace Aetherium.Server
             var scopes = azureAdSection["Scopes"];
 
             // Only add authentication if B2C is configured
-            if (!string.IsNullOrEmpty(domain) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tenantId))
+            var b2cConfigured = !string.IsNullOrEmpty(domain) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tenantId);
+            if (b2cConfigured)
             {
                 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAdB2C"));
-                
+
                 // Configure additional options
                 builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                 {
@@ -66,16 +67,28 @@ namespace Aetherium.Server
                 builder.Services.AddAuthorization(options =>
                 {
                     options.AddPolicy("Admin", policy => policy.RequireClaim("roles", "Admin"));
+                    // GameClient policy: when B2C is configured, the game hub requires an
+                    // authenticated user. The [Authorize(Policy = "GameClient")] attribute on
+                    // GameHub is permanent; the policy adapts to deployment mode so dev runs
+                    // without B2C still allow anonymous play.
+                    options.AddPolicy("GameClient", policy => policy.RequireAuthenticatedUser());
                     options.DefaultPolicy = new AuthorizationPolicyBuilder()
                         .RequireAuthenticatedUser()
                         .Build();
                 });
 
-                Console.WriteLine("Azure AD B2C authentication enabled");
+                Console.WriteLine("Azure AD B2C authentication enabled (GameHub gated by GameClient policy)");
             }
             else
             {
-                Console.WriteLine("Azure AD B2C not configured - authentication disabled");
+                // No B2C: register a GameClient policy that allows anonymous so the
+                // [Authorize(Policy = "GameClient")] attribute on GameHub is a no-op in dev.
+                // We still need authorization services registered for the attribute to resolve.
+                builder.Services.AddAuthorization(options =>
+                {
+                    options.AddPolicy("GameClient", policy => policy.RequireAssertion(_ => true));
+                });
+                Console.WriteLine("Azure AD B2C not configured - GameHub running in open/dev mode");
             }
 
             builder.Services.AddControllers(); // Add API controllers
@@ -146,22 +159,30 @@ namespace Aetherium.Server
             // Add Orleans co-hosting (can be disabled for tests via env var)
             // Note: disableOrleans already checked above
 
-            // Add world tick service (background service to drive world ticks)
-            builder.Services.AddSingleton<WorldTickService>(sp =>
+            // Add world tick service. When Orleans is enabled, register it as a hosted
+            // service so it actually runs. When Orleans is disabled (test mode), keep it as
+            // a plain singleton so anything resolving it still gets a usable instance.
+            if (!disableOrleans)
             {
-                var grainFactory = sp.GetService<Orleans.IGrainFactory>();
-                if (grainFactory == null && !disableOrleans)
+                builder.Services.AddSingleton<WorldTickService>(sp =>
                 {
-                    // If Orleans is enabled, we'll need to resolve IGrainFactory from Orleans host
-                    // For now, we'll create a wrapper that gets it from the Orleans host
-                    // This will be resolved when Orleans starts
-                }
-                var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SimulationOptions>>();
-                return new WorldTickService(grainFactory!, options);
-            });
-            // Note: WorldTickService is registered but not started as a hosted service
-            // Manual ticking can be done via API or other mechanisms
-            // Automatic ticking would require a world registry to track active worlds
+                    var grainFactory = sp.GetRequiredService<Orleans.IGrainFactory>();
+                    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SimulationOptions>>();
+                    return new WorldTickService(grainFactory, options);
+                });
+                builder.Services.AddHostedService(sp => sp.GetRequiredService<WorldTickService>());
+            }
+            else
+            {
+                // No IGrainFactory available in disabled-Orleans test runs; expose a no-op
+                // singleton placeholder so any test wiring that resolves WorldTickService
+                // doesn't blow up. The hosted service is intentionally not registered.
+                builder.Services.AddSingleton<WorldTickService>(sp =>
+                {
+                    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SimulationOptions>>();
+                    return new WorldTickService(null!, options);
+                });
+            }
             
             // Add world generation services
             builder.Services.AddSingleton<MapGeneratorRegistry>();
@@ -324,11 +345,9 @@ namespace Aetherium.Server
                         return host.Services.GetRequiredService<IHubContext<Hubs.AgentDashboardHub>>();
                     });
                     
-                    // Register IGrainFactory for GameManagementGrain
-                    siloBuilder.Services.AddSingleton<IGrainFactory>(sp =>
-                    {
-                        return sp.GetRequiredService<IGrainFactory>();
-                    });
+                    // Note: Orleans itself registers IGrainFactory inside the silo container.
+                    // A `sp.GetRequiredService<IGrainFactory>()` self-resolving registration is a
+                    // recursive cycle, so we deliberately omit it and rely on Orleans's default.
 
                     // Register IClusterClient for ManagementHub
                     siloBuilder.Services.AddSingleton<IClusterClient>(sp =>
@@ -368,13 +387,15 @@ namespace Aetherium.Server
             app.UseMiddleware<ApiKeyMiddleware>();
             app.UseRouting();
             
-            // Add authentication/authorization middleware (only if B2C is configured)
+            // Add auth middleware. UseAuthentication is conditional (no scheme = nothing to do),
+            // but UseAuthorization runs unconditionally so [Authorize(Policy="GameClient")] on
+            // GameHub resolves either way — the policy itself decides whether to allow anonymous.
             var appAzureAdSection = app.Configuration.GetSection("AzureAdB2C");
             if (!string.IsNullOrEmpty(appAzureAdSection["Domain"]))
             {
                 app.UseAuthentication();
-                app.UseAuthorization();
             }
+            app.UseAuthorization();
             
             // Get IClusterClient for hubs that need it
             IClusterClient? clusterClient = null;

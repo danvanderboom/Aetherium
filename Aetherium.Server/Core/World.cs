@@ -24,8 +24,6 @@ namespace Aetherium.Core
 
         public event Action<WorldEvent>? WorldEvents;
 
-        Random rand = new Random();
-
         public World()
         {
             TerrainTypes = new Dictionary<string, TerrainType>();
@@ -40,29 +38,28 @@ namespace Aetherium.Core
 
         public WorldLocation? SelectRandomPassableLocation()
         {
-            if (EntitiesByLocation.Count == 0)
+            // Build a snapshot of passable locations once, then sample. This avoids
+            // an infinite loop when no locations are passable.
+            var passable = EntitiesByLocation.Keys.Where(PassableTerrain).ToList();
+            if (passable.Count == 0)
                 return null;
 
-            while (true)
-            {
-                var es = EntitiesByLocation.ToList();
-                var location = es[rand.Next(0, es.Count)].Key;
-
-                if (PassableTerrain(location))
-                    return location;
-            }
+            return passable[Random.Shared.Next(0, passable.Count)];
         }
 
-        public T SelectRandomEntity<T>(IList<string>? excludedEntityIds = null)
+        public T? SelectRandomEntity<T>(IList<string>? excludedEntityIds = null)
             where T : Entity
         {
             var exclusions = excludedEntityIds ?? new List<string>();
 
-            var cs = Entities.OfType<T>()
+            var cs = Entities.Values.OfType<T>()
                 .Where(e => !exclusions.Contains(e.EntityId))
                 .ToList();
 
-            return cs[rand.Next(0, cs.Count)];
+            if (cs.Count == 0)
+                return null;
+
+            return cs[Random.Shared.Next(0, cs.Count)];
         }
 
         public TerrainType? GetTerrainType(WorldLocation location)
@@ -148,11 +145,8 @@ namespace Aetherium.Core
                 TerrainTypes.Add(terrainType.Name, terrainType);
         }
 
-        int addEntityCalls = 0;
         public void AddEntity(Entity entity)
         {
-            addEntityCalls++;
-
             if (Entities.TryAdd(entity.EntityId, entity))
             {
                 ConcurrentDictionary<string, Entity> dict;
@@ -195,74 +189,84 @@ namespace Aetherium.Core
 
         public void RemoveEntity(string Id)
         {
-            var e = Entities[Id];
-            if (e == null)
-                throw new ArgumentException("EntityId not found");
+            if (!TryRemoveEntity(Id))
+                throw new ArgumentException($"EntityId not found: {Id}");
+        }
 
-            if (Entities.TryGetValue(Id, out var entity)
-                && EntitiesByLocation.TryGetValue(entity.Get<WorldLocation>(), out var entitiesAtLocation)
-                && entitiesAtLocation.TryRemove(Id, out var _)
-                && Entities.TryRemove(Id, out var _))
+        /// <summary>
+        /// Atomically removes an entity. Returns true if this call won the race; false if the
+        /// entity was already removed (or never existed). Use this when racing pickups must
+        /// produce exactly one winner.
+        /// </summary>
+        public bool TryRemoveEntity(string Id)
+        {
+            if (!Entities.TryGetValue(Id, out var entity))
+                return false;
+
+            var location = entity.Get<WorldLocation>();
+            if (!EntitiesByLocation.TryGetValue(location, out var entitiesAtLocation))
+                return false;
+
+            // The location-bucket remove is the single atomic step that decides the race.
+            // Whoever flips this from "present" to "absent" wins; everyone else returns false.
+            if (!entitiesAtLocation.TryRemove(Id, out var _))
+                return false;
+
+            Entities.TryRemove(Id, out var _);
+
+            if (entity is Character)
+                Characters.TryRemove(entity.EntityId, out var _);
+
+            if (entitiesAtLocation.IsEmpty)
+                EntitiesByLocation.TryRemove(location, out var _);
+
+            WorldEvents?.Invoke(new WorldEvent
             {
-                if (e is Character)
-                    Characters.TryRemove(e.EntityId, out var _);
+                EventType = WorldEventType.EntityRemoved,
+                Location = location,
+                Entity = entity
+            });
 
-                // If no more entities remain at this location, remove the location index entry
-                if (entitiesAtLocation.IsEmpty)
-                {
-                    EntitiesByLocation.TryRemove(entity.Get<WorldLocation>(), out var _);
-                }
-
-                WorldEvents?.Invoke(new WorldEvent
-                {
-                    EventType = WorldEventType.EntityRemoved,
-                    Location = entity.Get<WorldLocation>(),
-                    Entity = entity
-                });
-            }
+            return true;
         }
 
         public void MoveEntity(string Id, WorldLocation destination)
         {
             if (Entities.TryGetValue(Id, out var entity))
             {
-                if (entity.Get<WorldLocation>() == destination)
+                var source = entity.Get<WorldLocation>();
+                if (source == destination)
                     return;
 
                 // remove from location index
-                if (EntitiesByLocation.TryGetValue(entity.Get<WorldLocation>(), out var entitiesAtSource)
+                if (EntitiesByLocation.TryGetValue(source, out var entitiesAtSource)
                     && entitiesAtSource.TryRemove(Id, out var _))
                 {
                     // update location on entity
                     entity.Set(destination);
 
-                    if (EntitiesByLocation.TryGetValue(destination, out var entitiesAtDestination)
-                        && entitiesAtDestination.TryAdd(Id, entity))
+                    // Get-or-create the destination bucket so entities never leak into limbo
+                    // when moving onto a cell that doesn't yet have an index entry (e.g. a
+                    // newly-uncovered tile, or a cell whose only resident was just removed).
+                    var entitiesAtDestination = EntitiesByLocation.GetOrAdd(
+                        destination,
+                        _ => new ConcurrentDictionary<string, Entity>());
+
+                    if (entitiesAtDestination.TryAdd(Id, entity))
                     {
+                        // Clean up empty source bucket
+                        if (entitiesAtSource.IsEmpty)
+                            EntitiesByLocation.TryRemove(source, out var _);
+
                         WorldEvents?.Invoke(new WorldEvent
                         {
                             EventType = WorldEventType.EntityMoved,
-                            Location = entity.Get<WorldLocation>(),
+                            Location = destination,
                             Entity = entity
                         });
                     }
                 }
             }
-        }
-
-        public bool TryMove(Character character, RelativeDirection direction)
-        {
-            var location = character.Get<WorldLocation>();
-            if (location == null)
-                throw new InvalidOperationException("Character is missing WorldLocation");
-
-            // TODO: transform RelativeDirection into WorldDirection
-            // if player heading is North, and direction is Forward, go North
-            // if player heading is East, and direction is Forward, go East
-            // if player heading is South, and direction is Left, go East
-            var destination = location.FromDelta(0, 0, 0);
-
-            return TryMove(character, destination);
         }
 
         public bool TryMove(Character character, WorldDirection direction)
@@ -271,6 +275,8 @@ namespace Aetherium.Core
             if (location == null)
                 throw new InvalidOperationException("Character is missing WorldLocation");
 
+            // Canonical engine convention: North = -Y, South = +Y, East = +X, West = -X.
+            // This matches GameSession.MoveView and the rest of the perception stack.
             switch (direction)
             {
                 case WorldDirection.North:
@@ -278,9 +284,9 @@ namespace Aetherium.Core
                 case WorldDirection.South:
                     return TryMove(character, location.FromDelta(0, +1, 0));
                 case WorldDirection.West:
-                    return TryMove(character, location.FromDelta(0, -1, 0));
+                    return TryMove(character, location.FromDelta(-1, 0, 0));
                 case WorldDirection.East:
-                    return TryMove(character, location.FromDelta(0, +1, 0));
+                    return TryMove(character, location.FromDelta(+1, 0, 0));
                 case WorldDirection.Up:
                     return TryMove(character, location.FromDelta(0, 0, +1));
                 case WorldDirection.Down:
@@ -295,9 +301,11 @@ namespace Aetherium.Core
             if (!EntitiesByLocation.ContainsKey(location))
                 return false;
 
-            // stop players (including monsters) from existing in the same location
-            var other = Entities.Values.Where(e => e is Character)
-                .FirstOrDefault(p => p.Get<WorldLocation>() == location);
+            // stop players (including monsters) from existing in the same location.
+            // Exclude the character itself so a no-op move doesn't trigger self-collision damage.
+            var other = Entities.Values
+                .OfType<Character>()
+                .FirstOrDefault(p => p.EntityId != character.EntityId && p.Get<WorldLocation>() == location);
             if (other != null)
             {
                 var health = character.Get<Health>();
@@ -367,19 +375,17 @@ namespace Aetherium.Core
             if (terrainType == null)
                 return false;
 
-            switch (terrainType.Name)
+            // Prefer the explicit flag when set so new terrain types don't have to live
+            // in the legacy switch below.
+            if (terrainType.IsPassable.HasValue)
+                return terrainType.IsPassable.Value;
+
+            // Legacy name-based fallback so existing builders keep working without edits.
+            return terrainType.Name switch
             {
-                case "Indoors":
-                case "Upstairs":
-                case "Downstairs":
-                case "Road":
-                case "Plains":
-                case "Forest":
-                case "Cave":
-                    return true;
-                default:
-                    return false;
-            }
+                "Indoors" or "Upstairs" or "Downstairs" or "Road" or "Plains" or "Forest" or "Cave" => true,
+                _ => false,
+            };
         }
 
         /// <summary>

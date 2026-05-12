@@ -64,49 +64,45 @@ namespace Aetherium.Server.Agents.Tools.Movement
             if (distance < 1 || distance > 100)
                 return ToolExecutionResult.Error("Distance must be between 1 and 100");
             
-            // Use management grain if available (for agent execution)
+            // Async path: management-grain dispatch (used by agent runners that operate
+            // through IGameManagementGrain rather than holding a session reference).
             if (context.ManagementGrain != null)
             {
                 var result = await context.ManagementGrain.MoveAsync(context.SessionId, direction);
-                return result.Success 
+                return result.Success
                     ? ToolExecutionResult.Ok($"Moved {direction}")
                     : ToolExecutionResult.Error(result.Message);
             }
-            
-            // Otherwise use session directly (for synchronous player execution)
-            if (context.Session != null)
+
+            // In-process path: route through the gateway. Phase 2a's LocalMutationGateway
+            // wraps GameSession.MoveView; phase 2b+c will swap this for a grain-routed
+            // gateway transparently — this tool code does not change.
+            if (context.MutationGateway != null)
             {
-                // Parse direction to RelativeDirection
                 Aetherium.Model.RelativeDirection relDir;
                 switch (direction)
                 {
-                    case "F" or "FORWARD":
-                        relDir = Aetherium.Model.RelativeDirection.Forward;
-                        break;
-                    case "B" or "BACKWARD":
-                        relDir = Aetherium.Model.RelativeDirection.Backward;
-                        break;
-                    case "L" or "LEFT":
-                        relDir = Aetherium.Model.RelativeDirection.Left;
-                        break;
-                    case "R" or "RIGHT":
-                        relDir = Aetherium.Model.RelativeDirection.Right;
-                        break;
+                    case "F" or "FORWARD": relDir = Aetherium.Model.RelativeDirection.Forward; break;
+                    case "B" or "BACKWARD": relDir = Aetherium.Model.RelativeDirection.Backward; break;
+                    case "L" or "LEFT": relDir = Aetherium.Model.RelativeDirection.Left; break;
+                    case "R" or "RIGHT": relDir = Aetherium.Model.RelativeDirection.Right; break;
                     case "N" or "NORTH":
                     case "E" or "EAST":
                     case "S" or "SOUTH":
                     case "W" or "WEST":
-                        // For absolute directions, we'll need to calculate relative direction
-                        // This is handled by the management grain in the async path
+                        // Absolute directions require translation against the actor's heading;
+                        // that's the management-grain path's job today.
                         return ToolExecutionResult.Error("Absolute directions require async execution via management grain");
                     default:
                         return ToolExecutionResult.Error($"Invalid direction: {direction}");
                 }
-                
-                context.Session.MoveView(relDir, distance);
-                return ToolExecutionResult.Ok($"Moved {direction} by {distance}");
+
+                var moveResult = await context.MutationGateway.MoveAsync(relDir, distance);
+                return moveResult.Success
+                    ? ToolExecutionResult.Ok($"Moved {direction} by {distance}")
+                    : ToolExecutionResult.Error(moveResult.Reason ?? "Move failed");
             }
-            
+
             return ToolExecutionResult.Error("No execution context available");
         }
     }
