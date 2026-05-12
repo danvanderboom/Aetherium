@@ -172,6 +172,80 @@ namespace Aetherium.Test.MultiWorld
         }
 
         [Fact]
+        public void ComponentFieldChangedDelta_Decrements_Consumable_Uses_In_Inventory()
+        {
+            var session = NewSession();
+            var torch = new TorchItem();
+            session.Player!.Get<Inventory>()!.TryAdd(torch.EntityId, torch);
+            var startingUses = torch.Get<Consumable>()!.Uses;
+
+            session.ApplyDelta(new ComponentFieldChangedDelta
+            {
+                EntityId = torch.EntityId,
+                ComponentType = "Consumable",
+                FieldName = "Uses",
+                NumericValue = startingUses - 1,
+            });
+
+            Assert.Equal(startingUses - 1, torch.Get<Consumable>()!.Uses);
+        }
+
+        [Fact]
+        public void ItemDestroyedDelta_Removes_Item_From_Owner_Inventory()
+        {
+            var session = NewSession();
+            var item = new KeyItem("doomed");
+            session.Player!.Get<Inventory>()!.TryAdd(item.EntityId, item);
+
+            session.ApplyDelta(new ItemDestroyedDelta
+            {
+                EntityId = item.EntityId,
+                OwnerEntityId = session.Player.EntityId,
+            });
+
+            Assert.False(session.Player.Get<Inventory>()!.Items.ContainsKey(item.EntityId));
+        }
+
+        [Fact]
+        public void EntityPlacedDelta_Removes_From_Inventory_And_Adds_To_World()
+        {
+            var session = NewSession();
+            var torch = new TorchItem();
+            session.Player!.Get<Inventory>()!.TryAdd(torch.EntityId, torch);
+
+            session.ApplyDelta(new EntityPlacedDelta
+            {
+                Placement = new EntityPlacement
+                {
+                    EntityId = torch.EntityId,
+                    TypeName = nameof(TorchItem),
+                    X = 4, Y = 4, Z = 0,
+                },
+                SourceOwnerEntityId = session.Player.EntityId,
+            });
+
+            Assert.False(session.Player.Get<Inventory>()!.Items.ContainsKey(torch.EntityId));
+            Assert.True(session.World.Entities.ContainsKey(torch.EntityId));
+        }
+
+        [Fact]
+        public void ComponentFieldChangedDelta_Unknown_Pair_Throws_NotImplementedException()
+        {
+            var session = NewSession();
+            var item = new KeyItem("placeholder");
+            session.Player!.Get<Inventory>()!.TryAdd(item.EntityId, item);
+
+            Assert.Throws<System.NotImplementedException>(() =>
+                session.ApplyDelta(new ComponentFieldChangedDelta
+                {
+                    EntityId = item.EntityId,
+                    ComponentType = "MadeUp",
+                    FieldName = "Nope",
+                    NumericValue = 1,
+                }));
+        }
+
+        [Fact]
         public void Unknown_Delta_Type_Is_Logged_And_Dropped()
         {
             // Construct a custom subtype the dispatcher doesn't know about. Since the

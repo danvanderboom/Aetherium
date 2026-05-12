@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Aetherium.Components;
+using Aetherium.Core;
 using Aetherium.Entities;
 
 namespace Aetherium.Server
@@ -20,13 +21,21 @@ namespace Aetherium.Server
         /// <returns>A set of context tag strings (e.g., "near-door", "indoors", "in-forest", "in-combat").</returns>
         public static HashSet<string> EvaluateContext(GameSession session, string? targetEntityId = null)
         {
+            if (session == null || session.ViewLocation == null || session.World == null)
+                return new HashSet<string>();
+            return EvaluateContext(session.World, session.ViewLocation, targetEntityId);
+        }
+
+        /// <summary>
+        /// Session-free overload for grain-routed callers that don't have a
+        /// <see cref="GameSession"/>. Same semantics as the session overload.
+        /// </summary>
+        public static HashSet<string> EvaluateContext(World world, WorldLocation playerLocation, string? targetEntityId = null)
+        {
             var contextTags = new HashSet<string>();
 
-            if (session == null || session.ViewLocation == null || session.World == null)
+            if (world == null || playerLocation == null)
                 return contextTags;
-
-            var playerLocation = session.ViewLocation;
-            var world = session.World;
 
             // Check for doors nearby (adjacent or same location)
             var deltas = new[] { (0, 0), (1, 0), (-1, 0), (0, 1), (0, -1) };

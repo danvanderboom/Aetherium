@@ -255,11 +255,174 @@ namespace Aetherium.Server
 					HeatTracker.RemoveTrailsAt(new WorldLocation(expired.X, expired.Y, expired.Z));
 					break;
 
+				case Aetherium.Server.MultiWorld.ComponentFieldChangedDelta fieldChanged:
+					ApplyComponentFieldChanged(fieldChanged);
+					break;
+
+				case Aetherium.Server.MultiWorld.ItemDestroyedDelta destroyed:
+					ApplyItemDestroyed(destroyed);
+					break;
+
+				case Aetherium.Server.MultiWorld.EntityPlacedDelta placed:
+					ApplyEntityPlaced(placed);
+					break;
+
 				default:
 					Console.WriteLine($"[GameSession] Ignoring unknown delta type {delta.GetType().Name}");
 					break;
 			}
 		}
+	}
+
+	private void ApplyComponentFieldChanged(Aetherium.Server.MultiWorld.ComponentFieldChangedDelta delta)
+	{
+		// Find the entity in the world mirror OR in any owner's inventory mirror.
+		// Items reduced by Use (Consumable.Uses, Lockpick.Durability) live in inventory.
+		var entity = FindEntityAnywhere(delta.EntityId);
+		if (entity is null) return;
+
+		// Dispatch on (ComponentType, FieldName). New mutable fields must be added
+		// here as well as on the emitting grain side. Unknown pairs throw so test
+		// failures are loud rather than silent.
+		var key = (delta.ComponentType, delta.FieldName);
+		switch (key)
+		{
+			case ("Consumable", "Uses"):
+				{
+					var c = entity.Get<Aetherium.Components.Consumable>();
+					if (c is not null && delta.NumericValue.HasValue) c.Uses = (int)delta.NumericValue.Value;
+					break;
+				}
+			case ("Health", "Level"):
+				{
+					var h = entity.Get<Aetherium.Components.Health>();
+					if (h is not null && delta.NumericValue.HasValue) h.Level = (int)delta.NumericValue.Value;
+					break;
+				}
+			case ("ForcesDoor", "Durability"):
+				{
+					var c = entity.Get<Aetherium.Components.ForcesDoor>();
+					if (c is not null && delta.NumericValue.HasValue) c.Durability = (int)delta.NumericValue.Value;
+					break;
+				}
+			case ("Lockpick", "Durability"):
+				{
+					var c = entity.Get<Aetherium.Components.Lockpick>();
+					if (c is not null && delta.NumericValue.HasValue) c.Durability = (int)delta.NumericValue.Value;
+					break;
+				}
+			case ("PlaceableLight", "IsPlaced"):
+				{
+					var c = entity.Get<Aetherium.Components.PlaceableLight>();
+					if (c is not null && delta.BoolValue.HasValue) c.IsPlaced = delta.BoolValue.Value;
+					break;
+				}
+			case ("LightSource", "IsEnabled"):
+				{
+					var c = entity.Get<Aetherium.Components.LightSource>();
+					if (c is not null && delta.BoolValue.HasValue) c.IsEnabled = delta.BoolValue.Value;
+					break;
+				}
+			case ("LightSource", "IsDynamic"):
+				{
+					var c = entity.Get<Aetherium.Components.LightSource>();
+					if (c is not null && delta.BoolValue.HasValue) c.IsDynamic = delta.BoolValue.Value;
+					break;
+				}
+			case ("Activatable", "IsActivated"):
+				{
+					var c = entity.Get<Aetherium.Components.Activatable>();
+					if (c is not null && delta.BoolValue.HasValue) c.IsActivated = delta.BoolValue.Value;
+					break;
+				}
+			case ("Inventory", "Capacity"):
+				{
+					var c = entity.Get<Aetherium.Components.Inventory>();
+					if (c is not null && delta.NumericValue.HasValue) c.Capacity = (int)delta.NumericValue.Value;
+					break;
+				}
+			default:
+				throw new NotImplementedException(
+					$"ComponentFieldChangedDelta for ({delta.ComponentType}.{delta.FieldName}) is not handled. " +
+					"Add a case in GameSession.ApplyComponentFieldChanged.");
+		}
+	}
+
+	private void ApplyItemDestroyed(Aetherium.Server.MultiWorld.ItemDestroyedDelta delta)
+	{
+		if (!string.IsNullOrEmpty(delta.OwnerEntityId))
+		{
+			// Owner-side destruction: remove from that character's inventory.
+			if (World.Entities.TryGetValue(delta.OwnerEntityId, out var owner))
+			{
+				var inv = owner.Get<Aetherium.Components.Inventory>();
+				inv?.Remove(delta.EntityId);
+			}
+			else if (Player is not null && Player.EntityId == delta.OwnerEntityId)
+			{
+				var inv = Player.Get<Aetherium.Components.Inventory>();
+				inv?.Remove(delta.EntityId);
+			}
+		}
+		else
+		{
+			// World-side destruction.
+			World.TryRemoveEntity(delta.EntityId);
+		}
+	}
+
+	private void ApplyEntityPlaced(Aetherium.Server.MultiWorld.EntityPlacedDelta delta)
+	{
+		if (delta.Placement is null) return;
+
+		// Remove from the source owner's inventory before placing in the world to
+		// avoid the item briefly existing in both mirrors.
+		if (!string.IsNullOrEmpty(delta.SourceOwnerEntityId))
+		{
+			Aetherium.Components.Inventory? sourceInv = null;
+			if (Player is not null && Player.EntityId == delta.SourceOwnerEntityId)
+				sourceInv = Player.Get<Aetherium.Components.Inventory>();
+			else if (World.Entities.TryGetValue(delta.SourceOwnerEntityId, out var owner))
+				sourceInv = owner.Get<Aetherium.Components.Inventory>();
+			sourceInv?.Remove(delta.Placement.EntityId);
+		}
+
+		if (World.Entities.ContainsKey(delta.Placement.EntityId))
+			return; // idempotent
+
+		var factory = new Aetherium.Server.MultiWorld.EntityFactory(World);
+		var entity = factory.Create(delta.Placement);
+		if (entity is not null)
+			World.AddEntity(entity);
+	}
+
+	/// <summary>
+	/// Look up an entity by id in either the world mirror or any character's
+	/// inventory mirror. ComponentFieldChangedDelta targets items in inventory
+	/// (Consumable, Lockpick) as well as world entities (Activatable, doors).
+	/// </summary>
+	private Aetherium.Core.Entity? FindEntityAnywhere(string entityId)
+	{
+		if (World.Entities.TryGetValue(entityId, out var worldEntity))
+			return worldEntity;
+
+		// Check our player's inventory.
+		if (Player is not null)
+		{
+			var inv = Player.Get<Aetherium.Components.Inventory>();
+			if (inv is not null && inv.Items.TryGetValue(entityId, out var item))
+				return item;
+		}
+
+		// Check other characters' inventories (rare in single-player; matters for shared rooms).
+		foreach (var e in World.Entities.Values)
+		{
+			var inv = e.Get<Aetherium.Components.Inventory>();
+			if (inv is not null && inv.Items.TryGetValue(entityId, out var item))
+				return item;
+		}
+
+		return null;
 	}
 
 	private void ApplyEntityMoved(Aetherium.Server.MultiWorld.EntityMovedDelta delta)

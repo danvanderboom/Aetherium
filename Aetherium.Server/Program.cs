@@ -92,6 +92,7 @@ namespace Aetherium.Server
             }
 
             builder.Services.AddControllers(); // Add API controllers
+            builder.Services.AddSingleton<IRandomSource, DefaultRandomSource>();
             builder.Services.AddSingleton<GameSessionManager>();
             
             // Register world hosting service (only when Orleans is enabled)

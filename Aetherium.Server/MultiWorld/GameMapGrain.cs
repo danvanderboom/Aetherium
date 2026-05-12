@@ -1032,40 +1032,234 @@ namespace Aetherium.Server.MultiWorld
 
         public async Task<Aetherium.Model.InteractionResultDto> UseAsync(string sessionId, string itemEntityId, string onEntityId, string? usageId)
         {
-            // Phase 2c implements the gameplay-critical "use key on locked door"
-            // pattern natively. Other use modes (consume food, light torch, place
-            // crystal, lockpick, etc.) are not yet supported in grain mode; tools
-            // that need them should fall back to legacy session-local mode for now.
-            // Phase 2d's full InteractionSystem refactor will extend grain-bound Use.
-            if (_world is null) return Fail("Map not initialized");
-            var player = GetPlayerCharacter(sessionId);
-            if (player is null) return Fail("Player not on map");
+            // Full-fidelity Use via InteractionSystem. Snapshot the mutable fields
+            // we care about, delegate the mutation, then diff and emit deltas.
+            // See openspec/changes/extend-delta-vocabulary-for-use-disambiguation.
+            var ctx = TryBuildActionContext(sessionId);
+            if (ctx is null) return Fail("Map not initialized or player not on map");
 
-            var inv = player.Get<Aetherium.Components.Inventory>();
+            // Resolve item (must be in inventory). Target is optional for some
+            // modes (consume, place) but required for others (unlock, lockpick,
+            // force-open). InteractionSystem handles the per-mode requirement.
+            var inv = ctx.Player.Get<Aetherium.Components.Inventory>();
             if (inv is null || !inv.Items.TryGetValue(itemEntityId, out var item))
                 return Fail("Item not in inventory");
 
-            if (!_world.Entities.TryGetValue(onEntityId, out var target))
-                return Fail("Target not found");
+            ctx.World.Entities.TryGetValue(onEntityId, out var target);
 
-            var key = item.AllComponents.OfType<Aetherium.Components.Key>().FirstOrDefault();
-            var door = target.AllComponents.OfType<Aetherium.Components.OpensAndCloses>().FirstOrDefault();
-
-            if (key is not null && door is not null && door.IsLocked
-                && !string.IsNullOrEmpty(door.KeyShape) && door.KeyShape == key.KeyId)
+            // Reactive disambiguation when usageId is omitted.
+            string resolvedUsageId;
+            if (string.IsNullOrEmpty(usageId))
             {
-                door.IsLocked = false;
-                await FanOutAsync(new DoorStateChangedDelta
+                var options = _interactionSystem.GetUseOptions(ctx, itemEntityId, target is null ? null : onEntityId);
+                if (options.Count == 0) return Fail("No effect");
+                if (options.Count > 1)
                 {
-                    EntityId = onEntityId,
-                    IsOpen = door.IsOpen,
-                    IsLocked = door.IsLocked,
-                });
-                return Ok();
+                    // Return options for the client to pick from.
+                    return new Aetherium.Model.InteractionResultDto
+                    {
+                        Success = false,
+                        Reason = "Multiple usage options available",
+                        Options = options.Select(o => new Aetherium.Model.UsageOptionDto
+                        {
+                            UsageId = o.UsageId,
+                            Label = o.Label,
+                            Description = o.Description,
+                        }).ToList()
+                    };
+                }
+                resolvedUsageId = options[0].UsageId;
+            }
+            else
+            {
+                resolvedUsageId = usageId;
             }
 
-            return Fail("Use mode not supported in grain mode (phase 2c). Use legacy session for this action.");
+            // Snapshot all fields the dispatcher could mutate. We track them on
+            // the item, the target (if a door), and the player. Inventory
+            // membership is tracked separately so we can detect destruction
+            // (item leaves inventory and is NOT in the world) vs placement
+            // (item leaves inventory and IS in the world).
+            var snapshot = SnapshotUseFields(ctx, item, target);
+
+            var result = _interactionSystem.TryUseWithMode(ctx, itemEntityId, target is null ? null : onEntityId, resolvedUsageId);
+            if (!result.Success)
+                return new Aetherium.Model.InteractionResultDto { Success = false, Reason = result.Reason };
+
+            await EmitUseDeltasAsync(ctx, item, target, snapshot);
+            return Ok();
         }
+
+        /// <summary>
+        /// Component-field values captured before a Use action so the grain can
+        /// diff the post-state and emit precise deltas. Single-purpose record;
+        /// not used outside UseAsync.
+        /// </summary>
+        private sealed class UseFieldSnapshot
+        {
+            public int? ConsumableUses;
+            public int? HealthLevel;
+            public int? ForcesDoorDurability;
+            public int? LockpickDurability;
+            public bool? PlaceableLightIsPlaced;
+            public bool? LightSourceIsEnabled;
+            public bool? LightSourceIsDynamic;
+            public bool? ActivatableIsActivated;
+            public int? InventoryCapacity;
+
+            public bool? DoorIsOpen;
+            public bool? DoorIsLocked;
+
+            public bool ItemWasInInventory;
+            public bool ItemWasInWorld;
+        }
+
+        private static UseFieldSnapshot SnapshotUseFields(ActionContext ctx, Aetherium.Core.Entity item, Aetherium.Core.Entity? target)
+        {
+            var s = new UseFieldSnapshot();
+
+            s.ConsumableUses = item.Get<Aetherium.Components.Consumable>()?.Uses;
+            s.ForcesDoorDurability = item.Get<Aetherium.Components.ForcesDoor>()?.Durability;
+            s.LockpickDurability = item.Get<Aetherium.Components.Lockpick>()?.Durability;
+            s.PlaceableLightIsPlaced = item.Get<Aetherium.Components.PlaceableLight>()?.IsPlaced;
+            var ls = item.Get<Aetherium.Components.LightSource>();
+            s.LightSourceIsEnabled = ls?.IsEnabled;
+            s.LightSourceIsDynamic = ls?.IsDynamic;
+
+            s.HealthLevel = ctx.Player.Get<Aetherium.Components.Health>()?.Level;
+            s.InventoryCapacity = ctx.Player.Get<Aetherium.Components.Inventory>()?.Capacity;
+
+            if (target is not null)
+            {
+                var door = target.Get<Aetherium.Components.OpensAndCloses>();
+                s.DoorIsOpen = door?.IsOpen;
+                s.DoorIsLocked = door?.IsLocked;
+                s.ActivatableIsActivated = target.Get<Aetherium.Components.Activatable>()?.IsActivated;
+            }
+
+            var inv = ctx.Player.Get<Aetherium.Components.Inventory>();
+            s.ItemWasInInventory = inv is not null && inv.Items.ContainsKey(item.EntityId);
+            s.ItemWasInWorld = ctx.World.Entities.ContainsKey(item.EntityId);
+
+            return s;
+        }
+
+        /// <summary>
+        /// Diffs the post-Use state against the pre-call snapshot and emits one
+        /// delta per changed field, plus the appropriate inventory/world
+        /// transition delta if the item moved.
+        /// </summary>
+        private async Task EmitUseDeltasAsync(ActionContext ctx, Aetherium.Core.Entity item, Aetherium.Core.Entity? target, UseFieldSnapshot snapshot)
+        {
+            var inv = ctx.Player.Get<Aetherium.Components.Inventory>();
+            var itemIsInInventory = inv is not null && inv.Items.ContainsKey(item.EntityId);
+            var itemIsInWorld = ctx.World.Entities.ContainsKey(item.EntityId);
+
+            // Inventory transitions first — the field deltas below need to refer
+            // to an item the receiver can still find.
+            if (snapshot.ItemWasInInventory && !itemIsInInventory)
+            {
+                if (itemIsInWorld)
+                {
+                    // Placement: item went from inventory to world (TryPlace).
+                    var placement = EntityPlacement.FromLocation(item.EntityId, item.GetType().Name, ctx.ViewLocation);
+                    await FanOutAsync(new EntityPlacedDelta
+                    {
+                        Placement = placement,
+                        SourceOwnerEntityId = ctx.Player.EntityId,
+                    });
+                }
+                else
+                {
+                    // Destruction: item left inventory and didn't enter the world
+                    // (Consumable at zero uses, broken Lockpick, broken ForcesDoor).
+                    await FanOutAsync(new ItemDestroyedDelta
+                    {
+                        EntityId = item.EntityId,
+                        OwnerEntityId = ctx.Player.EntityId,
+                    });
+                }
+            }
+
+            // Component-field deltas. Door state has its own delta type because
+            // it bundles IsOpen+IsLocked; everything else goes through the
+            // generic ComponentFieldChangedDelta.
+            if (target is not null)
+            {
+                var door = target.Get<Aetherium.Components.OpensAndCloses>();
+                if (door is not null && (door.IsOpen != snapshot.DoorIsOpen || door.IsLocked != snapshot.DoorIsLocked))
+                {
+                    await FanOutAsync(new DoorStateChangedDelta
+                    {
+                        EntityId = target.EntityId,
+                        IsOpen = door.IsOpen,
+                        IsLocked = door.IsLocked,
+                    });
+                }
+
+                var activatable = target.Get<Aetherium.Components.Activatable>();
+                if (activatable is not null && activatable.IsActivated != snapshot.ActivatableIsActivated)
+                {
+                    await FanOutAsync(BoolFieldDelta(target.EntityId, "Activatable", "IsActivated", activatable.IsActivated));
+                }
+            }
+
+            // Item-side fields. Skip if item was destroyed (ItemDestroyedDelta is enough).
+            if (itemIsInInventory || itemIsInWorld)
+            {
+                var consumable = item.Get<Aetherium.Components.Consumable>();
+                if (consumable is not null && consumable.Uses != snapshot.ConsumableUses)
+                    await FanOutAsync(IntFieldDelta(item.EntityId, "Consumable", "Uses", consumable.Uses));
+
+                var forces = item.Get<Aetherium.Components.ForcesDoor>();
+                if (forces is not null && forces.Durability != snapshot.ForcesDoorDurability)
+                    await FanOutAsync(IntFieldDelta(item.EntityId, "ForcesDoor", "Durability", forces.Durability));
+
+                var lockpick = item.Get<Aetherium.Components.Lockpick>();
+                if (lockpick is not null && lockpick.Durability != snapshot.LockpickDurability)
+                    await FanOutAsync(IntFieldDelta(item.EntityId, "Lockpick", "Durability", lockpick.Durability));
+
+                var placeable = item.Get<Aetherium.Components.PlaceableLight>();
+                if (placeable is not null && placeable.IsPlaced != snapshot.PlaceableLightIsPlaced)
+                    await FanOutAsync(BoolFieldDelta(item.EntityId, "PlaceableLight", "IsPlaced", placeable.IsPlaced));
+
+                var ls = item.Get<Aetherium.Components.LightSource>();
+                if (ls is not null)
+                {
+                    if (ls.IsEnabled != snapshot.LightSourceIsEnabled)
+                        await FanOutAsync(BoolFieldDelta(item.EntityId, "LightSource", "IsEnabled", ls.IsEnabled));
+                    if (ls.IsDynamic != snapshot.LightSourceIsDynamic)
+                        await FanOutAsync(BoolFieldDelta(item.EntityId, "LightSource", "IsDynamic", ls.IsDynamic));
+                }
+            }
+
+            // Player-side fields.
+            var health = ctx.Player.Get<Aetherium.Components.Health>();
+            if (health is not null && health.Level != snapshot.HealthLevel)
+                await FanOutAsync(IntFieldDelta(ctx.Player.EntityId, "Health", "Level", health.Level));
+
+            var playerInv = ctx.Player.Get<Aetherium.Components.Inventory>();
+            if (playerInv is not null && playerInv.Capacity != snapshot.InventoryCapacity)
+                await FanOutAsync(IntFieldDelta(ctx.Player.EntityId, "Inventory", "Capacity", playerInv.Capacity));
+        }
+
+        private static ComponentFieldChangedDelta IntFieldDelta(string entityId, string componentType, string fieldName, int value)
+            => new ComponentFieldChangedDelta
+            {
+                EntityId = entityId,
+                ComponentType = componentType,
+                FieldName = fieldName,
+                NumericValue = value,
+            };
+
+        private static ComponentFieldChangedDelta BoolFieldDelta(string entityId, string componentType, string fieldName, bool value)
+            => new ComponentFieldChangedDelta
+            {
+                EntityId = entityId,
+                ComponentType = componentType,
+                FieldName = fieldName,
+                BoolValue = value,
+            };
 
         // ----- helpers ---------------------------------------------------
 

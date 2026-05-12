@@ -149,4 +149,69 @@ namespace Aetherium.Server.MultiWorld
         [Id(1)] public int Y { get; set; }
         [Id(2)] public int Z { get; set; }
     }
+
+    /// <summary>
+    /// A single numeric, boolean, or string field on a component changed in place.
+    /// Generic carrier so we don't need one delta type per (component, field) pair;
+    /// receivers dispatch on <see cref="ComponentType"/>+<see cref="FieldName"/> in
+    /// <c>GameSession.ApplyDelta</c>.
+    ///
+    /// <para>
+    /// Exactly one of <see cref="NumericValue"/>, <see cref="BoolValue"/>,
+    /// <see cref="StringValue"/> is populated per delta; the field's actual type
+    /// is implied by the (ComponentType, FieldName) pair. See design.md for the
+    /// trade-off vs per-component delta classes.
+    /// </para>
+    /// </summary>
+    [GenerateSerializer]
+    public class ComponentFieldChangedDelta : MapDelta
+    {
+        [Id(0)] public string EntityId { get; set; } = string.Empty;
+        [Id(1)] public string ComponentType { get; set; } = string.Empty;
+        [Id(2)] public string FieldName { get; set; } = string.Empty;
+        [Id(3)] public double? NumericValue { get; set; }
+        [Id(4)] public bool? BoolValue { get; set; }
+        [Id(5)] public string? StringValue { get; set; }
+    }
+
+    /// <summary>
+    /// An item was removed from the simulation entirely (consumed to zero uses or
+    /// destroyed when durability hit zero). Distinct from
+    /// <see cref="ItemTransferredDelta"/> because there is no destination — the
+    /// item ceases to exist.
+    ///
+    /// <para>
+    /// When <see cref="OwnerEntityId"/> is set, the item lived in that character's
+    /// inventory and the receiver removes it from there. When null, the item lived
+    /// in the world and the receiver removes it from <c>World.Entities</c>.
+    /// </para>
+    /// </summary>
+    [GenerateSerializer]
+    public class ItemDestroyedDelta : MapDelta
+    {
+        [Id(0)] public string EntityId { get; set; } = string.Empty;
+        [Id(1)] public string? OwnerEntityId { get; set; }
+    }
+
+    /// <summary>
+    /// An item transitioned from a player's inventory into the world at a location
+    /// (e.g. placing a torch). The <see cref="EntityPlacement"/> carries the item's
+    /// post-mutation component state so receivers can reconstruct it via
+    /// <c>EntityFactory.Create</c> with <c>IsPlaced</c>/<c>IsEnabled</c> flags
+    /// already in their new positions.
+    ///
+    /// <para>
+    /// Distinct from <see cref="EntityAddedDelta"/>: that delta represents the
+    /// grain spawning a fresh entity. This one represents an instance the
+    /// receiver already had in its inventory mirror crossing over to the world.
+    /// Receivers must remove the item from <see cref="SourceOwnerEntityId"/>'s
+    /// inventory before adding it to the world to avoid a double-reference.
+    /// </para>
+    /// </summary>
+    [GenerateSerializer]
+    public class EntityPlacedDelta : MapDelta
+    {
+        [Id(0)] public EntityPlacement Placement { get; set; } = new();
+        [Id(1)] public string? SourceOwnerEntityId { get; set; }
+    }
 }

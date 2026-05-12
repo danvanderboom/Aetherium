@@ -51,6 +51,13 @@ namespace Aetherium.Server
 
     public class InteractionSystem
     {
+        private readonly IRandomSource _random;
+
+        public InteractionSystem(IRandomSource? random = null)
+        {
+            _random = random ?? new DefaultRandomSource();
+        }
+
         // Session-taking overloads (legacy / LocalMutationGateway callers) forward
         // to the ActionContext canonical implementations below.
         public InteractionResult TryPickup(GameSession session, string targetEntityId)
@@ -146,21 +153,25 @@ namespace Aetherium.Server
 
         public InteractionResult TryUse(GameSession session, string itemEntityId, string onEntityId, string? usageId = null)
         {
-            if (session.Player == null)
-                return InteractionResult.Fail("No player");
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+            return TryUse(new ActionContext(session.World, session.Player, session.ViewLocation), itemEntityId, onEntityId, usageId);
+        }
 
-            var inventory = session.Player.Get<Inventory>();
+        public InteractionResult TryUse(ActionContext ctx, string itemEntityId, string onEntityId, string? usageId = null)
+        {
+            var inventory = ctx.Player.Get<Inventory>();
             if (inventory == null)
                 return InteractionResult.Fail("No inventory");
 
             if (!inventory.Items.TryGetValue(itemEntityId, out var item))
                 return InteractionResult.Fail("Item not in inventory");
 
-            if (!session.World.Entities.TryGetValue(onEntityId, out var target))
+            if (!ctx.World.Entities.TryGetValue(onEntityId, out var target))
                 return InteractionResult.Fail("Target not found");
 
             // Get all valid usage options
-            var options = GetUseOptions(session, itemEntityId, onEntityId);
+            var options = GetUseOptions(ctx, itemEntityId, onEntityId);
 
             // If no options, fail
             if (options.Count == 0)
@@ -169,13 +180,13 @@ namespace Aetherium.Server
             // If usageId is provided, use it directly
             if (!string.IsNullOrEmpty(usageId))
             {
-                return TryUseWithMode(session, itemEntityId, onEntityId, usageId);
+                return TryUseWithMode(ctx, itemEntityId, onEntityId, usageId);
             }
 
             // If exactly one option, auto-execute (backward compatibility)
             if (options.Count == 1)
             {
-                return TryUseWithMode(session, itemEntityId, onEntityId, options[0].UsageId);
+                return TryUseWithMode(ctx, itemEntityId, onEntityId, options[0].UsageId);
             }
 
             // Multiple options: return them for reactive disambiguation
@@ -187,18 +198,22 @@ namespace Aetherium.Server
         /// </summary>
         public List<UseOption> GetUseOptions(GameSession session, string itemEntityId, string? targetEntityId = null)
         {
+            if (session.Player == null || session.ViewLocation == null)
+                return new List<UseOption>();
+            return GetUseOptions(new ActionContext(session.World, session.Player, session.ViewLocation), itemEntityId, targetEntityId);
+        }
+
+        public List<UseOption> GetUseOptions(ActionContext ctx, string itemEntityId, string? targetEntityId = null)
+        {
             var options = new List<UseOption>();
 
-            if (session.Player == null)
-                return options;
-
-            var inventory = session.Player.Get<Inventory>();
+            var inventory = ctx.Player.Get<Inventory>();
             if (inventory == null || !inventory.Items.TryGetValue(itemEntityId, out var item))
                 return options;
 
-            var contextTags = ContextEvaluator.EvaluateContext(session, targetEntityId);
+            var contextTags = ContextEvaluator.EvaluateContext(ctx.World, ctx.ViewLocation, targetEntityId);
             Entity? target = null;
-            var hasTarget = !string.IsNullOrEmpty(targetEntityId) && session.World.Entities.TryGetValue(targetEntityId, out target);
+            var hasTarget = !string.IsNullOrEmpty(targetEntityId) && ctx.World.Entities.TryGetValue(targetEntityId, out target);
 
             // Consume (no target required)
             var consumable = item.AllComponents.OfType<Consumable>().FirstOrDefault();
@@ -283,29 +298,33 @@ namespace Aetherium.Server
         /// </summary>
         public InteractionResult TryUseWithMode(GameSession session, string itemEntityId, string? targetEntityId, string usageId)
         {
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+            return TryUseWithMode(new ActionContext(session.World, session.Player, session.ViewLocation), itemEntityId, targetEntityId, usageId);
+        }
+
+        public InteractionResult TryUseWithMode(ActionContext ctx, string itemEntityId, string? targetEntityId, string usageId)
+        {
             switch (usageId.ToLowerInvariant())
             {
                 case "consume":
-                    return TryConsume(session, itemEntityId);
-                
+                    return TryConsume(ctx, itemEntityId);
+
                 case "place":
-                    return TryPlace(session, itemEntityId);
-                
+                    return TryPlace(ctx, itemEntityId);
+
                 case "unlock-door":
                     // Extract key unlock logic to avoid recursion
                     if (string.IsNullOrEmpty(targetEntityId))
                         return InteractionResult.Fail("Target required for unlock-door");
-                    
-                    if (session.Player == null)
-                        return InteractionResult.Fail("No player");
-                    
-                    var inventory = session.Player.Get<Inventory>();
+
+                    var inventory = ctx.Player.Get<Inventory>();
                     if (inventory == null || !inventory.Items.TryGetValue(itemEntityId, out var item))
                         return InteractionResult.Fail("Item not in inventory");
-                    
-                    if (!session.World.Entities.TryGetValue(targetEntityId, out var target))
+
+                    if (!ctx.World.Entities.TryGetValue(targetEntityId, out var target))
                         return InteractionResult.Fail("Target not found");
-                    
+
                     var key = item.AllComponents.OfType<Key>().FirstOrDefault();
                     var door = target.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
                     if (key != null && door != null)
@@ -313,32 +332,32 @@ namespace Aetherium.Server
                         if (!string.IsNullOrEmpty(door.KeyShape) && door.KeyShape == key.KeyId)
                         {
                             door.IsLocked = false;
-                            
+
                             // Emit world event for door unlocked
-                            session.World.EmitEvent(new WorldEvent
+                            ctx.World.EmitEvent(new WorldEvent
                             {
                                 EventType = WorldEventType.DoorUnlocked,
                                 Location = target.Get<WorldLocation>(),
                                 Entity = target
                             });
-                            
+
                             return InteractionResult.Ok();
                         }
                         return InteractionResult.Fail("Key does not match");
                     }
-                    
+
                     return InteractionResult.Fail("Key or door not found");
-                
+
                 case "lockpick":
                     if (string.IsNullOrEmpty(targetEntityId))
                         return InteractionResult.Fail("Target required for lockpick");
-                    return TryLockpick(session, itemEntityId, targetEntityId);
-                
+                    return TryLockpick(ctx, itemEntityId, targetEntityId);
+
                 case "force-open":
                     if (string.IsNullOrEmpty(targetEntityId))
                         return InteractionResult.Fail("Target required for force-open");
-                    return TryForceOpen(session, itemEntityId, targetEntityId);
-                
+                    return TryForceOpen(ctx, itemEntityId, targetEntityId);
+
                 default:
                     return InteractionResult.Fail($"Unknown usage mode: {usageId}");
             }
@@ -395,14 +414,18 @@ namespace Aetherium.Server
         {
             if (session.Player == null || session.ViewLocation == null)
                 return InteractionResult.Fail("No player or view location");
+            return TryActivate(new ActionContext(session.World, session.Player, session.ViewLocation), entityId);
+        }
 
-            if (!session.World.Entities.TryGetValue(entityId, out var target))
+        public InteractionResult TryActivate(ActionContext ctx, string entityId)
+        {
+            if (!ctx.World.Entities.TryGetValue(entityId, out var target))
                 return InteractionResult.Fail("Entity not found");
 
             // Check if entity is adjacent or at same location
             var targetLoc = target.Get<WorldLocation>();
-            var distance = System.Math.Abs(targetLoc.X - session.ViewLocation.X) + 
-                          System.Math.Abs(targetLoc.Y - session.ViewLocation.Y);
+            var distance = System.Math.Abs(targetLoc.X - ctx.ViewLocation.X) +
+                          System.Math.Abs(targetLoc.Y - ctx.ViewLocation.Y);
             if (distance > 1)
                 return InteractionResult.Fail("Too far away");
 
@@ -423,7 +446,7 @@ namespace Aetherium.Server
             // Activate target entities (doors, mechanisms, etc.)
             foreach (var targetId in activatable.TargetEntityIds)
             {
-                if (session.World.Entities.TryGetValue(targetId, out var targetEntity))
+                if (ctx.World.Entities.TryGetValue(targetId, out var targetEntity))
                 {
                     // If target is a door, unlock/open it
                     var door = targetEntity.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
@@ -432,7 +455,7 @@ namespace Aetherium.Server
                         door.IsLocked = false;
                         if (!door.IsOpen)
                         {
-                            ToggleDoor(new ActionContext(session.World, session.Player!, session.ViewLocation!), targetId, open: true);
+                            ToggleDoor(ctx, targetId, open: true);
                         }
                     }
 
@@ -450,10 +473,14 @@ namespace Aetherium.Server
 
         public InteractionResult TryConsume(GameSession session, string itemId)
         {
-            if (session.Player == null)
-                return InteractionResult.Fail("No player");
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+            return TryConsume(new ActionContext(session.World, session.Player, session.ViewLocation), itemId);
+        }
 
-            var inventory = session.Player.Get<Inventory>();
+        public InteractionResult TryConsume(ActionContext ctx, string itemId)
+        {
+            var inventory = ctx.Player.Get<Inventory>();
             if (inventory == null)
                 return InteractionResult.Fail("No inventory");
 
@@ -468,7 +495,7 @@ namespace Aetherium.Server
                 return InteractionResult.Fail("No uses remaining");
 
             // Apply effect
-            var health = session.Player.Get<Health>();
+            var health = ctx.Player.Get<Health>();
             if (health != null)
             {
                 switch (consumable.EffectType)
@@ -495,15 +522,19 @@ namespace Aetherium.Server
         {
             if (session.Player == null || session.ViewLocation == null)
                 return InteractionResult.Fail("No player or view location");
+            return TryPlace(new ActionContext(session.World, session.Player, session.ViewLocation), itemId, location);
+        }
 
-            var inventory = session.Player.Get<Inventory>();
+        public InteractionResult TryPlace(ActionContext ctx, string itemId, WorldLocation? location = null)
+        {
+            var inventory = ctx.Player.Get<Inventory>();
             if (inventory == null)
                 return InteractionResult.Fail("No inventory");
 
             if (!inventory.Items.TryGetValue(itemId, out var item))
                 return InteractionResult.Fail("Item not in inventory");
 
-            var placeLocation = location ?? session.ViewLocation;
+            var placeLocation = location ?? ctx.ViewLocation;
 
             // Check if item can be placed (has PlaceableLight component)
             var placeableLight = item.AllComponents.OfType<PlaceableLight>().FirstOrDefault();
@@ -525,7 +556,7 @@ namespace Aetherium.Server
             // Remove from inventory and add to world
             inventory.Remove(itemId);
             item.Set(new WorldLocation(placeLocation.X, placeLocation.Y, placeLocation.Z));
-            session.World.AddEntity(item);
+            ctx.World.AddEntity(item);
 
             return InteractionResult.Ok();
         }
@@ -534,8 +565,12 @@ namespace Aetherium.Server
         {
             if (session.Player == null || session.ViewLocation == null)
                 return InteractionResult.Fail("No player or view location");
+            return TryClimb(new ActionContext(session.World, session.Player, session.ViewLocation), entityId);
+        }
 
-            if (!session.World.Entities.TryGetValue(entityId, out var target))
+        public InteractionResult TryClimb(ActionContext ctx, string entityId)
+        {
+            if (!ctx.World.Entities.TryGetValue(entityId, out var target))
                 return InteractionResult.Fail("Entity not found");
 
             var climbable = target.AllComponents.OfType<Climbable>().FirstOrDefault();
@@ -544,14 +579,14 @@ namespace Aetherium.Server
 
             if (climbable.RequiresItem && !string.IsNullOrEmpty(climbable.RequiredItemId))
             {
-                var inventory = session.Player.Get<Inventory>();
+                var inventory = ctx.Player.Get<Inventory>();
                 if (inventory == null || !inventory.Items.ContainsKey(climbable.RequiredItemId))
                     return InteractionResult.Fail("Required item not in inventory");
             }
 
             // Climbing logic - for now, just verify it's at the same location
             var targetLoc = target.Get<WorldLocation>();
-            if (targetLoc != session.ViewLocation)
+            if (targetLoc != ctx.ViewLocation)
                 return InteractionResult.Fail("Not at climbable location");
 
             // Climbing would typically change Z level, but that's handled by movement system
@@ -561,17 +596,21 @@ namespace Aetherium.Server
 
         public InteractionResult TryForceOpen(GameSession session, string itemId, string doorId)
         {
-            if (session.Player == null)
-                return InteractionResult.Fail("No player");
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+            return TryForceOpen(new ActionContext(session.World, session.Player, session.ViewLocation), itemId, doorId);
+        }
 
-            var inventory = session.Player.Get<Inventory>();
+        public InteractionResult TryForceOpen(ActionContext ctx, string itemId, string doorId)
+        {
+            var inventory = ctx.Player.Get<Inventory>();
             if (inventory == null)
                 return InteractionResult.Fail("No inventory");
 
             if (!inventory.Items.TryGetValue(itemId, out var item))
                 return InteractionResult.Fail("Item not in inventory");
 
-            if (!session.World.Entities.TryGetValue(doorId, out var door))
+            if (!ctx.World.Entities.TryGetValue(doorId, out var door))
                 return InteractionResult.Fail("Door not found");
 
             var forcesDoor = item.AllComponents.OfType<ForcesDoor>().FirstOrDefault();
@@ -588,7 +627,7 @@ namespace Aetherium.Server
                 doorComp.IsLocked = false;
                 if (!doorComp.IsOpen)
                 {
-                    ToggleDoor(new ActionContext(session.World, session.Player!, session.ViewLocation!), doorId, open: true);
+                    ToggleDoor(ctx, doorId, open: true);
                 }
 
                 // Reduce durability
@@ -606,17 +645,21 @@ namespace Aetherium.Server
 
         public InteractionResult TryLockpick(GameSession session, string itemId, string doorId)
         {
-            if (session.Player == null)
-                return InteractionResult.Fail("No player");
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+            return TryLockpick(new ActionContext(session.World, session.Player, session.ViewLocation), itemId, doorId);
+        }
 
-            var inventory = session.Player.Get<Inventory>();
+        public InteractionResult TryLockpick(ActionContext ctx, string itemId, string doorId)
+        {
+            var inventory = ctx.Player.Get<Inventory>();
             if (inventory == null)
                 return InteractionResult.Fail("No inventory");
 
             if (!inventory.Items.TryGetValue(itemId, out var item))
                 return InteractionResult.Fail("Item not in inventory");
 
-            if (!session.World.Entities.TryGetValue(doorId, out var door))
+            if (!ctx.World.Entities.TryGetValue(doorId, out var door))
                 return InteractionResult.Fail("Door not found");
 
             var lockpick = item.AllComponents.OfType<Lockpick>().FirstOrDefault();
@@ -627,10 +670,11 @@ namespace Aetherium.Server
             if (doorComp == null || !doorComp.IsLocked)
                 return InteractionResult.Fail("Door is not locked");
 
-            // Simplified lockpicking: success based on skill level (60% + 5% per skill level)
+            // Simplified lockpicking: success based on skill level (60% + 5% per skill level).
+            // Uses the injected IRandomSource so tests can drive deterministic outcomes
+            // (see openspec/changes/extend-delta-vocabulary-for-use-disambiguation).
             var successChance = 0.6 + (lockpick.SkillLevel * 0.05);
-            var random = new System.Random();
-            var roll = random.NextDouble();
+            var roll = _random.NextDouble();
 
             if (roll < successChance)
             {
@@ -660,10 +704,14 @@ namespace Aetherium.Server
 
         public InteractionResult TryEquip(GameSession session, string itemId)
         {
-            if (session.Player == null)
-                return InteractionResult.Fail("No player");
+            if (session.Player == null || session.ViewLocation == null)
+                return InteractionResult.Fail("No player or view location");
+            return TryEquip(new ActionContext(session.World, session.Player, session.ViewLocation), itemId);
+        }
 
-            var inventory = session.Player.Get<Inventory>();
+        public InteractionResult TryEquip(ActionContext ctx, string itemId)
+        {
+            var inventory = ctx.Player.Get<Inventory>();
             if (inventory == null)
                 return InteractionResult.Fail("No inventory");
 
@@ -685,7 +733,7 @@ namespace Aetherium.Server
             {
                 // Cloak is equipped - perception system will check this
                 // For now, just mark as equipped by storing on player
-                session.Player.Set(item);
+                ctx.Player.Set(item);
                 return InteractionResult.Ok();
             }
 
