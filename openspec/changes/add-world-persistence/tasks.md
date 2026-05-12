@@ -38,10 +38,10 @@
 
 ## Phase E — Compaction and retention
 
-- [ ] E.1 Add a `GameMapGrain` grain timer firing every N minutes (configurable, default 10) or after M deltas (default 1000), whichever comes first
-- [ ] E.2 On fire: capture `WorldSnapshotBuilder.SnapshotOf(...)`, await `SaveSnapshotAsync`, await `CompactDeltasAsync` to drop log entries at or below the snapshot's sequence
-- [ ] E.3 Configuration knobs in `appsettings.json` under `Persistence:Compaction`: `IntervalMinutes`, `DeltaCountThreshold`, `Enabled`
-- [ ] E.4 Test: `Aetherium.Test/Persistence/CompactionTests.cs` — append > threshold deltas, trigger compaction, verify only post-snapshot deltas remain in `delta_log` and the snapshot's sequence is correct
+- [x] E.1 [GameMapGrain](Aetherium.Server/MultiWorld/GameMapGrain.cs) registers a periodic `RegisterGrainTimer` in `OnActivateAsync` (and disposes it in `OnDeactivateAsync`). On fire, the callback checks whether any deltas have been appended since the last snapshot and, if so, awaits `ForceSnapshotAsync` then resets the counter. Periodic timer interval comes from `CompactionOptions.IntervalMinutes` (default 10)
+- [x] E.2 Threshold-based trigger: `PersistDeltaAsync` increments `_deltasSinceLastSnapshot` after every successful append and immediately fires a fire-and-forget compaction when the counter crosses `CompactionOptions.DeltaCountThreshold` (default 1000). Both triggers share a CAS-guarded `_compactionInFlight` flag so a timer firing concurrently with a threshold cross doesn't double-fire. `ForceSnapshotAsync` already handles "capture snapshot + persist + truncate log ≤ sequence"
+- [x] E.3 [Aetherium.Server/Persistence/PersistenceOptions.cs](Aetherium.Server/Persistence/PersistenceOptions.cs) — new `PersistenceOptions { Compaction { Enabled, IntervalMinutes, DeltaCountThreshold } }`. Bound from the `Persistence` section of `appsettings.json` in [Program.cs](Aetherium.Server/Program.cs). `Compaction.Enabled = false` short-circuits both the timer and the threshold trigger
+- [x] E.4 [Aetherium.Test/Persistence/CompactionTests.cs](Aetherium.Test/Persistence/CompactionTests.cs) — three TestCluster integration tests configured with `DeltaCountThreshold=3` and `IntervalMinutes=60` so the threshold path is deterministic: (a) crossing the threshold drives an automatic snapshot into the store, (b) the retained log holds only entries with `Sequence > snapshot.LastSequence` after compaction, (c) the post-compaction counter resets so a single follow-up delta does NOT immediately produce another snapshot, but five do. Full suite: 788 tests pass, 0 failures, 2 skipped (was 785; +3 from this phase)
 
 ## Phase F — Schema and delta-type evolution
 

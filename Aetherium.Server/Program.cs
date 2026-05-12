@@ -120,6 +120,10 @@ namespace Aetherium.Server
             // Add simulation configuration
             builder.Services.Configure<SimulationOptions>(
                 builder.Configuration.GetSection("Simulation"));
+
+            // Persistence configuration (snapshot compaction cadence + threshold).
+            builder.Services.Configure<Aetherium.Server.Persistence.PersistenceOptions>(
+                builder.Configuration.GetSection("Persistence"));
             
             // Add simulation services
             builder.Services.AddSingleton<WorldClock>();

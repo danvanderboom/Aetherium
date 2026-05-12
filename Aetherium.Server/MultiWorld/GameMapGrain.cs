@@ -73,6 +73,14 @@ namespace Aetherium.Server.MultiWorld
         private Aetherium.Server.Persistence.IWorldSnapshotStore? _snapshotStore;
         private bool _snapshotStoreResolved;
 
+        // Compaction state. Counter increments per persisted delta; when it crosses
+        // CompactionOptions.DeltaCountThreshold OR the periodic timer fires, we capture
+        // a fresh snapshot and reset the counter (ForceSnapshotAsync also compacts the
+        // log). Setting Enabled=false short-circuits both triggers.
+        private IDisposable? _compactionTimer;
+        private long _deltasSinceLastSnapshot;
+        private int _compactionInFlight; // CAS guard so concurrent triggers don't double-fire
+
         private Aetherium.Server.Persistence.IWorldSnapshotStore? GetSnapshotStore()
         {
             if (!_snapshotStoreResolved)
@@ -98,11 +106,52 @@ namespace Aetherium.Server.MultiWorld
             try
             {
                 await store.AppendMapDeltaAsync(_mapState.State.WorldId, _mapState.State.MapId, delta);
+                System.Threading.Interlocked.Increment(ref _deltasSinceLastSnapshot);
+                MaybeTriggerThresholdCompaction();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[GameMapGrain] AppendMapDelta failed seq={delta.Sequence} type={delta.GetType().Name}: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// If the count of deltas appended since the last snapshot has crossed the
+        /// configured threshold, kick off a compaction in the background. CAS guard
+        /// prevents two concurrent triggers (timer + threshold racing). The check is
+        /// cheap; the snapshot capture itself runs on the grain's own scheduler.
+        /// </summary>
+        private void MaybeTriggerThresholdCompaction()
+        {
+            var opts = GetCompactionOptions();
+            if (opts is null || !opts.Enabled || opts.DeltaCountThreshold <= 0) return;
+            if (_deltasSinceLastSnapshot < opts.DeltaCountThreshold) return;
+            if (System.Threading.Interlocked.CompareExchange(ref _compactionInFlight, 1, 0) != 0) return;
+            _ = RunCompactionAsync();
+        }
+
+        private async Task RunCompactionAsync()
+        {
+            try
+            {
+                await ForceSnapshotAsync();
+                System.Threading.Interlocked.Exchange(ref _deltasSinceLastSnapshot, 0);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameMapGrain] Compaction failed: {ex.Message}");
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _compactionInFlight, 0);
+            }
+        }
+
+        private Aetherium.Server.Persistence.CompactionOptions? GetCompactionOptions()
+        {
+            var optsAccessor = ServiceProvider.GetService(typeof(Microsoft.Extensions.Options.IOptions<Aetherium.Server.Persistence.PersistenceOptions>))
+                as Microsoft.Extensions.Options.IOptions<Aetherium.Server.Persistence.PersistenceOptions>;
+            return optsAccessor?.Value.Compaction;
         }
 
         public GameMapGrain(
@@ -133,7 +182,50 @@ namespace Aetherium.Server.MultiWorld
                 AttachWorldEventSubscriber();
             }
 
+            // Start the periodic compaction timer when persistence + compaction are
+            // both wired. Falls back to a no-op when either the snapshot store or the
+            // options binding is absent (e.g., tests that don't configure them).
+            StartCompactionTimer();
+
             await base.OnActivateAsync(cancellationToken);
+        }
+
+        public override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+        {
+            _compactionTimer?.Dispose();
+            _compactionTimer = null;
+            return base.OnDeactivateAsync(reason, cancellationToken);
+        }
+
+        private void StartCompactionTimer()
+        {
+            if (_compactionTimer is not null) return;
+            var opts = GetCompactionOptions();
+            if (opts is null || !opts.Enabled || opts.IntervalMinutes <= 0) return;
+            if (GetSnapshotStore() is null) return;
+
+            var interval = TimeSpan.FromMinutes(opts.IntervalMinutes);
+            _compactionTimer = this.RegisterGrainTimer(
+                async _ =>
+                {
+                    if (_deltasSinceLastSnapshot == 0) return; // nothing to compact
+                    if (System.Threading.Interlocked.CompareExchange(ref _compactionInFlight, 1, 0) != 0) return;
+                    try
+                    {
+                        await ForceSnapshotAsync();
+                        System.Threading.Interlocked.Exchange(ref _deltasSinceLastSnapshot, 0);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[GameMapGrain] Timer compaction failed: {ex.Message}");
+                    }
+                    finally
+                    {
+                        System.Threading.Interlocked.Exchange(ref _compactionInFlight, 0);
+                    }
+                },
+                state: (object?)null,
+                new GrainTimerCreationOptions { DueTime = interval, Period = interval, Interleave = true });
         }
 
         /// <summary>
