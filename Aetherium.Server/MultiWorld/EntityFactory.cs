@@ -98,6 +98,56 @@ namespace Aetherium.Server.MultiWorld
                 if (!string.IsNullOrEmpty(portal.Activation))
                     placement.Properties["Activation"] = portal.Activation!;
             }
+
+            // Mutable component fields tracked by ComponentFieldChangedDelta. Capturing
+            // these into the snapshot makes it self-contained — a cold start does not
+            // need a long delta-log replay to reconstruct the durable in-game state.
+            if (entity.Components.TryGetValue(typeof(HasHeading), out var headingComp)
+                && headingComp is HasHeading hh)
+            {
+                placement.Properties["Heading"] = hh.Heading.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (entity.Components.TryGetValue(typeof(Consumable), out var consComp)
+                && consComp is Consumable cons)
+            {
+                placement.Properties["ConsumableUses"] = cons.Uses.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (entity.Components.TryGetValue(typeof(Health), out var healthComp)
+                && healthComp is Health health)
+            {
+                placement.Properties["HealthLevel"] = health.Level.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (entity.Components.TryGetValue(typeof(Lockpick), out var lockComp)
+                && lockComp is Lockpick lockpick)
+            {
+                placement.Properties["LockpickDurability"] = lockpick.Durability.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (entity.Components.TryGetValue(typeof(ForcesDoor), out var fdComp)
+                && fdComp is ForcesDoor forces)
+            {
+                placement.Properties["ForcesDoorDurability"] = forces.Durability.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (entity.Components.TryGetValue(typeof(PlaceableLight), out var plComp)
+                && plComp is PlaceableLight placeable)
+            {
+                placement.Properties["IsPlaced"] = placeable.IsPlaced ? "true" : "false";
+            }
+            if (entity.Components.TryGetValue(typeof(LightSource), out var lsComp)
+                && lsComp is LightSource ls)
+            {
+                placement.Properties["LightIsEnabled"] = ls.IsEnabled ? "true" : "false";
+                placement.Properties["LightIsDynamic"] = ls.IsDynamic ? "true" : "false";
+            }
+            if (entity.Components.TryGetValue(typeof(Activatable), out var actComp)
+                && actComp is Activatable activatable)
+            {
+                placement.Properties["IsActivated"] = activatable.IsActivated ? "true" : "false";
+            }
+            if (entity.Components.TryGetValue(typeof(Inventory), out var invComp)
+                && invComp is Inventory inv)
+            {
+                placement.Properties["InventoryCapacity"] = inv.Capacity.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
 
         private static void ApplyProperties(Entity entity, EntityPlacement placement)
@@ -129,6 +179,71 @@ namespace Aetherium.Server.MultiWorld
                     portal.TargetTag = tt;
                 if (placement.Properties.TryGetValue("Activation", out var act))
                     portal.Activation = act;
+            }
+
+            // Symmetric restoration of mutable component fields captured by ExtractProperties.
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (entity.Components.TryGetValue(typeof(HasHeading), out var headingComp)
+                && headingComp is HasHeading hh
+                && placement.Properties.TryGetValue("Heading", out var hStr)
+                && int.TryParse(hStr, System.Globalization.NumberStyles.Integer, inv, out var heading))
+            {
+                hh.Heading = heading;
+            }
+            if (entity.Components.TryGetValue(typeof(Consumable), out var consComp)
+                && consComp is Consumable cons
+                && placement.Properties.TryGetValue("ConsumableUses", out var usesStr)
+                && int.TryParse(usesStr, System.Globalization.NumberStyles.Integer, inv, out var uses))
+            {
+                cons.Uses = uses;
+            }
+            if (entity.Components.TryGetValue(typeof(Health), out var healthComp)
+                && healthComp is Health health
+                && placement.Properties.TryGetValue("HealthLevel", out var hlStr)
+                && int.TryParse(hlStr, System.Globalization.NumberStyles.Integer, inv, out var hl))
+            {
+                health.Level = hl;
+            }
+            if (entity.Components.TryGetValue(typeof(Lockpick), out var lockComp)
+                && lockComp is Lockpick lockpick
+                && placement.Properties.TryGetValue("LockpickDurability", out var ldStr)
+                && int.TryParse(ldStr, System.Globalization.NumberStyles.Integer, inv, out var ld))
+            {
+                lockpick.Durability = ld;
+            }
+            if (entity.Components.TryGetValue(typeof(ForcesDoor), out var fdComp)
+                && fdComp is ForcesDoor forces
+                && placement.Properties.TryGetValue("ForcesDoorDurability", out var fdStr)
+                && int.TryParse(fdStr, System.Globalization.NumberStyles.Integer, inv, out var fd))
+            {
+                forces.Durability = fd;
+            }
+            if (entity.Components.TryGetValue(typeof(PlaceableLight), out var plComp)
+                && plComp is PlaceableLight placeable
+                && placement.Properties.TryGetValue("IsPlaced", out var ipStr))
+            {
+                placeable.IsPlaced = string.Equals(ipStr, "true", StringComparison.OrdinalIgnoreCase);
+            }
+            if (entity.Components.TryGetValue(typeof(LightSource), out var lsComp)
+                && lsComp is LightSource ls)
+            {
+                if (placement.Properties.TryGetValue("LightIsEnabled", out var leStr))
+                    ls.IsEnabled = string.Equals(leStr, "true", StringComparison.OrdinalIgnoreCase);
+                if (placement.Properties.TryGetValue("LightIsDynamic", out var ldyStr))
+                    ls.IsDynamic = string.Equals(ldyStr, "true", StringComparison.OrdinalIgnoreCase);
+            }
+            if (entity.Components.TryGetValue(typeof(Activatable), out var actComp)
+                && actComp is Activatable activatable
+                && placement.Properties.TryGetValue("IsActivated", out var iaStr))
+            {
+                activatable.IsActivated = string.Equals(iaStr, "true", StringComparison.OrdinalIgnoreCase);
+            }
+            if (entity.Components.TryGetValue(typeof(Inventory), out var invComp)
+                && invComp is Inventory invObj
+                && placement.Properties.TryGetValue("InventoryCapacity", out var icStr)
+                && int.TryParse(icStr, System.Globalization.NumberStyles.Integer, inv, out var ic))
+            {
+                invObj.Capacity = ic;
             }
         }
 

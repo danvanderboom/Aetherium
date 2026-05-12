@@ -66,6 +66,45 @@ namespace Aetherium.Server.MultiWorld
             return _sessionManager;
         }
 
+        // Lazy-resolved snapshot store. Optional so existing test fixtures that don't
+        // register one (and the "memory" default) still work; absence yields a silent
+        // no-op append. Production wiring (Program.cs) provides SqliteWorldSnapshotStore
+        // when ORLEANS_STORAGE=sqlite, MemoryWorldSnapshotStore otherwise.
+        private Aetherium.Server.Persistence.IWorldSnapshotStore? _snapshotStore;
+        private bool _snapshotStoreResolved;
+
+        private Aetherium.Server.Persistence.IWorldSnapshotStore? GetSnapshotStore()
+        {
+            if (!_snapshotStoreResolved)
+            {
+                _snapshotStore = this.ServiceProvider.GetService(
+                    typeof(Aetherium.Server.Persistence.IWorldSnapshotStore))
+                    as Aetherium.Server.Persistence.IWorldSnapshotStore;
+                _snapshotStoreResolved = true;
+            }
+            return _snapshotStore;
+        }
+
+        /// <summary>
+        /// Persists a sequence-stamped delta to the append-only log via
+        /// <see cref="Aetherium.Server.Persistence.IWorldSnapshotStore.AppendMapDeltaAsync"/>. Failures
+        /// are logged but do not stall game logic — see the failure-handling requirement in
+        /// the world-persistence spec.
+        /// </summary>
+        private async Task PersistDeltaAsync(MapDelta delta)
+        {
+            var store = GetSnapshotStore();
+            if (store is null || _mapState.State is null) return;
+            try
+            {
+                await store.AppendMapDeltaAsync(_mapState.State.WorldId, _mapState.State.MapId, delta);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameMapGrain] AppendMapDelta failed seq={delta.Sequence} type={delta.GetType().Name}: {ex.Message}");
+            }
+        }
+
         public GameMapGrain(
             [PersistentState("map", "mapStore")] IPersistentState<MapState> mapState,
             MapGeneratorRegistry generatorRegistry,
@@ -83,17 +122,71 @@ namespace Aetherium.Server.MultiWorld
         {
             if (_mapState.State != null && _mapState.State.Recipe != null && _world == null)
             {
-                // Reactivation after silo restart: rehydrate _world by replaying the
-                // captured recipe. Cheap (milliseconds) and avoids needing real World
-                // serialization in phase 1. Mutation state (doors opened mid-game,
-                // monsters spawned by ticks, etc.) is lost on restart — phase 2 will
-                // address that via real snapshots in MapState.SerializedWorld.
-                _world = RegenerateFromRecipe(_mapState.State.Recipe);
+                // Reactivation after silo restart. Prefer a persisted snapshot when
+                // available — it captures mid-game mutations (doors opened, items moved,
+                // component fields decremented) that recipe regeneration alone cannot.
+                // Fall back to recipe-only regen on first-ever activation, when the
+                // snapshot store isn't wired, or when no snapshot has been captured.
+                _world = await TryHydrateFromSnapshotAsync()
+                    ?? RegenerateFromRecipe(_mapState.State.Recipe);
                 await PartitionIntoRegionsAsync();
                 AttachWorldEventSubscriber();
             }
 
             await base.OnActivateAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Attempts to rebuild <see cref="_world"/> from a persisted snapshot at
+        /// <c>(WorldId, MapId)</c>. Returns null when no snapshot is available so the
+        /// caller can fall back to recipe-only regeneration. When a snapshot is found,
+        /// post-snapshot deltas are replayed in sequence order via <see cref="MapDeltaReplayer"/>,
+        /// and <see cref="_nextSequence"/> is advanced past the highest replayed sequence.
+        /// </summary>
+        private async Task<World?> TryHydrateFromSnapshotAsync()
+        {
+            var store = GetSnapshotStore();
+            if (store is null || _mapState.State is null) return null;
+
+            var regionSnapshot = await store.LoadSnapshotAsync(_mapState.State.WorldId, _mapState.State.MapId);
+            if (regionSnapshot is null || regionSnapshot.SerializedEntities is null || regionSnapshot.SerializedEntities.Length == 0)
+                return null;
+
+            var serializer = ServiceProvider.GetService(typeof(Orleans.Serialization.Serializer))
+                as Orleans.Serialization.Serializer;
+            if (serializer is null) return null;
+
+            // Snapshot blob is a full self-contained WorldSnapshot (recipe + entities).
+            var worldSnapshot = serializer.Deserialize<WorldSnapshot>(regionSnapshot.SerializedEntities);
+
+            var builder = new Aetherium.WorldBuilders.SnapshotWorldBuilder(worldSnapshot, _generatorRegistry);
+            var world = builder.Build();
+
+            // Replay deltas appended after the snapshot's sequence so mid-snapshot mutations
+            // are preserved. Each delta is idempotent; replay order is by Sequence ascending.
+            var postDeltas = await store.GetMapDeltasSinceSequenceAsync(
+                _mapState.State.WorldId, _mapState.State.MapId, regionSnapshot.LastSequence);
+
+            long highestReplayed = regionSnapshot.LastSequence;
+            foreach (var delta in postDeltas)
+            {
+                try
+                {
+                    MapDeltaReplayer.Apply(world, delta);
+                    if (delta.Sequence > highestReplayed) highestReplayed = delta.Sequence;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[GameMapGrain] Delta replay failed seq={delta.Sequence} type={delta.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            // _nextSequence starts at 1 (default). After hydration, advance it past
+            // whatever the snapshot+log covered so future appends don't collide.
+            System.Threading.Interlocked.Exchange(ref _nextSequence, highestReplayed);
+
+            Console.WriteLine($"[GameMapGrain] Hydrated {_mapState.State.MapId} from snapshot at seq={regionSnapshot.LastSequence}, replayed {postDeltas.Length} delta(s), next seq={highestReplayed + 1}");
+            return world;
         }
 
         /// <summary>
@@ -647,6 +740,55 @@ namespace Aetherium.Server.MultiWorld
             return _regions.TryGetValue(regionKey, out var region) ? region : null;
         }
 
+        /// <summary>
+        /// Captures the grain's live <see cref="World"/> into a <see cref="Aetherium.Server.Persistence.RegionStateSnapshot"/>,
+        /// persists it via <see cref="Aetherium.Server.Persistence.IWorldSnapshotStore.SaveSnapshotAsync"/>, and compacts the
+        /// map's delta log up through the captured sequence. Bounded recovery: on the
+        /// next activation, only deltas with <c>Sequence &gt; LastSequence</c> need to be
+        /// replayed atop the snapshot.
+        /// </summary>
+        public async Task<long> ForceSnapshotAsync()
+        {
+            var store = GetSnapshotStore();
+            if (store is null || _world is null || _mapState.State is null || _mapState.State.Recipe is null)
+                return 0;
+
+            // Capture the highest sequence that has been emitted. Increment is the
+            // sequence number ALREADY assigned to the most recent delta; new deltas
+            // get _nextSequence + 1.
+            var capturedSequence = System.Threading.Interlocked.Read(ref _nextSequence);
+
+            var worldSnapshot = WorldSnapshotBuilder.SnapshotOf(
+                _world,
+                _mapState.State.Recipe,
+                _mapState.State.WorldId,
+                _mapState.State.MapId,
+                _mapState.State.Size);
+
+            // Serialize the full WorldSnapshot (recipe + entities) so the persisted snapshot
+            // is self-contained — recovery does not require MapState's recipe to also be
+            // durable. Trades a few extra bytes for operational simplicity (a backup is one row).
+            var serializer = ServiceProvider.GetService(typeof(Orleans.Serialization.Serializer))
+                as Orleans.Serialization.Serializer;
+            byte[]? entityBytes = null;
+            if (serializer is not null)
+                entityBytes = serializer.SerializeToArray(worldSnapshot);
+
+            var regionSnapshot = new Aetherium.Server.Persistence.RegionStateSnapshot
+            {
+                RegionId = _mapState.State.MapId,
+                MapId = _mapState.State.MapId,
+                RegionSize = _regionSize,
+                SavedAt = DateTime.UtcNow,
+                SerializedEntities = entityBytes,
+                LastSequence = capturedSequence,
+            };
+
+            await store.SaveSnapshotAsync(_mapState.State.WorldId, regionSnapshot);
+            await store.CompactMapDeltasAsync(_mapState.State.WorldId, _mapState.State.MapId, capturedSequence);
+            return capturedSequence;
+        }
+
         public async Task SaveMapAsync()
         {
             if (_regions == null || _mapState.State == null)
@@ -801,6 +943,11 @@ namespace Aetherium.Server.MultiWorld
             delta.MapId = _mapState.State.MapId;
             delta.Sequence = System.Threading.Interlocked.Increment(ref _nextSequence);
 
+            // Persist before fan-out: a session that observes a delta must never see one
+            // that was lost on a subsequent restart. Append failures log + proceed so the
+            // live game does not stall on transient persistence errors.
+            await PersistDeltaAsync(delta);
+
             var mgr = GetSessionManager();
             if (mgr is null) return; // not wired (TestingHost path) — no consumers, no problem
 
@@ -825,6 +972,9 @@ namespace Aetherium.Server.MultiWorld
             if (_mapState.State is null) return;
             delta.MapId = _mapState.State.MapId;
             delta.Sequence = System.Threading.Interlocked.Increment(ref _nextSequence);
+
+            // Persist before send: same durability contract as FanOutAsync.
+            await PersistDeltaAsync(delta);
 
             var mgr = GetSessionManager();
             if (mgr is null) return;

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Aetherium.Server.MultiWorld;
 using Aetherium.Server.Persistence;
 
 namespace Aetherium.Test.TestStubs
@@ -11,6 +12,7 @@ namespace Aetherium.Test.TestStubs
     {
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, RegionStateSnapshot>> _worldIdToRegionIdToSnapshot = new();
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, List<RegionDelta>>> _worldIdToRegionIdToDeltas = new();
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, List<MapDelta>>> _worldIdToRegionIdToMapDeltas = new();
 
         public Task SaveSnapshotAsync(string worldId, RegionStateSnapshot snapshot)
         {
@@ -83,6 +85,37 @@ namespace Aetherium.Test.TestStubs
             if (_worldIdToRegionIdToDeltas.TryGetValue(worldId, out var deltas))
             {
                 deltas.TryRemove(regionId, out _);
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task AppendMapDeltaAsync(string worldId, string regionId, MapDelta delta)
+        {
+            var regions = _worldIdToRegionIdToMapDeltas.GetOrAdd(worldId, _ => new());
+            var list = regions.GetOrAdd(regionId, _ => new());
+            lock (list) { list.Add(delta); }
+            return Task.CompletedTask;
+        }
+
+        public Task<MapDelta[]> GetMapDeltasSinceSequenceAsync(string worldId, string regionId, long sinceSequence)
+        {
+            if (_worldIdToRegionIdToMapDeltas.TryGetValue(worldId, out var regions) &&
+                regions.TryGetValue(regionId, out var list))
+            {
+                lock (list)
+                {
+                    return Task.FromResult(list.Where(d => d.Sequence > sinceSequence).OrderBy(d => d.Sequence).ToArray());
+                }
+            }
+            return Task.FromResult(Array.Empty<MapDelta>());
+        }
+
+        public Task CompactMapDeltasAsync(string worldId, string regionId, long throughSequence)
+        {
+            if (_worldIdToRegionIdToMapDeltas.TryGetValue(worldId, out var regions) &&
+                regions.TryGetValue(regionId, out var list))
+            {
+                lock (list) { list.RemoveAll(d => d.Sequence <= throughSequence); }
             }
             return Task.CompletedTask;
         }

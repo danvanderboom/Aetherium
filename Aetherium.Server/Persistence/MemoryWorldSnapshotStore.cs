@@ -3,17 +3,18 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Aetherium.Server.MultiWorld;
 
 namespace Aetherium.Server.Persistence
 {
     /// <summary>
-    /// In-memory implementation of IWorldSnapshotStore (for development).
-    /// In production, this would be backed by Azure Blob Storage or similar.
+    /// In-memory implementation of IWorldSnapshotStore (for development and tests).
     /// </summary>
     public class MemoryWorldSnapshotStore : IWorldSnapshotStore
     {
         private readonly ConcurrentDictionary<string, RegionStateSnapshot> _snapshots = new();
         private readonly ConcurrentDictionary<string, List<RegionDelta>> _deltaLogs = new();
+        private readonly ConcurrentDictionary<string, List<MapDelta>> _mapDeltaLogs = new();
 
         public Task SaveSnapshotAsync(string worldId, RegionStateSnapshot snapshot)
         {
@@ -122,6 +123,43 @@ namespace Aetherium.Server.Persistence
             }
             
             return snapshot;
+        }
+
+        public Task AppendMapDeltaAsync(string worldId, string regionId, MapDelta delta)
+        {
+            var key = GetDeltaLogKey(worldId, regionId);
+            var log = _mapDeltaLogs.GetOrAdd(key, _ => new List<MapDelta>());
+            lock (log)
+            {
+                log.Add(delta);
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task<MapDelta[]> GetMapDeltasSinceSequenceAsync(string worldId, string regionId, long sinceSequence)
+        {
+            var key = GetDeltaLogKey(worldId, regionId);
+            if (!_mapDeltaLogs.TryGetValue(key, out var log))
+                return Task.FromResult(Array.Empty<MapDelta>());
+
+            MapDelta[] deltas;
+            lock (log)
+            {
+                deltas = log.Where(d => d.Sequence > sinceSequence).OrderBy(d => d.Sequence).ToArray();
+            }
+            return Task.FromResult(deltas);
+        }
+
+        public Task CompactMapDeltasAsync(string worldId, string regionId, long throughSequence)
+        {
+            var key = GetDeltaLogKey(worldId, regionId);
+            if (!_mapDeltaLogs.TryGetValue(key, out var log))
+                return Task.CompletedTask;
+            lock (log)
+            {
+                log.RemoveAll(d => d.Sequence <= throughSequence);
+            }
+            return Task.CompletedTask;
         }
 
         private static string GetSnapshotKey(string worldId, string regionId) => $"{worldId}:snapshot:{regionId}";

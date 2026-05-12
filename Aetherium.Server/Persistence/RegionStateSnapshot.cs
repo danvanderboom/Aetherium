@@ -48,6 +48,13 @@ namespace Aetherium.Server.Persistence
         /// Season at save time.
         /// </summary>
         [Id(13)] public string? Season { get; set; }
+
+        /// <summary>
+        /// Highest grain-emitted <c>MapDelta.Sequence</c> incorporated into this snapshot.
+        /// On cold start, the grain loads the snapshot and replays only deltas with
+        /// <c>Sequence &gt; LastSequence</c>. Zero on first snapshot or pre-versioned data.
+        /// </summary>
+        [Id(14)] public long LastSequence { get; set; }
     }
 
     /// <summary>

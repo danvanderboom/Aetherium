@@ -104,6 +104,15 @@ namespace Aetherium.Server.MultiWorld
         Task SaveMapAsync();
 
         /// <summary>
+        /// Captures the grain's current world state into a <see cref="Aetherium.Server.Persistence.RegionStateSnapshot"/>
+        /// keyed by <c>(MapState.WorldId, MapState.MapId)</c>, persists it via
+        /// <see cref="Aetherium.Server.Persistence.IWorldSnapshotStore.SaveSnapshotAsync"/>, and compacts the delta log up to
+        /// the captured sequence so subsequent cold starts replay a bounded tail. Returns
+        /// the sequence the snapshot covers (zero when no snapshot store is wired).
+        /// </summary>
+        Task<long> ForceSnapshotAsync();
+
+        /// <summary>
         /// Loads map regions from persistent storage.
         /// </summary>
         Task<bool> LoadMapAsync();

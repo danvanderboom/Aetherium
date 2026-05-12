@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -122,7 +123,23 @@ namespace Aetherium.Server
             
             // Add simulation services
             builder.Services.AddSingleton<WorldClock>();
-            builder.Services.AddSingleton<IWorldSnapshotStore, MemoryWorldSnapshotStore>();
+
+            // Persistent world snapshot store: SQLite when ORLEANS_STORAGE=sqlite
+            // (or AETHERIUM_DATA_DIR is set and ORLEANS_STORAGE is unset), else in-memory.
+            var (storageMode, sqliteConnectionString) = ResolveStorageConfiguration();
+            if (storageMode == "sqlite")
+            {
+                builder.Services.AddSingleton<IWorldSnapshotStore>(sp =>
+                {
+                    var serializer = sp.GetRequiredService<Orleans.Serialization.Serializer>();
+                    var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SqliteWorldSnapshotStore>>();
+                    return new SqliteWorldSnapshotStore(sqliteConnectionString!, serializer, logger);
+                });
+            }
+            else
+            {
+                builder.Services.AddSingleton<IWorldSnapshotStore, MemoryWorldSnapshotStore>();
+            }
             builder.Services.AddSingleton<SeasonManager>();
             builder.Services.AddSingleton<WeatherSystem>();
             builder.Services.AddSingleton<SpawnManager>();
@@ -253,46 +270,33 @@ namespace Aetherium.Server
                 {
                     siloBuilder.UseLocalhostClustering();
                     
-                    // Configure grain storage
-                    var storageType = Environment.GetEnvironmentVariable("ORLEANS_STORAGE") ?? "memory";
-                    
-                    if (storageType == "memory")
+                    // Configure grain storage. Resolution centralized in ResolveStorageConfiguration
+                    // so the snapshot-store DI binding (above) and the grain-storage providers stay in sync.
+                    if (storageMode == "memory")
                     {
                         Console.WriteLine("Using in-memory grain storage (development mode)");
                         siloBuilder.AddMemoryGrainStorage("narrativeStore");
                         siloBuilder.AddMemoryGrainStorage("worldStore");
                         siloBuilder.AddMemoryGrainStorage("mapStore");
                     }
-                    
+                    else if (storageMode == "sqlite")
+                    {
+                        Console.WriteLine($"Using SQLite grain storage at {sqliteConnectionString}");
+                        foreach (var storeName in new[] { "narrativeStore", "worldStore", "mapStore" })
+                        {
+                            var capturedName = storeName;
+                            var capturedConnString = sqliteConnectionString!;
+                            siloBuilder.Services.AddKeyedSingleton<Orleans.Storage.IGrainStorage>(capturedName, (sp, _) =>
+                            {
+                                var serializer = sp.GetRequiredService<Orleans.Serialization.Serializer>();
+                                var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SqliteGrainStorage>>();
+                                return new SqliteGrainStorage(capturedName, capturedConnString, serializer, logger);
+                            });
+                        }
+                    }
+
                     // Configure Orleans Streams for world events
                     siloBuilder.AddMemoryStreams("Default");
-                    // Azure Storage support - requires Microsoft.Orleans.Persistence.AzureStorage package
-                    // Uncomment when package is added:
-                    /*
-                    else if (storageType == "azure")
-                    {
-                        // Azure Table Storage configuration (for production)
-                        var connectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING");
-                        if (string.IsNullOrEmpty(connectionString))
-                        {
-                            throw new InvalidOperationException("AZURE_STORAGE_CONNECTION_STRING is required for Azure storage");
-                        }
-                        
-                        Console.WriteLine("Using Azure Table Storage for grain persistence");
-                        siloBuilder.AddAzureTableGrainStorage("narrativeStore", options =>
-                        {
-                            options.ConfigureTableServiceClient(connectionString);
-                        });
-                        siloBuilder.AddAzureTableGrainStorage("worldStore", options =>
-                        {
-                            options.ConfigureTableServiceClient(connectionString);
-                        });
-                        siloBuilder.AddAzureTableGrainStorage("mapStore", options =>
-                        {
-                            options.ConfigureTableServiceClient(connectionString);
-                        });
-                    }
-                    */
                     
                     // Ensure grains can resolve the same singletons from host
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<PromptRegistry>());
@@ -432,6 +436,31 @@ namespace Aetherium.Server
             Console.WriteLine("Agent dashboard: http://localhost:5000/dashboard");
 
             await app.RunAsync();
+        }
+
+        /// <summary>
+        /// Decides storage mode ("memory" or "sqlite") from environment variables and returns
+        /// the resolved SQLite connection string when applicable. Defaults to "memory" unless
+        /// <c>ORLEANS_STORAGE=sqlite</c> is set, or <c>AETHERIUM_DATA_DIR</c> is set and
+        /// <c>ORLEANS_STORAGE</c> is unset. Throws on unknown values.
+        /// </summary>
+        private static (string mode, string? connectionString) ResolveStorageConfiguration()
+        {
+            var dataDir = Environment.GetEnvironmentVariable("AETHERIUM_DATA_DIR");
+            var defaultStorage = string.IsNullOrEmpty(dataDir) ? "memory" : "sqlite";
+            var storageType = Environment.GetEnvironmentVariable("ORLEANS_STORAGE") ?? defaultStorage;
+
+            if (storageType == "memory") return ("memory", null);
+            if (storageType == "sqlite")
+            {
+                var resolvedDir = string.IsNullOrEmpty(dataDir)
+                    ? Path.Combine(AppContext.BaseDirectory, "aetherium-data")
+                    : dataDir;
+                var dbPath = Path.Combine(resolvedDir, "aetherium.db");
+                return ("sqlite", $"Data Source={dbPath};Cache=Shared");
+            }
+            throw new InvalidOperationException(
+                $"Unknown ORLEANS_STORAGE value: {storageType}. Expected 'memory' or 'sqlite'.");
         }
     }
 }
