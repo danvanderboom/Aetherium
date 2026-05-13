@@ -12,10 +12,10 @@ namespace Aetherium.Unity.Rendering
     /// </summary>
     public class TilemapRenderer2D : MonoBehaviour
     {
-        [SerializeField] private Tilemap tilemap;
-        [SerializeField] private TileBase defaultTile;
+        [SerializeField] private Tilemap? tilemap;
+        [SerializeField] private TileBase? defaultTile;
         private Dictionary<string, TileBase> tileCache = new Dictionary<string, TileBase>();
-        private TileBase fallbackTile;
+        private TileBase? fallbackTile;
 
         private int currentZLevel = 0;
         private PerceptionLite? currentPerception;

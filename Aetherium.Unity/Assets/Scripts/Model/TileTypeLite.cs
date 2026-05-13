@@ -16,7 +16,7 @@ namespace Aetherium.Unity.Model
         {
         }
 
-        public TileTypeLite(string name, Dictionary<string, string> settings)
+        public TileTypeLite(string name, Dictionary<string, string>? settings)
         {
             Name = name;
             Settings = settings ?? new Dictionary<string, string>();

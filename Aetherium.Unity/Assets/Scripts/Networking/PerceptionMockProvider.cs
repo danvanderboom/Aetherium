@@ -18,7 +18,7 @@ namespace Aetherium.Unity.Networking
     {
         private List<PerceptionLite> frames = new List<PerceptionLite>();
         private int currentFrameIndex = 0;
-        private string framesPath;
+        private string framesPath = string.Empty;
 
         public event Action<PerceptionLite>? PerceptionUpdated;
 
