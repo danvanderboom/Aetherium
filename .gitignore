@@ -77,6 +77,7 @@ StyleCopReport.xml
 *.pgc
 *.pgd
 *.rsp
+!Aetherium.Unity/**/*.rsp
 *.sbr
 *.tlb
 *.tli

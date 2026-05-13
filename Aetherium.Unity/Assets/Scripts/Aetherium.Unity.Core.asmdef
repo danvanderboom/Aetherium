@@ -1,7 +1,9 @@
 {
     "name": "Aetherium.Unity.Core",
     "rootNamespace": "Aetherium.Unity",
-    "references": [],
+    "references": [
+        "Unity.InputSystem"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
