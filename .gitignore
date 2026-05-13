@@ -186,6 +186,10 @@ PublishScripts/
 **/[Pp]ackages/*
 # except build/, which is used as an MSBuild target.
 !**/[Pp]ackages/build/
+# Unity package manifest + lockfile are first-class project state and must be tracked
+# despite the NuGet rule above swallowing the Aetherium.Unity/Packages/ directory.
+!Aetherium.Unity/Packages/manifest.json
+!Aetherium.Unity/Packages/packages-lock.json
 # Uncomment if necessary however generally it will be regenerated when needed
 #!**/[Pp]ackages/repositories.config
 # NuGet v3's project.json files produces more ignorable files
