@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Aetherium.Unity.Model;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace Aetherium.Unity.Networking
@@ -52,7 +55,9 @@ namespace Aetherium.Unity.Networking
                 try
                 {
                     var json = File.ReadAllText(jsonFile);
-                    var perception = JsonUtility.FromJson<PerceptionLite>(json);
+                    // Unity's built-in JsonUtility cannot deserialize properties or
+                    // Dictionary<,>, both of which the *Lite DTOs rely on. Use Newtonsoft.
+                    var perception = JsonConvert.DeserializeObject<PerceptionLite>(json);
                     if (perception != null)
                     {
                         frames.Add(perception);
@@ -87,22 +92,23 @@ namespace Aetherium.Unity.Networking
             var current = GetCurrent();
             if (current != null)
             {
-                PerceptionUpdated?.Invoke(current);
+                PerceptionUpdated?.Invoke(ClonePerception(current));
             }
-        }
-
-        /// <summary>
-        /// Updates local mock state based on a tool execution (for offline mode).
-        /// </summary>
-        public void UpdateMockState(string toolId, Dictionary<string, object> args)
-        {
-            ExecuteToolMock(toolId, args);
         }
 
         /// <summary>
         /// Executes a tool in mock mode and returns a result.
         /// </summary>
-        public ToolExecutionResultDto ExecuteToolMock(string toolId, Dictionary<string, object> args)
+        public Task<ToolExecutionResultDto> ExecuteToolAsync(
+            string toolId,
+            Dictionary<string, object> args,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(ExecuteToolMockSync(toolId, args));
+        }
+
+        private ToolExecutionResultDto ExecuteToolMockSync(string toolId, Dictionary<string, object> args)
         {
             if (frames.Count == 0)
                 return new ToolExecutionResultDto { Success = false, Message = "No frames loaded" };
@@ -111,96 +117,130 @@ namespace Aetherium.Unity.Networking
             if (current == null)
                 return new ToolExecutionResultDto { Success = false, Message = "No current frame" };
 
-            // Simple mock state mutations for offline testing
-            bool success = true;
-            string message = $"Executed {toolId}";
+            bool handlerSucceeded;
+            string message;
 
             switch (toolId.ToLower())
             {
                 case "move":
-                    HandleMove(current, args);
+                    handlerSucceeded = HandleMove(current, args);
+                    message = handlerSucceeded ? "Executed move" : "Move: invalid or missing 'direction'";
                     break;
                 case "rotate":
-                    HandleRotate(current, args);
+                    handlerSucceeded = HandleRotate(current, args);
+                    message = handlerSucceeded ? "Executed rotate" : "Rotate: invalid or missing 'clockwise'";
                     break;
                 case "changelevel":
-                    HandleChangeLevel(current, args);
+                    handlerSucceeded = HandleChangeLevel(current, args);
+                    message = handlerSucceeded ? "Executed changelevel" : "ChangeLevel: invalid or missing 'up'";
                     break;
                 default:
-                    success = false;
+                    handlerSucceeded = false;
                     message = $"Unknown tool: {toolId}";
                     break;
             }
 
-            PerceptionUpdated?.Invoke(current);
+            // Clone before raising so subscribers can safely snapshot the value;
+            // the mock continues to mutate `current` in place across calls.
+            if (handlerSucceeded)
+            {
+                PerceptionUpdated?.Invoke(ClonePerception(current));
+            }
 
             return new ToolExecutionResultDto
             {
-                Success = success,
+                Success = handlerSucceeded,
                 Message = message
             };
         }
 
-        private void HandleMove(PerceptionLite perception, Dictionary<string, object> args)
+        private bool HandleMove(PerceptionLite perception, Dictionary<string, object> args)
         {
-            if (args.TryGetValue("direction", out var directionObj))
-            {
-                var direction = directionObj.ToString()?.ToLower();
-                var loc = perception.PlayerLocation;
+            if (!args.TryGetValue("direction", out var directionObj))
+                return false;
 
-                switch (direction)
-                {
-                    case "forward":
-                    case "north":
-                        loc.Y += 1;
-                        break;
-                    case "backward":
-                    case "south":
-                        loc.Y -= 1;
-                        break;
-                    case "right":
-                    case "east":
-                        loc.X += 1;
-                        break;
-                    case "left":
-                    case "west":
-                        loc.X -= 1;
-                        break;
-                }
+            var direction = directionObj?.ToString()?.ToLower();
+            if (string.IsNullOrEmpty(direction))
+                return false;
+
+            // Resolve heading-relative names ("forward"/"backward"/"left"/"right")
+            // to absolute cardinals based on PlayerHeading. Absolute names pass through.
+            var absolute = ResolveDirection(direction, perception.PlayerHeading);
+            if (absolute == null)
+                return false;
+
+            var loc = perception.PlayerLocation;
+            switch (absolute)
+            {
+                case WorldDirectionLite.North: loc.Y += 1; return true;
+                case WorldDirectionLite.South: loc.Y -= 1; return true;
+                case WorldDirectionLite.East:  loc.X += 1; return true;
+                case WorldDirectionLite.West:  loc.X -= 1; return true;
+                default: return false;
             }
         }
 
-        private void HandleRotate(PerceptionLite perception, Dictionary<string, object> args)
+        private bool HandleRotate(PerceptionLite perception, Dictionary<string, object> args)
         {
-            if (args.TryGetValue("clockwise", out var clockwiseObj) && clockwiseObj is bool clockwise)
-            {
-                if (clockwise)
-                {
-                    perception.HeadingDegrees = (perception.HeadingDegrees + 90) % 360;
-                }
-                else
-                {
-                    perception.HeadingDegrees = (perception.HeadingDegrees - 90 + 360) % 360;
-                }
+            if (!args.TryGetValue("clockwise", out var clockwiseObj) || clockwiseObj is not bool clockwise)
+                return false;
 
-                // Update enum heading
-                perception.PlayerHeading = DegreesToDirection(perception.HeadingDegrees);
+            perception.HeadingDegrees = clockwise
+                ? (perception.HeadingDegrees + 90) % 360
+                : (perception.HeadingDegrees - 90 + 360) % 360;
+            perception.PlayerHeading = DegreesToDirection(perception.HeadingDegrees);
+            return true;
+        }
+
+        private bool HandleChangeLevel(PerceptionLite perception, Dictionary<string, object> args)
+        {
+            if (!args.TryGetValue("up", out var upObj) || upObj is not bool up)
+                return false;
+
+            perception.PlayerLocation.Z += up ? 1 : -1;
+            return true;
+        }
+
+        private static WorldDirectionLite? ResolveDirection(string direction, WorldDirectionLite heading)
+        {
+            switch (direction)
+            {
+                case "north": return WorldDirectionLite.North;
+                case "south": return WorldDirectionLite.South;
+                case "east":  return WorldDirectionLite.East;
+                case "west":  return WorldDirectionLite.West;
+                case "forward":  return heading;
+                case "backward": return Opposite(heading);
+                case "right":    return RotateCW(heading);
+                case "left":     return RotateCW(Opposite(heading));
+                default: return null;
             }
         }
 
-        private void HandleChangeLevel(PerceptionLite perception, Dictionary<string, object> args)
+        private static WorldDirectionLite Opposite(WorldDirectionLite d) => d switch
         {
-            if (args.TryGetValue("up", out var upObj) && upObj is bool up)
-            {
-                if (up)
-                {
-                    perception.PlayerLocation.Z += 1;
-                }
-                else
-                {
-                    perception.PlayerLocation.Z -= 1;
-                }
-            }
+            WorldDirectionLite.North => WorldDirectionLite.South,
+            WorldDirectionLite.South => WorldDirectionLite.North,
+            WorldDirectionLite.East  => WorldDirectionLite.West,
+            WorldDirectionLite.West  => WorldDirectionLite.East,
+            _ => d,
+        };
+
+        private static WorldDirectionLite RotateCW(WorldDirectionLite d) => d switch
+        {
+            WorldDirectionLite.North => WorldDirectionLite.East,
+            WorldDirectionLite.East  => WorldDirectionLite.South,
+            WorldDirectionLite.South => WorldDirectionLite.West,
+            WorldDirectionLite.West  => WorldDirectionLite.North,
+            _ => d,
+        };
+
+        private static PerceptionLite ClonePerception(PerceptionLite source)
+        {
+            // Round-trip via JSON. The mock is not in a hot path and this guarantees
+            // a deep copy without hand-maintaining a Clone() on every Lite type.
+            var json = JsonConvert.SerializeObject(source);
+            return JsonConvert.DeserializeObject<PerceptionLite>(json) ?? new PerceptionLite();
         }
 
         private WorldDirectionLite DegreesToDirection(int degrees)
