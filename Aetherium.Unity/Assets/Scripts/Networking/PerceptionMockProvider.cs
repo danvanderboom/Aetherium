@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Aetherium.Unity.Model;
@@ -39,8 +40,10 @@ namespace Aetherium.Unity.Networking
                 return;
             }
 
+            // Natural sort so `frame_10.json` follows `frame_9.json` instead of
+            // sorting between `frame_1.json` and `frame_2.json` lexically.
             var jsonFiles = Directory.GetFiles(framesPath, "*.json")
-                .OrderBy(f => f)
+                .OrderBy(NaturalSortKey, StringComparer.Ordinal)
                 .ToArray();
 
             if (jsonFiles.Length == 0)
@@ -241,6 +244,13 @@ namespace Aetherium.Unity.Networking
             // a deep copy without hand-maintaining a Clone() on every Lite type.
             var json = JsonConvert.SerializeObject(source);
             return JsonConvert.DeserializeObject<PerceptionLite>(json) ?? new PerceptionLite();
+        }
+
+        private static string NaturalSortKey(string path)
+        {
+            // Zero-pad every numeric run to 10 digits so lexical compare matches
+            // numeric compare for any sane filename length.
+            return Regex.Replace(path, "[0-9]+", m => m.Value.PadLeft(10, '0'));
         }
 
         private WorldDirectionLite DegreesToDirection(int degrees)

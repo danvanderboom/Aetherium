@@ -18,6 +18,12 @@ namespace Aetherium.Unity.Rendering
 
         private PerceptionLite? currentPerception;
 
+        // Cached Z-range across currentPerception.Visuals so CycleZLevel doesn't
+        // re-scan the whole dictionary on every input press.
+        private int cachedMinZ;
+        private int cachedMaxZ;
+        private bool hasZRange;
+
         public Text? HudText => hudText;
 
         private void Awake()
@@ -63,6 +69,7 @@ namespace Aetherium.Unity.Rendering
         private void OnPerceptionUpdated(PerceptionLite perception)
         {
             currentPerception = perception;
+            RecomputeZRange(perception);
 
             // Update tilemap renderer
             if (tilemapRenderer != null)
@@ -115,29 +122,16 @@ namespace Aetherium.Unity.Rendering
         /// </summary>
         public void CycleZLevel(bool up)
         {
-            if (currentPerception == null)
-                return;
-
-            // Find min/max Z levels in perception
-            int minZ = int.MaxValue;
-            int maxZ = int.MinValue;
-
-            foreach (var visual in currentPerception.Visuals.Values)
-            {
-                if (visual.Location.Z < minZ) minZ = visual.Location.Z;
-                if (visual.Location.Z > maxZ) maxZ = visual.Location.Z;
-            }
-
-            if (minZ == int.MaxValue)
+            if (currentPerception == null || !hasZRange)
                 return;
 
             if (up)
             {
-                currentZLevel = (currentZLevel >= maxZ) ? minZ : currentZLevel + 1;
+                currentZLevel = (currentZLevel >= cachedMaxZ) ? cachedMinZ : currentZLevel + 1;
             }
             else
             {
-                currentZLevel = (currentZLevel <= minZ) ? maxZ : currentZLevel - 1;
+                currentZLevel = (currentZLevel <= cachedMinZ) ? cachedMaxZ : currentZLevel - 1;
             }
 
             // Update renderer
@@ -157,6 +151,24 @@ namespace Aetherium.Unity.Rendering
         /// Gets the current Z-level.
         /// </summary>
         public int GetCurrentZLevel() => currentZLevel;
+
+        private void RecomputeZRange(PerceptionLite perception)
+        {
+            int minZ = int.MaxValue;
+            int maxZ = int.MinValue;
+            foreach (var visual in perception.Visuals.Values)
+            {
+                if (visual.Location.Z < minZ) minZ = visual.Location.Z;
+                if (visual.Location.Z > maxZ) maxZ = visual.Location.Z;
+            }
+
+            hasZRange = minZ != int.MaxValue;
+            if (hasZRange)
+            {
+                cachedMinZ = minZ;
+                cachedMaxZ = maxZ;
+            }
+        }
     }
 }
 

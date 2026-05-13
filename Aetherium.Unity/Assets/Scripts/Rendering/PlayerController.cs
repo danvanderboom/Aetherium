@@ -82,10 +82,9 @@ namespace Aetherium.Unity.Rendering
 
         private void UpdateRotation(int headingDegrees)
         {
-            // Rotate sprite to face heading direction
-            // Unity's 2D typically uses 0 degrees as right, so adjust for game's North-up convention
-            float rotationZ = (headingDegrees - 90) % 360; // Convert North (0) to Up (-90)
-            transform.rotation = Quaternion.Euler(0, 0, -rotationZ);
+            // Game convention: 0° = North (up). Unity 2D convention: 0° = right (+X axis).
+            // North-up means the sprite's "forward" should point at +Y, which is +90° in Unity.
+            transform.rotation = Quaternion.Euler(0, 0, 90f - headingDegrees);
         }
 
         // Input System handlers
@@ -298,18 +297,19 @@ namespace Aetherium.Unity.Rendering
             hudText.text = "Select Option:\n" + string.Join("\n", optionTexts);
         }
 
+        private const float MoveDeadzone = 0.5f;
+
         private string? Vector2ToDirection(Vector2 input)
         {
-            // Threshold to avoid diagonal movement
+            // Single deadzone applied to the dominant axis so a near-centered
+            // stick (e.g. (0.05, 0.0)) doesn't register as "east".
+            if (input.magnitude < MoveDeadzone)
+                return null;
+
             if (Mathf.Abs(input.x) > Mathf.Abs(input.y))
-            {
-                return input.x > 0 ? "east" : "west";
-            }
-            else if (Mathf.Abs(input.y) > 0.1f)
-            {
-                return input.y > 0 ? "north" : "south";
-            }
-            return null;
+                return input.x > 0f ? "east" : "west";
+
+            return input.y > 0f ? "north" : "south";
         }
     }
 }
