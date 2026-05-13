@@ -1,3 +1,4 @@
+#nullable enable
 namespace Aetherium.Unity.Model
 {
     /// <summary>

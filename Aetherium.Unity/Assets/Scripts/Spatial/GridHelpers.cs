@@ -1,3 +1,4 @@
+#nullable enable
 using Aetherium.Unity.Model;
 using UnityEngine;
 

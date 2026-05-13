@@ -1,4 +1,5 @@
 #if USE_SIGNALR
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Threading;
