@@ -17,8 +17,8 @@ namespace Aetherium.Unity.Tests
             // Arrange
             yield return SceneManager.LoadSceneAsync("Main");
 
-            var playerController = Object.FindObjectOfType<PlayerController>();
-            var gameClientFacade = Object.FindObjectOfType<GameClientFacade>();
+            var playerController = Object.FindAnyObjectByType<PlayerController>();
+            var gameClientFacade = Object.FindAnyObjectByType<GameClientFacade>();
             
             if (playerController == null || gameClientFacade == null)
             {

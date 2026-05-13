@@ -23,23 +23,22 @@ namespace Aetherium.Unity.Rendering
         private bool isMoving = false;
 
         // Option selection state
-        private bool isChoosingOption = false;
+        public bool IsChoosingOption { get; private set; }
         private string? pendingToolId;
         private Dictionary<string, object>? pendingArgsBase;
         private List<UsageOptionDto> options = new List<UsageOptionDto>();
         private int selectedOptionIndex = 0;
-        private string? originalHudText;
 
         private void Awake()
         {
             if (gameClientFacade == null)
             {
-                gameClientFacade = FindObjectOfType<GameClientFacade>();
+                gameClientFacade = FindAnyObjectByType<GameClientFacade>();
             }
 
             if (gameManager == null)
             {
-                gameManager = FindObjectOfType<GameManager>();
+                gameManager = FindAnyObjectByType<GameManager>();
             }
 
             // Try to get HUD text from GameManager if not assigned
@@ -92,7 +91,7 @@ namespace Aetherium.Unity.Rendering
         // Input System handlers
         public void OnMove(InputAction.CallbackContext context)
         {
-            if (!context.performed || gameClientFacade == null || isChoosingOption)
+            if (!context.performed || gameClientFacade == null || IsChoosingOption)
                 return;
 
             var moveInput = context.ReadValue<Vector2>();
@@ -111,7 +110,7 @@ namespace Aetherium.Unity.Rendering
 
         public void OnRotate(InputAction.CallbackContext context)
         {
-            if (!context.performed || gameClientFacade == null || isChoosingOption)
+            if (!context.performed || gameClientFacade == null || IsChoosingOption)
                 return;
 
             // Read as float axis: negative = counter-clockwise, positive = clockwise
@@ -130,7 +129,7 @@ namespace Aetherium.Unity.Rendering
 
         public void OnChangeLevel(InputAction.CallbackContext context)
         {
-            if (!context.performed || gameClientFacade == null || isChoosingOption)
+            if (!context.performed || gameClientFacade == null || IsChoosingOption)
                 return;
 
             // Read as float axis: negative = down, positive = up
@@ -152,27 +151,32 @@ namespace Aetherium.Unity.Rendering
             if (!context.performed || gameClientFacade == null)
                 return;
 
-            if (isChoosingOption)
+            if (IsChoosingOption)
             {
                 // Already in option selection mode, use OptionConfirm instead
                 return;
             }
 
-            // For now, execute a simple "use" tool (can be extended later for context use)
-            // This is a placeholder - in a real implementation, this would determine what to use based on context
-            var args = new Dictionary<string, object>();
-            var result = await gameClientFacade.ExecuteToolAsync("use", args);
-
-            // Check if result contains options (multi-use tool)
-            if (result.Success && result.Data != null && result.Data.TryGetValue("options", out var optionsObj))
+            try
             {
-                EnterOptionSelectionMode("use", args, optionsObj);
+                var args = new Dictionary<string, object>();
+                var result = await gameClientFacade.ExecuteToolAsync("use", args);
+
+                if (result.Success && result.Data != null && result.Data.TryGetValue("options", out var optionsObj))
+                {
+                    EnterOptionSelectionMode("use", args, optionsObj);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                // async void: a thrown exception would tear down the player loop.
+                Debug.LogException(ex);
             }
         }
 
         public void OnOptionNavUp(InputAction.CallbackContext context)
         {
-            if (!isChoosingOption || !context.performed)
+            if (!IsChoosingOption || !context.performed)
                 return;
 
             selectedOptionIndex = (selectedOptionIndex - 1 + options.Count) % options.Count;
@@ -181,7 +185,7 @@ namespace Aetherium.Unity.Rendering
 
         public void OnOptionNavDown(InputAction.CallbackContext context)
         {
-            if (!isChoosingOption || !context.performed)
+            if (!IsChoosingOption || !context.performed)
                 return;
 
             selectedOptionIndex = (selectedOptionIndex + 1) % options.Count;
@@ -190,7 +194,7 @@ namespace Aetherium.Unity.Rendering
 
         public async void OnOptionConfirm(InputAction.CallbackContext context)
         {
-            if (!isChoosingOption || !context.performed || gameClientFacade == null || options.Count == 0)
+            if (!IsChoosingOption || !context.performed || gameClientFacade == null || options.Count == 0)
                 return;
 
             if (pendingToolId == null || pendingArgsBase == null)
@@ -199,29 +203,40 @@ namespace Aetherium.Unity.Rendering
                 return;
             }
 
-            // Re-execute tool with selected usageId
+            // Capture state before we await — pendingToolId/pendingArgsBase may be cleared
+            // if option mode is exited while we're suspended.
+            var toolId = pendingToolId;
+            var argsBase = pendingArgsBase;
             var selectedOption = options[selectedOptionIndex];
-            var args = new Dictionary<string, object>(pendingArgsBase)
+            var args = new Dictionary<string, object>(argsBase)
             {
                 ["usageId"] = selectedOption.UsageId
             };
 
-            var result = await gameClientFacade.ExecuteToolAsync(pendingToolId, args);
-            
-            // If result has options again (shouldn't happen, but handle it), stay in selection mode
-            if (result.Success && result.Data != null && result.Data.TryGetValue("options", out var optionsObj))
+            try
             {
-                EnterOptionSelectionMode(pendingToolId, pendingArgsBase, optionsObj);
+                var result = await gameClientFacade.ExecuteToolAsync(toolId, args);
+
+                if (result.Success && result.Data != null && result.Data.TryGetValue("options", out var optionsObj))
+                {
+                    EnterOptionSelectionMode(toolId, argsBase, optionsObj);
+                }
+                else
+                {
+                    ExitOptionSelectionMode();
+                }
             }
-            else
+            catch (System.Exception ex)
             {
+                // async void: a thrown exception would tear down the player loop.
+                Debug.LogException(ex);
                 ExitOptionSelectionMode();
             }
         }
 
         public void OnOptionCancel(InputAction.CallbackContext context)
         {
-            if (!isChoosingOption || !context.performed)
+            if (!IsChoosingOption || !context.performed)
                 return;
 
             ExitOptionSelectionMode();
@@ -229,7 +244,7 @@ namespace Aetherium.Unity.Rendering
 
         private void EnterOptionSelectionMode(string toolId, Dictionary<string, object> argsBase, object optionsObj)
         {
-            isChoosingOption = true;
+            IsChoosingOption = true;
             pendingToolId = toolId;
             pendingArgsBase = new Dictionary<string, object>(argsBase);
 
@@ -257,34 +272,19 @@ namespace Aetherium.Unity.Rendering
 
         private void ExitOptionSelectionMode()
         {
-            isChoosingOption = false;
+            IsChoosingOption = false;
             pendingToolId = null;
             pendingArgsBase = null;
             options.Clear();
             selectedOptionIndex = 0;
 
-            // Restore original HUD text
-            if (hudText != null && originalHudText != null)
-            {
-                hudText.text = originalHudText;
-                originalHudText = null;
-            }
-            else if (gameManager != null)
-            {
-                // GameManager will update HUD in next perception update
-            }
+            gameManager?.RefreshHUD();
         }
 
         private void UpdateOptionsDisplay()
         {
             if (hudText == null)
                 return;
-
-            // Save original HUD text if not already saved
-            if (originalHudText == null)
-            {
-                originalHudText = hudText.text;
-            }
 
             // Display options with selection indicator
             var optionTexts = new List<string>();

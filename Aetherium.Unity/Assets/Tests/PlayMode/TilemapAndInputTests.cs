@@ -28,10 +28,10 @@ namespace Aetherium.Unity.Tests
             // Arrange
             yield return SceneManager.LoadSceneAsync("Main");
 
-            var tilemapRenderer = Object.FindObjectOfType<TilemapRenderer2D>();
+            var tilemapRenderer = Object.FindAnyObjectByType<TilemapRenderer2D>();
             Assert.IsNotNull(tilemapRenderer, "TilemapRenderer2D should exist in scene");
 
-            var gameClientFacade = Object.FindObjectOfType<GameClientFacade>();
+            var gameClientFacade = Object.FindAnyObjectByType<GameClientFacade>();
             Assert.IsNotNull(gameClientFacade, "GameClientFacade should exist in scene");
 
             // Wait for perception to load
@@ -61,14 +61,14 @@ namespace Aetherium.Unity.Tests
             // Arrange
             yield return SceneManager.LoadSceneAsync("Main");
 
-            var playerController = Object.FindObjectOfType<PlayerController>();
+            var playerController = Object.FindAnyObjectByType<PlayerController>();
             if (playerController == null)
             {
                 Assert.Fail("PlayerController not found in scene");
                 yield break;
             }
 
-            var gameClientFacade = Object.FindObjectOfType<GameClientFacade>();
+            var gameClientFacade = Object.FindAnyObjectByType<GameClientFacade>();
             if (gameClientFacade == null)
             {
                 Assert.Fail("GameClientFacade not found in scene");

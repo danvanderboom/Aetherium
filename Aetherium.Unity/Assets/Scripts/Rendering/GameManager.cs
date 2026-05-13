@@ -24,17 +24,17 @@ namespace Aetherium.Unity.Rendering
         {
             if (gameClientFacade == null)
             {
-                gameClientFacade = FindObjectOfType<GameClientFacade>();
+                gameClientFacade = FindAnyObjectByType<GameClientFacade>();
             }
 
             if (tilemapRenderer == null)
             {
-                tilemapRenderer = FindObjectOfType<TilemapRenderer2D>();
+                tilemapRenderer = FindAnyObjectByType<TilemapRenderer2D>();
             }
 
             if (playerController == null)
             {
-                playerController = FindObjectOfType<PlayerController>();
+                playerController = FindAnyObjectByType<PlayerController>();
             }
         }
 
@@ -80,9 +80,26 @@ namespace Aetherium.Unity.Rendering
             UpdateHUD(perception);
         }
 
+        /// <summary>
+        /// Repaints the HUD from the most recent perception. Safe to call when
+        /// option-selection mode has just ended and the controller needs the
+        /// default HUD restored without waiting for the next perception tick.
+        /// </summary>
+        public void RefreshHUD()
+        {
+            if (currentPerception != null)
+            {
+                UpdateHUD(currentPerception);
+            }
+        }
+
         private void UpdateHUD(PerceptionLite perception)
         {
             if (hudText == null)
+                return;
+
+            // While the player is choosing a usage option, PlayerController owns the HUD.
+            if (playerController != null && playerController.IsChoosingOption)
                 return;
 
             var headingText = perception.PlayerHeading.ToString();

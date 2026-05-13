@@ -14,7 +14,8 @@ namespace Aetherium.Unity.Rendering
     {
         [SerializeField] private Tilemap tilemap;
         [SerializeField] private TileBase defaultTile;
-        [SerializeField] private Dictionary<string, TileBase> tileCache = new Dictionary<string, TileBase>();
+        private Dictionary<string, TileBase> tileCache = new Dictionary<string, TileBase>();
+        private TileBase fallbackTile;
 
         private int currentZLevel = 0;
         private PerceptionLite? currentPerception;
@@ -96,7 +97,7 @@ namespace Aetherium.Unity.Rendering
         {
             if (string.IsNullOrEmpty(tileTypeId))
             {
-                return defaultTile ?? CreateDefaultTile();
+                return GetFallbackTile();
             }
 
             if (tileCache.TryGetValue(tileTypeId, out var cachedTile))
@@ -113,9 +114,31 @@ namespace Aetherium.Unity.Rendering
             }
 
             // Fallback to default
-            var defaultTileBase = defaultTile ?? CreateDefaultTile();
-            tileCache[tileTypeId] = defaultTileBase;
-            return defaultTileBase;
+            var fallback = GetFallbackTile();
+            tileCache[tileTypeId] = fallback;
+            return fallback;
+        }
+
+        private TileBase GetFallbackTile()
+        {
+            if (defaultTile != null)
+                return defaultTile;
+
+            // Lazily create a single fallback Tile so we don't allocate per frame
+            // when no inspector-assigned defaultTile is provided.
+            if (fallbackTile == null)
+                fallbackTile = CreateDefaultTile();
+
+            return fallbackTile;
+        }
+
+        private void OnDestroy()
+        {
+            if (fallbackTile != null)
+            {
+                Destroy(fallbackTile);
+                fallbackTile = null;
+            }
         }
 
         private TileBase CreateTileFromType(TileTypeLite tileType)
