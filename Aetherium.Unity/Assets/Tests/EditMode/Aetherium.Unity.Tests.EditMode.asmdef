@@ -1,0 +1,22 @@
+{
+    "name": "Aetherium.Unity.Tests.EditMode",
+    "rootNamespace": "Aetherium.Unity.Tests",
+    "references": [
+        "GUID:bf100dee69393dc488132b83fca4c41f",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

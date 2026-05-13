@@ -2,15 +2,18 @@
     "name": "Aetherium.Unity.Tests.PlayMode",
     "rootNamespace": "Aetherium.Unity.Tests",
     "references": [
+        "GUID:bf100dee69393dc488132b83fca4c41f",
+        "UnityEngine.TestRunner"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
     "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": [],
     "noEngineReferences": false
 }
-
