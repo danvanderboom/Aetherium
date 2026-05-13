@@ -24,9 +24,6 @@ namespace Aetherium.Unity.Tests
             var hudObject = new GameObject("HUDText");
             var hudText = hudObject.AddComponent<Text>();
 
-            playerController.gameClientFacade = facade;
-            playerController.hudText = hudText;
-
             // Create a result with options
             var options = new List<object>
             {
@@ -130,8 +127,6 @@ namespace Aetherium.Unity.Tests
             var hudObject = new GameObject("HUDText");
             var hudText = hudObject.AddComponent<Text>();
             hudText.text = "Original HUD Text";
-
-            playerController.hudText = hudText;
 
             yield return new WaitForSeconds(0.1f);
 

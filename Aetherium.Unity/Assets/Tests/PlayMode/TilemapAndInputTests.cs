@@ -12,16 +12,6 @@ namespace Aetherium.Unity.Tests
 {
     public class TilemapAndInputTests
     {
-        [SetUp]
-        public void SetUp()
-        {
-            // Enable Input System
-            if (!InputSystem.settings.enabled)
-            {
-                InputSystem.settings.SetInternalFeatureFlag("ENABLE_INPUT_SYSTEM", true);
-            }
-        }
-
         [UnityTest]
         public IEnumerator LoadMainScene_TilemapRendersCorrectly()
         {
