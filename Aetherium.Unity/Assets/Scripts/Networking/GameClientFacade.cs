@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Aetherium.Unity.Model;
 using UnityEngine;
@@ -14,11 +15,15 @@ namespace Aetherium.Unity.Networking
     public class GameClientFacade : MonoBehaviour
     {
         private IPerceptionProvider? currentProvider;
-        private PerceptionMockProvider mockProvider;
+        private PerceptionMockProvider mockProvider = null!;
 #if USE_SIGNALR
         private PerceptionSignalRClient? signalRClient;
 #endif
         private bool isLiveMode = false;
+
+        // Cancels in-flight tool calls when the component is destroyed so awaiting
+        // continuations don't resume against a torn-down GameObject.
+        private readonly CancellationTokenSource lifetimeCts = new CancellationTokenSource();
 
         public event Action<PerceptionLite>? PerceptionUpdated;
 
@@ -27,14 +32,21 @@ namespace Aetherium.Unity.Networking
         private void Awake()
         {
             mockProvider = new PerceptionMockProvider();
-            mockProvider.PerceptionUpdated += OnPerceptionUpdated;
-            
-            // Default to offline mode
+            // Default to offline mode (subscribes the mock provider).
             SetMode(false);
         }
 
         private void OnDestroy()
         {
+            try
+            {
+                lifetimeCts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already disposed; nothing to do.
+            }
+
             if (mockProvider != null)
             {
                 mockProvider.PerceptionUpdated -= OnPerceptionUpdated;
@@ -44,25 +56,26 @@ namespace Aetherium.Unity.Networking
             if (signalRClient != null)
             {
                 signalRClient.PerceptionUpdated -= OnPerceptionUpdated;
-                signalRClient.Disconnect();
+                signalRClient.Dispose();
+                signalRClient = null;
             }
 #endif
+
+            lifetimeCts.Dispose();
         }
 
         /// <summary>
-        /// Sets the mode to Live (true) or Offline Mock (false).
+        /// Sets the mode to Live (true) or Offline Mock (false). Subscribes to
+        /// exactly one provider at a time so the two can't both fire events.
         /// </summary>
         public void SetMode(bool live)
         {
-            if (isLiveMode == live)
+            if (currentProvider != null && isLiveMode == live)
                 return;
 
+            // Detach from whichever provider was previously active.
+            DetachCurrentProvider();
             isLiveMode = live;
-
-            if (currentProvider != null && currentProvider != mockProvider)
-            {
-                currentProvider.PerceptionUpdated -= OnPerceptionUpdated;
-            }
 
 #if USE_SIGNALR
             if (live)
@@ -71,30 +84,34 @@ namespace Aetherium.Unity.Networking
                 {
                     signalRClient = new PerceptionSignalRClient("http://localhost:5000/gamehub");
                 }
-                signalRClient.PerceptionUpdated += OnPerceptionUpdated;
-                currentProvider = signalRClient;
-                
+                AttachProvider(signalRClient);
                 StartCoroutine(ConnectSignalRAsync());
-            }
-            else
-            {
-                if (signalRClient != null)
-                {
-                    signalRClient.PerceptionUpdated -= OnPerceptionUpdated;
-                }
-                currentProvider = mockProvider;
+                return;
             }
 #else
             if (live)
             {
                 Debug.LogWarning("Live mode requested but USE_SIGNALR is not defined. Falling back to Offline Mock mode.");
-                currentProvider = mockProvider;
-            }
-            else
-            {
-                currentProvider = mockProvider;
+                isLiveMode = false;
             }
 #endif
+
+            AttachProvider(mockProvider);
+        }
+
+        private void AttachProvider(IPerceptionProvider provider)
+        {
+            currentProvider = provider;
+            provider.PerceptionUpdated += OnPerceptionUpdated;
+        }
+
+        private void DetachCurrentProvider()
+        {
+            if (currentProvider != null)
+            {
+                currentProvider.PerceptionUpdated -= OnPerceptionUpdated;
+                currentProvider = null;
+            }
         }
 
 #if USE_SIGNALR
@@ -106,53 +123,54 @@ namespace Aetherium.Unity.Networking
             var task = signalRClient.ConnectAsync();
             yield return new WaitUntil(() => task.IsCompleted);
 
-            if (!task.IsCompletedSuccessfully)
+            if (task.IsFaulted)
             {
-                Debug.LogError("Failed to connect to SignalR server. Falling back to Offline Mock mode.");
+                Debug.LogException(task.Exception ?? new Exception("SignalR connect failed"));
+                SetMode(false);
+            }
+            else if (task.IsCanceled)
+            {
+                Debug.LogWarning("SignalR connect was cancelled. Falling back to Offline Mock mode.");
                 SetMode(false);
             }
         }
 #endif
 
         /// <summary>
-        /// Executes a tool with the specified ID and arguments.
-        /// In Offline mode, mutates local mock state.
-        /// In Live mode, sends command to server.
+        /// Fire-and-forget tool execution. Logs faults to the Unity console so
+        /// errors don't disappear into the unobserved-exception finalizer.
         /// </summary>
         public void ExecuteTool(string toolId, Dictionary<string, object> args)
         {
-            // Fire-and-forget async version for backward compatibility
-            _ = ExecuteToolAsync(toolId, args);
+            _ = ExecuteToolAsync(toolId, args)
+                .ContinueWith(
+                    t => Debug.LogException(t.Exception!),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.FromCurrentSynchronizationContext());
         }
 
         /// <summary>
-        /// Executes a tool with the specified ID and arguments asynchronously, returning the result.
-        /// In Offline mode, mutates local mock state and returns a success result.
-        /// In Live mode, sends command to server and returns the server's result.
+        /// Executes a tool against the active provider. The returned task is
+        /// linked to the component lifetime; it will fault with
+        /// <see cref="OperationCanceledException"/> if the GameObject is destroyed mid-flight.
         /// </summary>
-        public async Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, Dictionary<string, object> args)
+        public Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, Dictionary<string, object> args)
+            => ExecuteToolAsync(toolId, args, CancellationToken.None);
+
+        public async Task<ToolExecutionResultDto> ExecuteToolAsync(
+            string toolId,
+            Dictionary<string, object> args,
+            CancellationToken cancellationToken)
         {
-            if (isLiveMode)
+            var provider = currentProvider;
+            if (provider == null)
             {
-#if USE_SIGNALR
-                if (signalRClient != null)
-                {
-                    return await signalRClient.ExecuteToolAsync(toolId, args);
-                }
-                else
-                {
-                    Debug.LogError("SignalR client not initialized. Falling back to mock.");
-                    return mockProvider.ExecuteToolMock(toolId, args);
-                }
-#else
-                Debug.LogWarning("ExecuteToolAsync called in Live mode but USE_SIGNALR is not defined. Using mock.");
-                return mockProvider.ExecuteToolMock(toolId, args);
-#endif
+                return new ToolExecutionResultDto { Success = false, Message = "No provider configured" };
             }
-            else
-            {
-                return mockProvider.ExecuteToolMock(toolId, args);
-            }
+
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(lifetimeCts.Token, cancellationToken);
+            return await provider.ExecuteToolAsync(toolId, args, linked.Token);
         }
 
         private void OnPerceptionUpdated(PerceptionLite perception)
@@ -161,4 +179,3 @@ namespace Aetherium.Unity.Networking
         }
     }
 }
-
