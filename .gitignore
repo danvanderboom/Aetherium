@@ -65,6 +65,10 @@ StyleCopReport.xml
 *_h.h
 *.ilk
 *.meta
+# But Unity .meta files are project state and must be tracked. The blanket
+# *.meta rule above is for VS-generated metas in non-Unity contexts; this
+# exception keeps every meta under the Unity asset tree under version control.
+!Aetherium.Unity/**/*.meta
 *.obj
 *.iobj
 *.pch
