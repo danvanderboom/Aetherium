@@ -3,7 +3,8 @@
     "rootNamespace": "Aetherium.Unity.Tests",
     "references": [
         "GUID:bf100dee69393dc488132b83fca4c41f",
-        "UnityEngine.TestRunner"
+        "UnityEngine.TestRunner",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

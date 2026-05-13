@@ -1,3 +1,4 @@
+#nullable enable
 using System.Collections.Generic;
 
 namespace Aetherium.Unity.Model
