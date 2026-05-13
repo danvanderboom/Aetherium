@@ -358,6 +358,7 @@ Aetherium.Unity/MemoryCaptures/
 Aetherium.Unity/*.csproj
 Aetherium.Unity/*.unityproj
 Aetherium.Unity/*.sln
+Aetherium.Unity/*.slnx
 Aetherium.Unity/*.suo
 Aetherium.Unity/*.tmp
 Aetherium.Unity/*.user

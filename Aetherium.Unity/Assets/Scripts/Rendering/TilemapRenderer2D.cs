@@ -20,6 +20,14 @@ namespace Aetherium.Unity.Rendering
         private int currentZLevel = 0;
         private PerceptionLite? currentPerception;
 
+        // Cells written in the previous render pass. RenderPerception only clears
+        // cells in (previous \ current) and only writes the (current) batch, so we
+        // avoid ClearAllTiles + per-tile SetTile every frame.
+        private readonly HashSet<Vector3Int> previousCells = new HashSet<Vector3Int>();
+        private readonly HashSet<Vector3Int> currentCells = new HashSet<Vector3Int>();
+        private readonly List<Vector3Int> positionsScratch = new List<Vector3Int>();
+        private readonly List<TileBase> tilesScratch = new List<TileBase>();
+
         private void Awake()
         {
             if (tilemap == null)
@@ -43,19 +51,40 @@ namespace Aetherium.Unity.Rendering
             if (tilemap == null || perception == null)
                 return;
 
-            tilemap.ClearAllTiles();
+            currentCells.Clear();
+            positionsScratch.Clear();
+            tilesScratch.Clear();
 
-            // Render only tiles on the current Z-level
             foreach (var visual in perception.Visuals.Values)
             {
-                if (visual.Location.Z == zLevel)
-                {
-                    var tile = GetOrCreateTile(visual.TileTypeId, perception.TileTypes);
-                    var worldPos = GridHelpers.GridToWorld(visual.Location);
-                    var cellPos = tilemap.WorldToCell(worldPos);
-                    tilemap.SetTile(cellPos, tile);
-                }
+                if (visual.Location.Z != zLevel)
+                    continue;
+
+                var worldPos = GridHelpers.GridToWorld(visual.Location);
+                var cellPos = tilemap.WorldToCell(worldPos);
+                if (!currentCells.Add(cellPos))
+                    continue; // duplicate visual at the same cell, ignore
+
+                positionsScratch.Add(cellPos);
+                tilesScratch.Add(GetOrCreateTile(visual.TileTypeId, perception.TileTypes));
             }
+
+            // Clear cells that were set last frame but are no longer present.
+            foreach (var prev in previousCells)
+            {
+                if (!currentCells.Contains(prev))
+                    tilemap.SetTile(prev, null);
+            }
+
+            if (positionsScratch.Count > 0)
+            {
+                tilemap.SetTiles(positionsScratch.ToArray(), tilesScratch.ToArray());
+            }
+
+            // Swap: previousCells becomes the set we just wrote.
+            previousCells.Clear();
+            foreach (var c in currentCells)
+                previousCells.Add(c);
         }
 
         /// <summary>
@@ -75,23 +104,9 @@ namespace Aetherium.Unity.Rendering
         public int GetCurrentZLevel() => currentZLevel;
 
         /// <summary>
-        /// Gets the number of tiles rendered at the current Z-level.
+        /// Gets the number of tiles currently written to the tilemap.
         /// </summary>
-        public int GetRenderedTileCount()
-        {
-            if (tilemap == null || currentPerception == null)
-                return 0;
-
-            int count = 0;
-            foreach (var visual in currentPerception.Visuals.Values)
-            {
-                if (visual.Location.Z == currentZLevel)
-                {
-                    count++;
-                }
-            }
-            return count;
-        }
+        public int GetRenderedTileCount() => previousCells.Count;
 
         private TileBase GetOrCreateTile(string tileTypeId, Dictionary<string, TileTypeLite> tileTypes)
         {
@@ -158,4 +173,3 @@ namespace Aetherium.Unity.Rendering
         }
     }
 }
-

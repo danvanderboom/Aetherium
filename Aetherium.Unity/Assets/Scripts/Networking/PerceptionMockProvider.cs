@@ -31,7 +31,26 @@ namespace Aetherium.Unity.Networking
         private void LoadFrames()
         {
             frames.Clear();
-            
+
+#if UNITY_ANDROID || UNITY_WEBGL
+            // On Android (APK / asset bundle) and WebGL (HTTP), StreamingAssets is
+            // not a real filesystem path — File.IO will silently return nothing.
+            // The honest fix is to load via UnityWebRequest asynchronously, which
+            // requires turning the constructor into an explicit InitializeAsync
+            // step. Until that happens, refuse to pretend and warn loudly so
+            // developers don't ship a "working" empty offline mode.
+            if (Application.platform == RuntimePlatform.Android ||
+                Application.platform == RuntimePlatform.WebGLPlayer)
+            {
+                Debug.LogWarning(
+                    "PerceptionMockProvider: synchronous file loading is not supported on " +
+                    $"{Application.platform}. Offline mock frames will not be available until " +
+                    "an async UnityWebRequest-based loader is wired up. Use live (SignalR) mode instead.");
+                frames.Add(new PerceptionLite());
+                return;
+            }
+#endif
+
             if (!Directory.Exists(framesPath))
             {
                 Debug.LogWarning($"PerceptionFrames directory not found at {framesPath}");
