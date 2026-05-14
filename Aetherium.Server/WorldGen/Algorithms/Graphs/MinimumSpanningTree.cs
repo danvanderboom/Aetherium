@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Aetherium.WorldGen.Algorithms.Graphs
 {
     /// <summary>
-    /// Minimum Spanning Tree implementation using Prim's algorithm.
-    /// Used for connecting city districts, outdoor features, etc.
+    /// Minimum Spanning Tree using PriorityQueue-backed Prim's algorithm.
+    /// Edges with non-finite weights are treated as missing — disconnected inputs return a forest.
     /// </summary>
     public static class MinimumSpanningTree
     {
@@ -46,84 +45,94 @@ namespace Aetherium.WorldGen.Algorithms.Graphs
         }
 
         /// <summary>
-        /// Computes minimum spanning tree using Prim's algorithm.
+        /// Computes a minimum spanning tree (or forest) using Prim's algorithm with a priority queue.
+        /// Node equality is reference-based; supply distinct Node instances per logical node.
         /// </summary>
-        /// <param name="nodes">List of nodes to connect</param>
-        /// <param name="weightFunc">Optional custom weight function (defaults to Euclidean distance)</param>
-        /// <returns>List of edges forming the MST</returns>
         public static List<Edge> ComputeMST(
             List<Node> nodes,
             Func<Node, Node, double>? weightFunc = null)
         {
+            if (nodes == null) throw new ArgumentNullException(nameof(nodes));
             if (nodes.Count < 2)
                 return new List<Edge>();
 
             weightFunc ??= (a, b) => a.DistanceTo(b);
 
-            var mstEdges = new List<Edge>();
-            var inMST = new HashSet<Node> { nodes[0] };
-            var candidates = new List<Edge>();
+            var mstEdges = new List<Edge>(nodes.Count - 1);
+            var inMST = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+            var pq = new PriorityQueue<Edge, double>();
 
-            // Add all edges from first node
-            for (int i = 1; i < nodes.Count; i++)
+            // Seed from the first node; repeat from any disconnected node so we produce a forest.
+            for (int seedIndex = 0; seedIndex < nodes.Count; seedIndex++)
             {
-                candidates.Add(new Edge(nodes[0], nodes[i], weightFunc(nodes[0], nodes[i])));
-            }
-
-            while (inMST.Count < nodes.Count && candidates.Count > 0)
-            {
-                // Find minimum weight edge
-                candidates.Sort((a, b) => a.Weight.CompareTo(b.Weight));
-                var minEdge = candidates[0];
-                candidates.RemoveAt(0);
-
-                // Skip if both nodes already in MST
-                if (inMST.Contains(minEdge.To))
+                var seed = nodes[seedIndex];
+                if (inMST.Contains(seed))
                     continue;
 
-                // Add edge to MST
-                mstEdges.Add(minEdge);
-                inMST.Add(minEdge.To);
+                inMST.Add(seed);
+                EnqueueEdgesFrom(seed, nodes, inMST, weightFunc, pq);
 
-                // Add new candidate edges from the newly added node
-                foreach (var node in nodes)
+                while (pq.Count > 0)
                 {
-                    if (!inMST.Contains(node))
-                    {
-                        candidates.Add(new Edge(minEdge.To, node, weightFunc(minEdge.To, node)));
-                    }
+                    var edge = pq.Dequeue();
+                    if (inMST.Contains(edge.To))
+                        continue;
+
+                    mstEdges.Add(edge);
+                    inMST.Add(edge.To);
+                    EnqueueEdgesFrom(edge.To, nodes, inMST, weightFunc, pq);
                 }
+
+                // After the queue drains, any remaining nodes are in a different component.
+                // The outer loop will pick them up and start a new tree.
+                pq.Clear();
             }
 
             return mstEdges;
         }
 
+        private static void EnqueueEdgesFrom(
+            Node from,
+            List<Node> nodes,
+            HashSet<Node> inMST,
+            Func<Node, Node, double> weightFunc,
+            PriorityQueue<Edge, double> pq)
+        {
+            foreach (var node in nodes)
+            {
+                if (inMST.Contains(node))
+                    continue;
+                var w = weightFunc(from, node);
+                if (double.IsNaN(w) || double.IsInfinity(w))
+                    continue;
+                pq.Enqueue(new Edge(from, node, w), w);
+            }
+        }
+
         /// <summary>
-        /// Computes MST with additional random edges for more connectivity.
+        /// Computes the MST and adds extra non-MST edges for additional connectivity.
         /// </summary>
-        /// <param name="nodes">List of nodes</param>
-        /// <param name="extraEdgePercentage">Percentage of extra edges to add (0.0-1.0)</param>
-        /// <param name="random">Random number generator</param>
-        /// <returns>List of edges (MST + extra edges)</returns>
         public static List<Edge> ComputeMSTWithExtraEdges(
             List<Node> nodes,
             double extraEdgePercentage,
             Random random,
             Func<Node, Node, double>? weightFunc = null)
         {
+            if (random == null) throw new ArgumentNullException(nameof(random));
+
             var mstEdges = ComputeMST(nodes, weightFunc);
-            
-            if (extraEdgePercentage <= 0)
+
+            if (extraEdgePercentage <= 0 || mstEdges.Count == 0)
                 return mstEdges;
 
             weightFunc ??= (a, b) => a.DistanceTo(b);
 
-            // Find all possible edges not in MST
-            var mstEdgeSet = new HashSet<(Node, Node)>();
+            // Track MST adjacency by reference identity.
+            var mstAdjacency = new Dictionary<Node, HashSet<Node>>(ReferenceEqualityComparer.Instance);
             foreach (var edge in mstEdges)
             {
-                mstEdgeSet.Add((edge.From, edge.To));
-                mstEdgeSet.Add((edge.To, edge.From));
+                GetOrAddSet(mstAdjacency, edge.From).Add(edge.To);
+                GetOrAddSet(mstAdjacency, edge.To).Add(edge.From);
             }
 
             var possibleEdges = new List<Edge>();
@@ -131,14 +140,17 @@ namespace Aetherium.WorldGen.Algorithms.Graphs
             {
                 for (int j = i + 1; j < nodes.Count; j++)
                 {
-                    if (!mstEdgeSet.Contains((nodes[i], nodes[j])))
-                    {
-                        possibleEdges.Add(new Edge(nodes[i], nodes[j], weightFunc(nodes[i], nodes[j])));
-                    }
+                    var a = nodes[i];
+                    var b = nodes[j];
+                    if (mstAdjacency.TryGetValue(a, out var neighbors) && neighbors.Contains(b))
+                        continue;
+                    var w = weightFunc(a, b);
+                    if (double.IsNaN(w) || double.IsInfinity(w))
+                        continue;
+                    possibleEdges.Add(new Edge(a, b, w));
                 }
             }
 
-            // Add random extra edges
             int extraEdgeCount = (int)(mstEdges.Count * extraEdgePercentage);
             for (int i = 0; i < extraEdgeCount && possibleEdges.Count > 0; i++)
             {
@@ -150,17 +162,28 @@ namespace Aetherium.WorldGen.Algorithms.Graphs
             return mstEdges;
         }
 
+        private static HashSet<Node> GetOrAddSet(Dictionary<Node, HashSet<Node>> dict, Node key)
+        {
+            if (!dict.TryGetValue(key, out var set))
+            {
+                set = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+                dict[key] = set;
+            }
+            return set;
+        }
+
         /// <summary>
-        /// Converts edges to a path (for road generation).
+        /// Rasterizes an edge to a list of grid cells using Bresenham's line algorithm.
         /// </summary>
         public static List<(int x, int y)> EdgesToPath(Edge edge)
         {
+            if (edge == null) throw new ArgumentNullException(nameof(edge));
+
             var path = new List<(int, int)>();
-            
-            // Bresenham's line algorithm
+
             int x0 = edge.From.X, y0 = edge.From.Y;
             int x1 = edge.To.X, y1 = edge.To.Y;
-            
+
             int dx = Math.Abs(x1 - x0);
             int dy = Math.Abs(y1 - y0);
             int sx = x0 < x1 ? 1 : -1;
@@ -170,10 +193,10 @@ namespace Aetherium.WorldGen.Algorithms.Graphs
             while (true)
             {
                 path.Add((x0, y0));
-                
+
                 if (x0 == x1 && y0 == y1)
                     break;
-                
+
                 int e2 = 2 * err;
                 if (e2 > -dy)
                 {
@@ -186,10 +209,8 @@ namespace Aetherium.WorldGen.Algorithms.Graphs
                     y0 += sy;
                 }
             }
-            
+
             return path;
         }
     }
 }
-
-

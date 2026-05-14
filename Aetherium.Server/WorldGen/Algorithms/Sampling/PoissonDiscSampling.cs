@@ -6,6 +6,13 @@ namespace Aetherium.WorldGen.Algorithms.Sampling
     /// <summary>
     /// Poisson Disc Sampling using Bridson's algorithm for evenly distributed points.
     /// Used for placing buildings, trees, and other features with minimum spacing.
+    ///
+    /// <para>Invariant: the cell size is fixed at <c>minDistance / √2</c> so that every grid
+    /// cell can hold at most one accepted point. Callers must not mutate <c>minDistance</c>
+    /// after construction.</para>
+    ///
+    /// <para>Deterministic: requires a seeded <see cref="Random"/>. The constructor throws if
+    /// none is provided, to prevent silent wall-clock entropy from leaking in.</para>
     /// </summary>
     public class PoissonDiscSampling
     {
@@ -15,12 +22,21 @@ namespace Aetherium.WorldGen.Algorithms.Sampling
         private readonly int _height;
         private readonly int _maxAttempts;
 
-        public PoissonDiscSampling(int width, int height, double minDistance, Random? random = null, int maxAttempts = 30)
+        public PoissonDiscSampling(int width, int height, double minDistance, Random random, int maxAttempts = 30)
         {
+            if (random == null)
+                throw new ArgumentNullException(nameof(random),
+                    "PoissonDiscSampling requires a seeded Random to remain deterministic. " +
+                    "Pass GeneratorContext.GetRandom(\"<scope>\") from the calling generator.");
+            if (width <= 0 || height <= 0)
+                throw new ArgumentOutOfRangeException(nameof(width), "Sampling region must have positive dimensions.");
+            if (!(minDistance > 0))
+                throw new ArgumentOutOfRangeException(nameof(minDistance), "minDistance must be > 0.");
+
             _width = width;
             _height = height;
             _minDistance = minDistance;
-            _random = random ?? new Random();
+            _random = random;
             _maxAttempts = maxAttempts;
         }
 

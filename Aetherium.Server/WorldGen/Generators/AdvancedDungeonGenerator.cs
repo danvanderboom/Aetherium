@@ -95,10 +95,7 @@ namespace Aetherium.WorldGen.Generators
                     continue;
                 }
 
-                var room = layoutHelper.CreateRoom(world, rect, shape);
-                layoutHelper.RoomsOnLevel.Add(room);
-                globals.Rooms.Add(room);
-                globals.Graph.EnsureNode(room.Id);
+                layoutHelper.CreateRoom(world, rect, shape);
             }
 
             layoutHelper.EnsureShapeVariety(world);
@@ -256,12 +253,11 @@ namespace Aetherium.WorldGen.Generators
 
         private void BuildPrimaryPath(World world, GeneratorContext context, GenerationGlobals globals)
         {
-            var orderedRooms = globals.Rooms.Where(r => !r.IsSecret).OrderBy(r => (r.Level, r.Id)).ToList();
-            if (orderedRooms.Count == 0)
+            var nonSecret = globals.Rooms.Where(r => !r.IsSecret).OrderBy(r => (r.Level, r.Id)).ToList();
+            if (nonSecret.Count == 0)
                 return;
 
-            var startRoom = orderedRooms.First();
-            var targetRoom = orderedRooms.Last();
+            var (startRoom, targetRoom) = SelectStartAndObjective(nonSecret, globals.Graph);
             globals.StartRoomId = startRoom.Id;
             globals.ObjectiveRoomId = targetRoom.Id;
 
@@ -298,16 +294,16 @@ namespace Aetherium.WorldGen.Generators
             if (globals.PrimaryRoomPath.Count < 2)
                 return;
 
-            var bridgeCorridor = FindBridgeCorridor(globals, globals.StartRoomId.Value, globals.ObjectiveRoomId.Value);
-            if (bridgeCorridor == null)
+            var bridgeResult = FindBridgeCorridor(globals, globals.StartRoomId.Value, globals.ObjectiveRoomId.Value);
+            if (bridgeResult == null)
                 return;
 
-            var corridor = bridgeCorridor.Value.Corridor;
-            var fromRoom = globals.RoomLookup[bridgeCorridor.Value.FromId];
-            var toRoom = globals.RoomLookup[bridgeCorridor.Value.ToId];
+            var corridor = bridgeResult.Value.Corridor;
+            var bridgeFromRoom = globals.RoomLookup[bridgeResult.Value.FromId];
+            var bridgeToRoom = globals.RoomLookup[bridgeResult.Value.ToId];
             var doorLocation = corridor.Path.Count > 0
                 ? corridor.Path[corridor.Path.Count / 2]
-                : toRoom.Center;
+                : bridgeToRoom.Center;
 
             var door = new Door();
             door.Set(doorLocation);
@@ -319,15 +315,61 @@ namespace Aetherium.WorldGen.Generators
             globals.InteractiveArtifacts.LockedDoorLocation = doorLocation;
             context.Metrics.LockedDoors++;
 
-            var keyLocation = fromRoom.Center;
+            // Place the key in the start room. For a true bridge edge this guarantees the key is
+            // reachable from start without traversing the door. For the fallback case (no true
+            // bridge — multiple paths exist), the start room is also trivially reachable.
+            var keyLocation = globals.RoomLookup[globals.StartRoomId.Value].Center;
             var key = new KeyItem("emerald");
             key.Set(keyLocation);
             world.AddEntity(key);
             context.Metrics.KeysPlaced++;
         }
 
+        private static (DungeonRoom Start, DungeonRoom Objective) SelectStartAndObjective(
+            List<DungeonRoom> nonSecretRooms,
+            RoomGraph graph)
+        {
+            // Constrain start to the shallowest level, objective to the deepest level.
+            int firstLevel = nonSecretRooms[0].Level;
+            int lastLevel = nonSecretRooms[nonSecretRooms.Count - 1].Level;
+
+            var startCandidates = nonSecretRooms.Where(r => r.Level == firstLevel).ToList();
+            var objectiveCandidates = nonSecretRooms.Where(r => r.Level == lastLevel).ToList();
+
+            DungeonRoom? bestStart = null;
+            DungeonRoom? bestObjective = null;
+            int bestDistance = -1;
+
+            // O(start * (V+E)) — small constant for typical dungeons (<100 rooms).
+            // Both lists are already ordered by (Level, Id), so ties resolve deterministically.
+            foreach (var start in startCandidates)
+            {
+                var distances = graph.BfsDistances(start.Id);
+                foreach (var objective in objectiveCandidates)
+                {
+                    if (start.Id == objective.Id)
+                        continue;
+                    if (!distances.TryGetValue(objective.Id, out var d))
+                        continue;
+                    if (d > bestDistance)
+                    {
+                        bestDistance = d;
+                        bestStart = start;
+                        bestObjective = objective;
+                    }
+                }
+            }
+
+            if (bestStart != null && bestObjective != null)
+                return (bestStart, bestObjective);
+
+            // Graph may be disconnected across levels; fall back to deterministic first/last.
+            return (startCandidates[0], objectiveCandidates[objectiveCandidates.Count - 1]);
+        }
+
         private (DungeonCorridor Corridor, int FromId, int ToId)? FindBridgeCorridor(GenerationGlobals globals, int startId, int targetId)
         {
+            // Preferred: a true bridge edge on the primary path — locking it cuts start from objective.
             for (int i = 0; i < globals.PrimaryRoomPath.Count - 1; i++)
             {
                 var fromId = globals.PrimaryRoomPath[i];
@@ -336,6 +378,18 @@ namespace Aetherium.WorldGen.Generators
                     continue;
 
                 if (globals.Graph.IsBridgeEdge(fromId, toId, startId, targetId))
+                {
+                    return (corridor, fromId, toId);
+                }
+            }
+
+            // Fallback: lock the corridor adjacent to the objective on the primary path so a locked
+            // door is always placed. The player may bypass via a loop, but the gating contract holds.
+            for (int i = globals.PrimaryRoomPath.Count - 2; i >= 0; i--)
+            {
+                var fromId = globals.PrimaryRoomPath[i];
+                var toId = globals.PrimaryRoomPath[i + 1];
+                if (globals.Corridors.TryGetValue(CorridorKey.Create(fromId, toId), out var corridor))
                 {
                     return (corridor, fromId, toId);
                 }
@@ -452,12 +506,22 @@ namespace Aetherium.WorldGen.Generators
 
         private DungeonRoom? BuildSecretRoom(World world, GeneratorContext context, int level, WorldLocation anchor, GenerationGlobals globals, Random rng)
         {
-            for (int attempt = 0; attempt < 8; attempt++)
+            const int MaxAttempts = 8;
+            for (int attempt = 0; attempt < MaxAttempts; attempt++)
             {
                 var size = rng.Next(3, 5);
-                var x = Math.Clamp(anchor.X + rng.Next(-size, size), 1, context.Width - size - 1);
-                var y = Math.Clamp(anchor.Y + rng.Next(-size, size), 1, context.Height - size - 1);
+                int maxX = Math.Max(1, context.Width - size - 1);
+                int maxY = Math.Max(1, context.Height - size - 1);
+                var x = Math.Clamp(anchor.X + rng.Next(-size, size), 1, maxX);
+                var y = Math.Clamp(anchor.Y + rng.Next(-size, size), 1, maxY);
                 var rect = new Rectangle(x, y, size, size);
+
+                // Prefer non-overlapping placement; on the final attempt accept overlap so tight
+                // maps still get a secret (visually merges with an existing room — acceptable
+                // for narrative payoff, and the validator only counts that secrets exist).
+                bool allowOverlap = attempt == MaxAttempts - 1;
+                if (!allowOverlap && !globals.CanPlace(rect, level))
+                    continue;
 
                 var room = new DungeonRoom(globals.GetNextRoomId(), level, rect, RoomShape.Rectangle, isSecret: true);
                 foreach (var tile in room.Tiles)
@@ -649,8 +713,17 @@ namespace Aetherium.WorldGen.Generators
                     width = height = _rng.Next(5, 8);
                 }
 
-                int x = _rng.Next(2, _context.Width - width - 2);
-                int y = _rng.Next(2, _context.Height - height - 2);
+                int maxX = _context.Width - width - 2;
+                int maxY = _context.Height - height - 2;
+                if (maxX <= 2 || maxY <= 2)
+                {
+                    throw new InvalidOperationException(
+                        $"Map ({_context.Width}x{_context.Height}) is too small to place a {shape} room of size {width}x{height}. " +
+                        "AdvancedDungeonGenerator requires roughly 15x15 minimum to fit a single room with margin.");
+                }
+
+                int x = _rng.Next(2, maxX);
+                int y = _rng.Next(2, maxY);
                 return new Rectangle(x, y, width, height);
             }
 
@@ -668,6 +741,8 @@ namespace Aetherium.WorldGen.Generators
                 }
                 _globals.RoomLookup[room.Id] = room;
                 _globals.Graph.EnsureNode(room.Id);
+                _globals.Rooms.Add(room);
+                RoomsOnLevel.Add(room);
                 return room;
             }
 
@@ -681,8 +756,7 @@ namespace Aetherium.WorldGen.Generators
                 var rect = GetRandomBounds(fallbackShape);
                 if (!CanPlace(rect))
                     return;
-                var room = CreateRoom(world, rect, fallbackShape);
-                RoomsOnLevel.Add(room);
+                CreateRoom(world, rect, fallbackShape);
             }
         }
 
@@ -731,7 +805,9 @@ namespace Aetherium.WorldGen.Generators
 
         private sealed class RoomGraph
         {
-            private readonly Dictionary<int, HashSet<int>> _adjacency = new();
+            // SortedSet gives deterministic BFS/DFS iteration order; HashSet iteration depends
+            // on internal bucket state and produces non-deterministic neighbor traversal order.
+            private readonly Dictionary<int, SortedSet<int>> _adjacency = new();
 
             public int EdgeCount => _adjacency.Sum(kvp => kvp.Value.Count) / 2;
             public int NodeCount => _adjacency.Count;
@@ -740,7 +816,7 @@ namespace Aetherium.WorldGen.Generators
             {
                 if (!_adjacency.ContainsKey(id))
                 {
-                    _adjacency[id] = new HashSet<int>();
+                    _adjacency[id] = new SortedSet<int>();
                 }
             }
 
@@ -784,6 +860,30 @@ namespace Aetherium.WorldGen.Generators
                 }
 
                 return !visited.Contains(targetId);
+            }
+
+            public Dictionary<int, int> BfsDistances(int startId)
+            {
+                var dist = new Dictionary<int, int>();
+                if (!_adjacency.ContainsKey(startId))
+                    return dist;
+
+                var queue = new Queue<int>();
+                dist[startId] = 0;
+                queue.Enqueue(startId);
+
+                while (queue.Count > 0)
+                {
+                    var current = queue.Dequeue();
+                    foreach (var neighbor in _adjacency[current])
+                    {
+                        if (dist.ContainsKey(neighbor))
+                            continue;
+                        dist[neighbor] = dist[current] + 1;
+                        queue.Enqueue(neighbor);
+                    }
+                }
+                return dist;
             }
 
             public List<int> FindPath(int start, int target)

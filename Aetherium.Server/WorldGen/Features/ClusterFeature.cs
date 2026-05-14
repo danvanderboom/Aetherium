@@ -69,13 +69,13 @@ namespace Aetherium.WorldGen.Features
                 if (candidates.Count == 0)
                     break;
 
-                var centerLoc = candidates[context.Random.Next(candidates.Count)];
-                int size = context.Random.Next(_minSize, _maxSize + 1);
+                var centerLoc = candidates[context.GetRandom("feature:cluster").Next(candidates.Count)];
+                int size = context.GetRandom("feature:cluster").Next(_minSize, _maxSize + 1);
 
                 // Use FloodFill or shape for organic cluster
                 List<WorldLocation> clusterLocs;
                 
-                if (context.Random.NextDouble() < 0.5)
+                if (context.GetRandom("feature:cluster").NextDouble() < 0.5)
                 {
                     // Circular cluster
                     int radius = size / 2;
@@ -84,8 +84,8 @@ namespace Aetherium.WorldGen.Features
                 else
                 {
                     // Elliptical cluster
-                    int radiusX = context.Random.Next(size / 2, size);
-                    int radiusY = context.Random.Next(size / 2, size);
+                    int radiusX = context.GetRandom("feature:cluster").Next(size / 2, size);
+                    int radiusY = context.GetRandom("feature:cluster").Next(size / 2, size);
                     clusterLocs = FloodFill.FillEllipse(centerLoc, radiusX, radiusY, context.ZLevel);
                 }
 

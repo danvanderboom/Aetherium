@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Aetherium.Components;
+using Aetherium.WorldGen;
 
 namespace Aetherium.WorldGen.Algorithms.Shapes
 {
@@ -15,7 +17,12 @@ namespace Aetherium.WorldGen.Algorithms.Shapes
         /// </summary>
         /// <param name="seed">Starting location</param>
         /// <param name="maxSize">Maximum number of locations to fill</param>
-        /// <param name="canExpand">Predicate determining if a location can be filled</param>
+        /// <param name="canExpand">
+        /// Predicate determining if a location can be filled. This also serves as the
+        /// bounds predicate — neighbors for which this returns false are never enqueued, so
+        /// the visited set stays bounded to <c>maxSize * 5</c> in the worst case rather than
+        /// growing without bound across the entire coordinate space.
+        /// </param>
         /// <param name="random">Random for non-deterministic expansion</param>
         /// <returns>List of locations in the filled region</returns>
         public static List<WorldLocation> Fill(
@@ -27,36 +34,41 @@ namespace Aetherium.WorldGen.Algorithms.Shapes
             var filled = new List<WorldLocation>();
             var visited = new HashSet<WorldLocation>();
             var queue = new Queue<WorldLocation>();
-            
+
+            if (!canExpand(seed))
+                return filled;
+
             queue.Enqueue(seed);
             visited.Add(seed);
-            
+
             while (queue.Count > 0 && filled.Count < maxSize)
             {
                 var current = queue.Dequeue();
-                
-                if (!canExpand(current))
-                    continue;
-                
                 filled.Add(current);
-                
+
                 // Get neighbors in random order if RNG provided
-                var neighbors = GetNeighbors(current);
+                var neighbors = WorldLocationNeighbors.Cardinal4(current).ToList();
                 if (random != null)
                 {
                     Shuffle(neighbors, random);
                 }
-                
+
                 foreach (var neighbor in neighbors)
                 {
-                    if (!visited.Contains(neighbor))
-                    {
-                        visited.Add(neighbor);
-                        queue.Enqueue(neighbor);
-                    }
+                    if (visited.Contains(neighbor))
+                        continue;
+
+                    // Test canExpand BEFORE adding to visited/queue so out-of-bounds neighbors
+                    // don't pollute the visited set. The canExpand predicate must include any
+                    // bounds checks the caller cares about.
+                    if (!canExpand(neighbor))
+                        continue;
+
+                    visited.Add(neighbor);
+                    queue.Enqueue(neighbor);
                 }
             }
-            
+
             return filled;
         }
 
@@ -133,17 +145,6 @@ namespace Aetherium.WorldGen.Algorithms.Shapes
             }
             
             return filled;
-        }
-
-        private static List<WorldLocation> GetNeighbors(WorldLocation location)
-        {
-            return new List<WorldLocation>
-            {
-                new WorldLocation(location.X + 1, location.Y, location.Z),
-                new WorldLocation(location.X - 1, location.Y, location.Z),
-                new WorldLocation(location.X, location.Y + 1, location.Z),
-                new WorldLocation(location.X, location.Y - 1, location.Z)
-            };
         }
 
         private static void Shuffle<T>(List<T> list, Random random)

@@ -1,7 +1,6 @@
 using System;
-using System.Linq;
-using System.Text;
 using System.Collections.Generic;
+using System.Linq;
 using Aetherium.Core;
 using Aetherium.Geometry;
 using Aetherium.Components;
@@ -10,6 +9,16 @@ using Aetherium.WorldGen;
 
 namespace Aetherium
 {
+    /// <summary>
+    /// Recursive back-tracker maze generator driven by a grid coloring that partitions
+    /// locations into rooms, walls, and pillars.
+    /// <para>
+    /// This type is intentionally kept in the <c>Aetherium</c> namespace (not
+    /// <c>Aetherium.WorldGen</c>) because an identical copy exists in the Console project.
+    /// TODO: move both copies to a shared assembly (Aetherium.Core or a new
+    /// Aetherium.Geometry.Algorithms project) and delete the duplicate.
+    /// </para>
+    /// </summary>
     public class MazeGenerator : IMapGenerator
     {
         public IList<WorldLocation> AllLocations { get; set; }
@@ -32,9 +41,12 @@ namespace Aetherium
             }
         }
 
-        Random rand = new Random();
+        // Accepts an injected Random so the maze is reproducible from a given seed.
+        // Falls back to a freshly-created Random (thread-local, random seed) when null.
+        private readonly Random _rand;
 
-        public List<WorldLocation> Visited;
+        // HashSet for O(1) membership tests; the underlying List<> was O(n) per lookup.
+        public HashSet<WorldLocation> Visited;
 
         public event Action<WorldLocation> SetRoom;
         public event Action<WorldLocation> SetPillar;
@@ -43,11 +55,16 @@ namespace Aetherium
 
         public event Action<WorldLocation>? CurrentLocationSet;
 
-        public MazeGenerator()
+        // Explicit parameterless constructor required for Activator.CreateInstance discovery
+        // (optional-parameter constructors are not found by Type.GetConstructor(Type.EmptyTypes)).
+        public MazeGenerator() : this((Random?)null) { }
+
+        public MazeGenerator(Random? random)
         {
+            _rand = random ?? new Random();
             World = new World();
             AllLocations = new List<WorldLocation>();
-            Visited = new List<WorldLocation>();
+            Visited = new HashSet<WorldLocation>();
             Coloring = new GridColoring<string>(new string[1, 1]);
             Rooms = new List<WorldLocation>();
             Walls = new List<WorldLocation>();
@@ -65,11 +82,13 @@ namespace Aetherium
             Action<WorldLocation> setRoom,
             Action<WorldLocation> setPillar,
             Action<WorldLocation> setWall,
-            Action<WorldLocation> removeWall)
+            Action<WorldLocation> removeWall,
+            Random? random = null)  // optional so existing callers don't need to change
         {
+            _rand = random ?? new Random();
             World = world;
             AllLocations = locations.ToList();
-            Visited = new List<WorldLocation>();
+            Visited = new HashSet<WorldLocation>();
             Coloring = coloring;
 
             SetRoom = setRoom;
@@ -98,8 +117,12 @@ namespace Aetherium
                         .ToList();
 
                     foreach (var cell in cells)
-                        if (cell != null && !Walls.Contains(cell))
+                    {
+                        // WorldLocation is a struct; the previous `cell != null` check was always
+                        // true and has been removed.
+                        if (!Walls.Contains(cell))
                             Walls.Add(cell);
+                    }
                 }
                 else if (!Pillars.Contains(location))
                 {
@@ -110,44 +133,36 @@ namespace Aetherium
 
         public void Build()
         {
-            Visited = new List<WorldLocation>();
-
-            var allLocationsCount = AllLocations.Count;
+            Visited = new HashSet<WorldLocation>();
 
             var walls = Walls.ToList();
             foreach (var wall in walls)
                 SetWall(wall);
 
-            var wallCount = walls.Count;
-
             foreach (var room in Rooms)
                 SetRoom(room);
 
-            var roomCount = Rooms.Count;
-
-            //var pillars = AllLocations.Except(Walls.Union(Rooms)).ToList();
             foreach (var pillar in Pillars)
                 SetPillar(pillar);
 
-            var pillarCount = Pillars.Count;
-
-            var thingCount = wallCount + roomCount + pillarCount;
-            var diff = allLocationsCount - thingCount;
-
             CurrentLocation = Rooms.SelectRandom();
-
-            //while (BuildNext()) { }
         }
 
+        /// <summary>
+        /// Advances the maze by one step. Returns <c>true</c> while work was done (i.e., the
+        /// maze was extended or a new unvisited room was connected), or <c>false</c> when the
+        /// algorithm has no more rooms to visit.
+        /// </summary>
         public bool BuildNext()
         {
             if (CurrentLocation == null)
                 return false;
 
-            if (!Visited.Contains(CurrentLocation))
-                Visited.Add(CurrentLocation);
-
-            var neighbors = GetNeighborRooms(CurrentLocation);
+            if (Visited.Add(CurrentLocation))
+            {
+                // HashSet.Add returns false when the element already existed; we don't need a
+                // separate Contains check.
+            }
 
             var unvisitedNeighbors = GetNeighborRooms(CurrentLocation)
                 .Where(kvp => !Visited.Contains(kvp.Key))
@@ -155,34 +170,35 @@ namespace Aetherium
 
             if (unvisitedNeighbors.Any())
             {
-                var selectedNeighbor = unvisitedNeighbors[rand.Next(0, unvisitedNeighbors.Count)];
+                var selectedNeighbor = unvisitedNeighbors[_rand.Next(0, unvisitedNeighbors.Count)];
                 Connect(selectedNeighbor.Value);
                 CurrentLocation = selectedNeighbor.Key;
+                return true;
             }
-            else
+
+            // No unvisited neighbors from current location — scan all locations for an unvisited
+            // room that has at least one visited neighbor (Prim's extension).
+            CurrentLocation = null;
+            foreach (var loc in AllLocations)
             {
-                CurrentLocation = null;
+                var visitedNeighbors = GetNeighborRooms(loc)
+                    .Where(kvp => Visited.Contains(kvp.Key))
+                    .ToList();
 
-                foreach (var loc in AllLocations)
+                if (!Visited.Contains(loc) && visitedNeighbors.Any())
                 {
-                    var visitedNeighbors = GetNeighborRooms(loc)
-                        .Where(kvp => Visited.Contains(kvp.Key))
-                        .ToList();
-
-                    if (!Visited.Contains(loc) && visitedNeighbors.Any())
-                    {
-                        CurrentLocation = loc;
-                        var neighbor = visitedNeighbors[rand.Next(0, visitedNeighbors.Count)];
-                        Connect(neighbor.Value);
-                        break;
-                    }
+                    CurrentLocation = loc;
+                    var neighbor = visitedNeighbors[_rand.Next(0, visitedNeighbors.Count)];
+                    Connect(neighbor.Value);
+                    return true;
                 }
             }
 
-            return true;
+            // No remaining unvisited rooms reachable — algorithm is complete.
+            return false;
         }
 
-        public IList<(WorldDirection Direction, WorldLocation Location)> GetNeighborLocations(WorldLocation loc) => 
+        public IList<(WorldDirection Direction, WorldLocation Location)> GetNeighborLocations(WorldLocation loc) =>
             new List<(WorldDirection Direction, WorldLocation Location)>
             {
                 (WorldDirection.West, loc.FromDelta(-1, 0, 0)),
@@ -229,7 +245,7 @@ namespace Aetherium
                 RemoveWall(loc);
         }
 
-        // Minimal implementation to satisfy IMapGenerator discovery in tests
+        // Minimal implementation to satisfy IMapGenerator discovery in tests.
         public World Generate(GeneratorContext context)
         {
             var delegateGen = new Aetherium.WorldGen.Generators.RoomsAndCorridorsGenerator();
@@ -237,4 +253,3 @@ namespace Aetherium
         }
     }
 }
-

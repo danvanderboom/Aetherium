@@ -14,6 +14,10 @@ namespace Aetherium.WorldGen.Generators.Cities
     /// </summary>
     public class OrganicCityGenerator : IMapGenerator
     {
+        // Extra-edge ratio for road MST: fraction of additional non-tree connections that
+        // produce loops in the road network.
+        private const double MstExtraEdgeRatio = 0.2;
+
         private readonly WorldBuilder _baseBuilder;
 
         public OrganicCityGenerator()
@@ -47,19 +51,20 @@ namespace Aetherium.WorldGen.Generators.Cities
             var districts = GenerateDistrictCenters(context, districtCount);
 
             // Build road network using MST
-            var mst = MinimumSpanningTree.ComputeMSTWithExtraEdges(districts, 0.2, context.Random);
+            var rng = context.GetRandom("city:organic");
+            var mst = MinimumSpanningTree.ComputeMSTWithExtraEdges(districts, MstExtraEdgeRatio, rng);
 
             // Carve roads along MST edges
             int roadWidth = GetParameter(context, "roadWidth", 2);
             foreach (var edge in mst)
             {
-                CarveRoad(world, edge, roadWidth, context.ZLevel);
+                CarveRoad(world, edge, roadWidth, context.ZLevel, context.Width, context.Height);
             }
 
             // Fill districts with buildings
             foreach (var district in districts)
             {
-                FillDistrictWithBuildings(world, district, context);
+                FillDistrictWithBuildings(world, district, context, rng);
             }
 
             // Set start location at first district center
@@ -76,58 +81,68 @@ namespace Aetherium.WorldGen.Generators.Cities
         {
             var centers = new List<MinimumSpanningTree.Node>();
             int margin = 10;
+            var rng = context.GetRandom("city:organic");
 
             for (int i = 0; i < count; i++)
             {
-                int x = context.Random.Next(margin, context.Width - margin);
-                int y = context.Random.Next(margin, context.Height - margin);
-                
+                int x = rng.Next(margin, context.Width - margin);
+                int y = rng.Next(margin, context.Height - margin);
+
                 centers.Add(new MinimumSpanningTree.Node(x, y, $"District{i}"));
             }
 
             return centers;
         }
 
-        private void CarveRoad(World world, MinimumSpanningTree.Edge edge, int width, int z)
+        private void CarveRoad(World world, MinimumSpanningTree.Edge edge, int width, int z, int mapWidth, int mapHeight)
         {
             var path = MinimumSpanningTree.EdgesToPath(edge);
 
             foreach (var (x, y) in path)
             {
-                // Widen the road
                 for (int dy = -width / 2; dy <= width / 2; dy++)
                 {
                     for (int dx = -width / 2; dx <= width / 2; dx++)
                     {
-                        var loc = new WorldLocation(x + dx, y + dy, z);
-                        world.SetTerrain("Road", loc);
+                        int wx = x + dx;
+                        int wy = y + dy;
+                        if (wx < 0 || wx >= mapWidth || wy < 0 || wy >= mapHeight)
+                            continue;
+                        world.SetTerrain("Road", new WorldLocation(wx, wy, z));
                     }
                 }
             }
         }
 
-        private void FillDistrictWithBuildings(World world, MinimumSpanningTree.Node district, GeneratorContext context)
+        private void FillDistrictWithBuildings(World world, MinimumSpanningTree.Node district, GeneratorContext context, Random rng)
         {
-            int radius = context.Random.Next(15, 25);
-            int buildingCount = context.Random.Next(5, 12);
+            int radius = rng.Next(15, 25);
+            int buildingCount = rng.Next(5, 12);
 
-            // Place buildings in a radial pattern around district center
             for (int i = 0; i < buildingCount; i++)
             {
-                double angle = context.Random.NextDouble() * 2 * Math.PI;
-                double distance = context.Random.NextDouble() * radius;
-                
+                double angle = rng.NextDouble() * 2 * Math.PI;
+                double distance = rng.NextDouble() * radius;
+
                 int bx = district.X + (int)(Math.Cos(angle) * distance);
                 int by = district.Y + (int)(Math.Sin(angle) * distance);
 
-                // Create building
-                int size = context.Random.Next(4, 8);
+                int size = rng.Next(4, 8);
+
+                // Skip buildings that would extend outside the map.
+                if (bx < 0 || by < 0 || bx + size > context.Width || by + size > context.Height)
+                    continue;
+
                 for (int dy = 0; dy < size; dy++)
                 {
                     for (int dx = 0; dx < size; dx++)
                     {
                         var loc = new WorldLocation(bx + dx, by + dy, context.ZLevel);
-                        
+
+                        // Don't clobber the road network with building tiles.
+                        if (world.GetTerrainType(loc)?.Name == "Road")
+                            continue;
+
                         if (dx == 0 || dx == size - 1 || dy == 0 || dy == size - 1)
                         {
                             world.SetTerrain("Wall", loc);
@@ -139,7 +154,6 @@ namespace Aetherium.WorldGen.Generators.Cities
                     }
                 }
 
-                // Add door
                 int doorX = bx + size / 2;
                 int doorY = by;
                 world.SetTerrain("Indoors", new WorldLocation(doorX, doorY, context.ZLevel));

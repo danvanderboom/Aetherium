@@ -46,9 +46,6 @@ namespace Aetherium.WorldGen.Generators.Cities
                 }
             }
 
-            // Generate street grid
-            var streets = new List<Rectangle>();
-            
             // Horizontal streets
             for (int y = streetWidth; y < context.Height - streetWidth; y += blockSize + streetWidth)
             {
@@ -117,10 +114,17 @@ namespace Aetherium.WorldGen.Generators.Cities
             return blocks;
         }
 
+        private const int MaxBuildingSize = 6; // exclusive upper bound for rng.Next
+        private const int MinBuildingSize = 3;
+
         private void PlaceBuildingsInBlock(World world, Rectangle block, GeneratorContext context)
         {
-            // Use Poisson sampling for building placement
-            var sampler = new PoissonDiscSampling(block.Width, block.Height, 6.0, context.Random);
+            // Poisson minimum distance must exceed the largest building footprint + 1 cell of
+            // wall buffer; otherwise adjacent samples can yield overlapping buildings even
+            // though they satisfy the Poisson constraint.
+            var rng = context.GetRandom("city:grid");
+            var minDistance = Math.Max(MaxBuildingSize, 6.0);
+            var sampler = new PoissonDiscSampling(block.Width, block.Height, minDistance, rng);
             var positions = sampler.Generate();
 
             foreach (var (relX, relY) in positions)
@@ -128,8 +132,7 @@ namespace Aetherium.WorldGen.Generators.Cities
                 int absX = block.X + (int)relX;
                 int absY = block.Y + (int)relY;
 
-                // Create simple 3x3 building
-                int buildingSize = context.Random.Next(3, 6);
+                int buildingSize = rng.Next(MinBuildingSize, MaxBuildingSize);
                 
                 for (int by = 0; by < buildingSize && absY + by < block.Y + block.Height; by++)
                 {

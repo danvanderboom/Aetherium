@@ -8,6 +8,13 @@ namespace Aetherium.WorldGen
     /// <summary>
     /// Describes a single world generation invocation, including target template,
     /// generator identifiers, dimensions, and narrative constraints.
+    ///
+    /// <para><b>Immutability contract:</b> once a <see cref="WorldGenerationRequest"/> is passed
+    /// to <see cref="WorldGenerationOrchestrator.Generate"/>, the orchestrator treats it as
+    /// read-only and never mutates any property. Callers may safely reuse the same request
+    /// object across retries, batch runs, and tests. The only intended mutating operation is
+    /// <see cref="ApplyCurriculumStage"/>, which is meant to be called by the caller
+    /// <em>before</em> handing the request to the orchestrator.</para>
     /// </summary>
     public sealed class WorldGenerationRequest
     {
@@ -26,6 +33,13 @@ namespace Aetherium.WorldGen
         public TimeSpan PhaseTimeout { get; set; } = TimeSpan.FromSeconds(2);
         public bool EnableMetrics { get; set; } = true;
         public bool EnableLogging { get; set; } = true;
+
+        /// <summary>
+        /// When true, wall-clock phase durations are recorded in <see cref="GenerationMetrics.PhaseDurationsMs"/>
+        /// and budget checks in the validation service will fire. Set to false in deterministic tests
+        /// to prevent flaky failures caused by wall-clock variation. Defaults to true for production use.
+        /// </summary>
+        public bool RecordTimings { get; set; } = true;
 
         /// <summary>
         /// Optional hybrid anchors for mixed authored/procedural content.

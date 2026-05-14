@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Aetherium.Components;
 using Aetherium.Core;
+using Aetherium.WorldGen;
 
 namespace Aetherium.WorldGen.Features.Structural
 {
@@ -113,70 +114,98 @@ namespace Aetherium.WorldGen.Features.Structural
 
         private void EnsureBuildingHasExits(World world, List<WorldLocation> building, GeneratorContext context)
         {
-            // Find perimeter (indoor cells adjacent to non-indoor)
-            var perimeterCandidates = new List<WorldLocation>();
-
+            // Existing exits: indoor cells that already touch traversable outside terrain
+            // (anything that isn't Indoors/Wall/None — Plains, Forest, Road, etc.).
+            var existingExits = new HashSet<WorldLocation>();
             foreach (var loc in building)
             {
-                var neighbors = new[]
-                {
-                    new WorldLocation(loc.X + 1, loc.Y, loc.Z),
-                    new WorldLocation(loc.X - 1, loc.Y, loc.Z),
-                    new WorldLocation(loc.X, loc.Y + 1, loc.Z),
-                    new WorldLocation(loc.X, loc.Y - 1, loc.Z)
-                };
-
-                foreach (var neighbor in neighbors)
-                {
-                    if (world.EntitiesByLocation.ContainsKey(neighbor))
-                    {
-                        var terrainType = world.GetTerrainType(neighbor);
-                        // If neighbor is not indoor and not wall, this is a valid exit location
-                        if (terrainType?.Name != "Indoors" && terrainType?.Name != "Wall")
-                        {
-                            perimeterCandidates.Add(loc);
-                            break;
-                        }
-                    }
-                }
+                if (HasOutsideNeighbor(world, loc))
+                    existingExits.Add(loc);
             }
 
-            // If no exits found on perimeter, make one by converting a wall
-            if (perimeterCandidates.Count == 0)
+            if (existingExits.Count >= _minExits)
+                return;
+
+            // Order building cells deterministically so exit placement is seed-stable.
+            var deterministic = building.OrderBy(l => l.Z).ThenBy(l => l.Y).ThenBy(l => l.X).ToList();
+
+            // Carve additional exits by converting walls adjacent to *traversable outside* terrain.
+            // Prefer walls facing real terrain (Plains/Road/etc.) over walls facing the void.
+            int needed = _minExits - existingExits.Count;
+            var carved = new HashSet<WorldLocation>();
+            foreach (var loc in deterministic)
             {
-                // Find walls adjacent to building
-                foreach (var loc in building)
+                if (needed <= 0)
+                    break;
+                foreach (var dir in WorldLocationNeighbors.Cardinal4Offsets)
                 {
-                    var neighbors = new[]
-                    {
-                        new WorldLocation(loc.X + 1, loc.Y, loc.Z),
-                        new WorldLocation(loc.X - 1, loc.Y, loc.Z),
-                        new WorldLocation(loc.X, loc.Y + 1, loc.Z),
-                        new WorldLocation(loc.X, loc.Y - 1, loc.Z)
-                    };
+                    var wallLoc = new WorldLocation(loc.X + dir.dx, loc.Y + dir.dy, loc.Z);
+                    if (carved.Contains(wallLoc))
+                        continue;
+                    if (!world.EntitiesByLocation.ContainsKey(wallLoc))
+                        continue;
+                    if (world.GetTerrainType(wallLoc)?.Name != "Wall")
+                        continue;
 
-                    foreach (var neighbor in neighbors)
-                    {
-                        if (world.EntitiesByLocation.ContainsKey(neighbor))
-                        {
-                            var terrainType = world.GetTerrainType(neighbor);
-                            if (terrainType?.Name == "Wall")
-                            {
-                                // Convert wall to indoor (door)
-                                world.SetTerrain("Indoors", neighbor);
-                                perimeterCandidates.Add(neighbor);
-                                break;
-                            }
-                        }
-                    }
+                    // The wall must face traversable outside terrain on its far side.
+                    var beyond = new WorldLocation(wallLoc.X + dir.dx, wallLoc.Y + dir.dy, wallLoc.Z);
+                    if (!IsTraversableOutside(world, beyond))
+                        continue;
 
-                    if (perimeterCandidates.Count > 0)
+                    world.SetTerrain("Indoors", wallLoc);
+                    carved.Add(wallLoc);
+                    needed--;
+                    if (needed <= 0)
                         break;
                 }
             }
 
-            // Ensure minimum number of exits
-            // (Currently just ensures at least one - can be extended for multiple exits)
+            // Last-resort fallback: convert any adjacent wall, even if it faces the void.
+            // Better than leaving the building sealed.
+            if (needed > 0)
+            {
+                foreach (var loc in deterministic)
+                {
+                    if (needed <= 0)
+                        break;
+                    foreach (var dir in WorldLocationNeighbors.Cardinal4Offsets)
+                    {
+                        var wallLoc = new WorldLocation(loc.X + dir.dx, loc.Y + dir.dy, loc.Z);
+                        if (carved.Contains(wallLoc))
+                            continue;
+                        if (!world.EntitiesByLocation.ContainsKey(wallLoc))
+                            continue;
+                        if (world.GetTerrainType(wallLoc)?.Name != "Wall")
+                            continue;
+                        world.SetTerrain("Indoors", wallLoc);
+                        carved.Add(wallLoc);
+                        needed--;
+                        if (needed <= 0)
+                            break;
+                    }
+                }
+            }
+        }
+
+        private static bool HasOutsideNeighbor(World world, WorldLocation loc)
+        {
+            foreach (var n in WorldLocationNeighbors.Cardinal4(loc))
+            {
+                if (!world.EntitiesByLocation.ContainsKey(n))
+                    continue;
+                var t = world.GetTerrainType(n)?.Name;
+                if (t != null && t != "Indoors" && t != "Wall" && t != "None")
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool IsTraversableOutside(World world, WorldLocation loc)
+        {
+            if (!world.EntitiesByLocation.ContainsKey(loc))
+                return false;
+            var t = world.GetTerrainType(loc)?.Name;
+            return t != null && t != "Indoors" && t != "Wall" && t != "None";
         }
     }
 }

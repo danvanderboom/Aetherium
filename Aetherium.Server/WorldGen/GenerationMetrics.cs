@@ -16,6 +16,12 @@ namespace Aetherium.WorldGen
         private readonly Dictionary<string, double> _customMetrics = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _validationFailures = new();
 
+        /// <summary>
+        /// The effective seed used to initialize the random number generator for this generation run.
+        /// Persist or log this value to replay an interesting world with the same seed.
+        /// </summary>
+        public int EffectiveSeed { get; set; }
+
         public double BranchingFactor { get; set; }
         public double LoopRatio { get; set; }
         public int DeadEndCount { get; set; }

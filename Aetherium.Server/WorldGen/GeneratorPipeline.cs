@@ -4,7 +4,16 @@ using Aetherium.Core;
 namespace Aetherium.WorldGen
 {
     /// <summary>
-    /// A pipeline of generation features that are applied in sequence to build a world.
+    /// Fluent builder for composing a sequence of <see cref="IGenerationFeature"/> objects and
+    /// applying them to a world in a single call.
+    ///
+    /// <para>This type is a <em>standalone utility</em>, not a registered
+    /// <see cref="IWorldGenerationPass"/>. It is intentionally excluded from the
+    /// <see cref="WorldGenerationOrchestrator"/> pipeline so that individual passes and generators
+    /// can use it internally to compose sub-steps without coupling the orchestrator to a
+    /// feature-list abstraction. To consume it within the orchestration pipeline, create a pass
+    /// that holds a <see cref="GeneratorPipeline"/> and calls <see cref="Apply"/> from its
+    /// <c>Execute</c> method.</para>
     /// </summary>
     public sealed class GeneratorPipeline
     {

@@ -65,11 +65,11 @@ namespace Aetherium.WorldGen.Features.Population
             while (placed < _totalItems && candidates.Count > 0)
             {
                 // Select random location
-                var loc = candidates[context.Random.Next(candidates.Count)];
+                var loc = candidates[context.GetRandom("feature:item-distribution").Next(candidates.Count)];
                 candidates.Remove(loc);
 
                 // Select item type based on weights
-                string itemType = SelectWeightedItem(context.Random, _itemWeights, totalWeight);
+                string itemType = SelectWeightedItem(context.GetRandom("feature:item-distribution"), _itemWeights, totalWeight);
 
                 // Placeholder for actual item spawning
                 Console.WriteLine($"[ItemDistributionFeature] Would place {itemType} at {loc}");

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Aetherium.Server.MultiWorld;
 using Aetherium.WorldGen;
@@ -113,33 +114,22 @@ namespace Aetherium.Server.HubWorld
         }
 
         /// <summary>
-        /// Serializes portal definitions to a string for storage in generator parameters.
+        /// Serializes portal definitions to JSON for storage in generator parameters.
+        /// JSON property names match the keys expected by PortalNetworkPass.PortalDefinitionDto.
         /// </summary>
-        private string SerializePortals(List<PortalDefinition> portals)
+        private static string SerializePortals(List<PortalDefinition> portals)
         {
-            // Simple serialization: store as JSON-like string
-            // In a full implementation, you'd use proper JSON serialization
-            var parts = new List<string>();
-            foreach (var portal in portals)
+            var dtos = portals.Select(p => new
             {
-                var portalData = new List<string>();
-                if (!string.IsNullOrEmpty(portal.PortalId))
-                    portalData.Add($"id:{portal.PortalId}");
-                if (!string.IsNullOrEmpty(portal.TargetWorldTag))
-                    portalData.Add($"worldTag:{portal.TargetWorldTag}");
-                if (!string.IsNullOrEmpty(portal.TargetWorldTemplate))
-                    portalData.Add($"worldTemplate:{portal.TargetWorldTemplate}");
-                if (!string.IsNullOrEmpty(portal.TargetMapTag))
-                    portalData.Add($"mapTag:{portal.TargetMapTag}");
-                if (!string.IsNullOrEmpty(portal.TargetMapName))
-                    portalData.Add($"mapName:{portal.TargetMapName}");
-                if (!string.IsNullOrEmpty(portal.Activation))
-                    portalData.Add($"activation:{portal.Activation}");
-                
-                parts.Add(string.Join("|", portalData));
-            }
-            
-            return string.Join(";", parts);
+                id = p.PortalId,
+                worldTag = p.TargetWorldTag,
+                worldTemplate = p.TargetWorldTemplate,
+                mapTag = p.TargetMapTag,
+                mapName = p.TargetMapName,
+                activation = p.Activation
+            }).ToList();
+
+            return JsonSerializer.Serialize(dtos);
         }
     }
 }

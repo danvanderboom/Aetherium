@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Aetherium.Components;
 using Aetherium.Core;
 using Aetherium.Entities;
@@ -13,10 +14,13 @@ namespace Aetherium.WorldGen.Passes
     /// </summary>
     public sealed class PortalNetworkPass : IWorldGenerationPass
     {
+        // One procedural portal per this many passable tiles (min 1, max 3).
+        private const int PortalTileRatio = 200;
+
         public string Name => "portal-network";
         public GenerationPhase Phase => GenerationPhase.Interactions;
 
-        public bool SupportsTemplate(WorldGenerationTemplate template) => true; // Works with all templates
+        public bool SupportsTemplate(WorldGenerationTemplate template) => true;
 
         public void Execute(WorldGenerationContext context)
         {
@@ -29,206 +33,266 @@ namespace Aetherium.WorldGen.Passes
             var world = context.World;
             var rng = context.GeneratorContext.GetRandom("portal-network");
 
-            // Check if this is a hub world with portal definitions
             bool isHub = false;
             if (context.GeneratorContext.GeneratorParams?.TryGetValue("isHub", out var isHubStr) == true && isHubStr != null)
             {
                 isHub = isHubStr.Equals("true", StringComparison.OrdinalIgnoreCase);
             }
 
-            if (isHub && context.GeneratorContext.GeneratorParams?.TryGetValue("portalDefinitions", out var portalDefsObj) == true)
+            if (isHub && context.GeneratorContext.GeneratorParams?.TryGetValue("portalDefinitions", out var portalDefsBlob) == true)
             {
-                // Hub world: place portals from definition
-                PlaceHubPortals(world, context, rng, portalDefsObj.ToString() ?? "");
+                PlaceHubPortals(world, context, rng, portalDefsBlob ?? string.Empty);
             }
             else
             {
-                // Procedural world: place portals randomly
                 PlaceProceduralPortals(world, context, rng);
             }
         }
 
-        /// <summary>
-        /// Places portals for a hub world based on portal definitions from the hub JSON.
-        /// </summary>
-        private void PlaceHubPortals(World world, WorldGenerationContext context, Random rng, string portalDefinitions)
+        private void PlaceHubPortals(World world, WorldGenerationContext context, Random rng, string portalDefinitionsBlob)
         {
-            // Parse portal definitions (format: "id:portal1|worldTag:dungeon|activation:unlocked;id:portal2|worldTag:city")
-            var portalDefs = ParsePortalDefinitions(portalDefinitions);
-            
+            List<PortalDefinitionDto> portalDefs;
+            try
+            {
+                portalDefs = ParsePortalDefinitions(portalDefinitionsBlob);
+            }
+            catch (Exception ex)
+            {
+                context.AddError($"Failed to parse hub portal definitions: {ex.Message}");
+                return;
+            }
+
             if (portalDefs.Count == 0)
             {
-                // Fallback to procedural placement if no valid definitions
                 PlaceProceduralPortals(world, context, rng);
                 return;
             }
 
-            var candidateLocations = FindPortalLocations(world, context, rng);
-            
+            var candidateLocations = FindPortalLocations(world, context);
+
             if (candidateLocations.Count == 0)
             {
-                // Fallback: use any passable location
                 candidateLocations = world.EntitiesByLocation.Keys
                     .Where(loc => world.PassableTerrain(loc))
+                    .OrderBy(loc => loc.Z).ThenBy(loc => loc.Y).ThenBy(loc => loc.X)
                     .ToList();
             }
 
-            // Place one portal per definition (up to available locations)
-            int portalsPlaced = 0;
+            var placed = new List<(string PortalId, WorldLocation Location)>();
             for (int i = 0; i < portalDefs.Count && candidateLocations.Count > 0; i++)
             {
                 var portalDef = portalDefs[i];
-                var locationIndex = portalsPlaced % candidateLocations.Count;
+                var locationIndex = rng.Next(candidateLocations.Count);
                 var location = candidateLocations[locationIndex];
-                candidateLocations.RemoveAt(locationIndex); // Remove used location
+                candidateLocations.RemoveAt(locationIndex);
 
-                // Determine target tag from portal definition
-                var targetTag = portalDef.TryGetValue("worldTag", out var tag) ? tag?.ToString() :
-                               portalDef.TryGetValue("worldTemplate", out var template) ? template?.ToString() : null;
-
-                var portalId = portalDef.TryGetValue("id", out var id) ? id?.ToString() ?? $"hub-portal-{i}" : $"hub-portal-{i}";
-                var activation = portalDef.TryGetValue("activation", out var act) ? act?.ToString() : null;
+                var portalId = string.IsNullOrEmpty(portalDef.Id) ? $"hub-portal-{i}" : portalDef.Id;
+                var targetTag = portalDef.WorldTag ?? portalDef.WorldTemplate;
 
                 var portal = new PortalEntity(
                     portalId: portalId,
                     targetWorldId: null,
                     targetMapId: null,
                     targetTag: targetTag,
-                    activation: activation
+                    activation: portalDef.Activation
                 );
 
                 portal.Set(location);
                 world.AddEntity(portal);
 
-                // Store portal metadata
-                if (!context.SharedData.ContainsKey("portals"))
-                {
-                    context.SharedData["portals"] = new List<Dictionary<string, object>>();
-                }
-
-                var portalList = context.SharedData["portals"] as List<Dictionary<string, object>>;
-                portalList?.Add(new Dictionary<string, object>
-                {
-                    { "portalId", portalId },
-                    { "location", location },
-                    { "targetTag", targetTag ?? "" },
-                    { "activation", activation ?? "" }
-                });
-
-                portalsPlaced++;
+                RecordPortalMetadata(context, portalId, location, targetTag, portalDef.Activation);
+                placed.Add((portalId, location));
             }
+
+            VerifyReachability(world, context, placed);
         }
 
-        /// <summary>
-        /// Places portals for a procedural world (original behavior).
-        /// </summary>
         private void PlaceProceduralPortals(World world, WorldGenerationContext context, Random rng)
         {
-            // Find strategic locations for portals:
-            // - Near exits/boundaries
-            // - At major landmarks (if available)
-            // - Distributed across key areas
-            var candidateLocations = FindPortalLocations(world, context, rng);
+            var candidateLocations = FindPortalLocations(world, context);
 
             if (candidateLocations.Count == 0)
             {
-                // Fallback: use any passable location
                 candidateLocations = world.EntitiesByLocation.Keys
                     .Where(loc => world.PassableTerrain(loc))
+                    .OrderBy(loc => loc.Z).ThenBy(loc => loc.Y).ThenBy(loc => loc.X)
                     .ToList();
             }
 
-            // Place 1-3 portals depending on world size
-            int portalCount = Math.Min(3, Math.Max(1, candidateLocations.Count / 200));
-            
+            int portalCount = Math.Min(3, Math.Max(1, candidateLocations.Count / PortalTileRatio));
+
+            var placed = new List<(string PortalId, WorldLocation Location)>();
             for (int i = 0; i < portalCount; i++)
             {
                 if (candidateLocations.Count == 0)
                     break;
 
-                var location = candidateLocations[rng.Next(candidateLocations.Count)];
-                candidateLocations.Remove(location); // Avoid placing multiple portals at same location
+                int idx = rng.Next(candidateLocations.Count);
+                var location = candidateLocations[idx];
+                candidateLocations.RemoveAt(idx);
 
-                // Generate portal with link hints
                 var portalId = $"portal-{context.GeneratorContext.Seed}-{i}";
-                var targetTag = SelectTargetTag(world, context, rng);
-                
+                var targetTag = SelectTargetTag(context, rng);
+
                 var portal = new PortalEntity(
                     portalId: portalId,
-                    targetWorldId: null, // Will be resolved at runtime via cluster grain
+                    targetWorldId: null,
                     targetMapId: null,
                     targetTag: targetTag,
-                    activation: null // No activation requirement by default
+                    activation: null
                 );
 
                 portal.Set(location);
                 world.AddEntity(portal);
 
-                // Store portal metadata in context for cluster registration
-                if (!context.SharedData.ContainsKey("portals"))
-                {
-                    context.SharedData["portals"] = new List<Dictionary<string, object>>();
-                }
-
-                var portalList = context.SharedData["portals"] as List<Dictionary<string, object>>;
-                portalList?.Add(new Dictionary<string, object>
-                {
-                    { "portalId", portalId },
-                    { "location", location },
-                    { "targetTag", targetTag ?? "" }
-                });
+                RecordPortalMetadata(context, portalId, location, targetTag, null);
+                placed.Add((portalId, location));
             }
+
+            VerifyReachability(world, context, placed);
         }
 
-        /// <summary>
-        /// Parses portal definitions from serialized string format.
-        /// Format: "id:portal1|worldTag:dungeon|activation:unlocked;id:portal2|worldTag:city"
-        /// </summary>
-        private List<Dictionary<string, string>> ParsePortalDefinitions(string portalDefinitions)
+        private static void RecordPortalMetadata(WorldGenerationContext context, string portalId, WorldLocation location, string? targetTag, string? activation)
         {
-            var result = new List<Dictionary<string, string>>();
-            
-            if (string.IsNullOrWhiteSpace(portalDefinitions))
-                return result;
-
-            var portalStrings = portalDefinitions.Split(';', StringSplitOptions.RemoveEmptyEntries);
-            
-            foreach (var portalStr in portalStrings)
+            if (!context.SharedData.ContainsKey("portals"))
             {
-                var portalDef = new Dictionary<string, string>();
-                var parts = portalStr.Split('|', StringSplitOptions.RemoveEmptyEntries);
-                
-                foreach (var part in parts)
+                context.SharedData["portals"] = new List<Dictionary<string, object>>();
+            }
+
+            if (context.SharedData["portals"] is not List<Dictionary<string, object>> portalList)
+            {
+                context.AddError("SharedData[\"portals\"] is not the expected list type — concurrent pass collision?");
+                return;
+            }
+
+            portalList.Add(new Dictionary<string, object>
+            {
+                { "portalId", portalId },
+                { "location", location },
+                { "targetTag", targetTag ?? string.Empty },
+                { "activation", activation ?? string.Empty }
+            });
+        }
+
+        private void VerifyReachability(World world, WorldGenerationContext context, List<(string PortalId, WorldLocation Location)> placed)
+        {
+            if (placed.Count == 0)
+                return;
+
+            var start = context.StartLocation;
+            if (start is null || start.IsNone)
+                return;
+
+            var reachable = BfsReachable(world, start);
+            var unreachable = new List<string>();
+            foreach (var (portalId, location) in placed)
+            {
+                if (!reachable.Contains(location))
                 {
-                    var keyValue = part.Split(':', 2, StringSplitOptions.RemoveEmptyEntries);
-                    if (keyValue.Length == 2)
-                    {
-                        portalDef[keyValue[0].Trim()] = keyValue[1].Trim();
-                    }
-                }
-                
-                if (portalDef.Count > 0)
-                {
-                    result.Add(portalDef);
+                    unreachable.Add($"{portalId}@{location.X},{location.Y},{location.Z}");
                 }
             }
-            
+
+            // Record reachability for validation/diagnostics. The validation service can
+            // promote this to a hard error per-template if portals must be reachable.
+            if (unreachable.Count > 0)
+            {
+                context.GeneratorContext.PhaseArtifacts["portal-network:unreachable"] = unreachable;
+            }
+            context.GeneratorContext.PhaseArtifacts["portal-network:reachable-count"] = placed.Count - unreachable.Count;
+            context.GeneratorContext.PhaseArtifacts["portal-network:placed-count"] = placed.Count;
+        }
+
+        private static HashSet<WorldLocation> BfsReachable(World world, WorldLocation start)
+        {
+            var visited = new HashSet<WorldLocation> { start };
+            var queue = new Queue<WorldLocation>();
+            queue.Enqueue(start);
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                foreach (var n in WorldLocationNeighbors.Cardinal6(current))
+                {
+                    if (visited.Contains(n))
+                        continue;
+                    if (!world.EntitiesByLocation.ContainsKey(n))
+                        continue;
+                    if (!world.PassableTerrain(n))
+                        continue;
+                    visited.Add(n);
+                    queue.Enqueue(n);
+                }
+            }
+
+            return visited;
+        }
+
+        // GetNeighbors removed — callers now use WorldLocationNeighbors.Cardinal6 directly.
+
+        /// <summary>
+        /// Parses portal definitions. Preferred format is JSON
+        /// (<c>[{"id":"p1","worldTag":"dungeon","activation":"unlocked"}, ...]</c>).
+        /// Falls back to the legacy <c>id:p1|worldTag:dungeon;...</c> format if the blob is not JSON,
+        /// for compatibility with older data; the legacy format is fragile (no escaping) and should be migrated.
+        /// </summary>
+        internal static List<PortalDefinitionDto> ParsePortalDefinitions(string blob)
+        {
+            var result = new List<PortalDefinitionDto>();
+            if (string.IsNullOrWhiteSpace(blob))
+                return result;
+
+            var trimmed = blob.TrimStart();
+            if (trimmed.StartsWith('[') || trimmed.StartsWith('{'))
+            {
+                var parsed = JsonSerializer.Deserialize<List<PortalDefinitionDto>>(blob, JsonOptions);
+                return parsed ?? result;
+            }
+
+            // Legacy pipe/semicolon format
+            foreach (var portalStr in blob.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var def = new PortalDefinitionDto();
+                bool hasAny = false;
+                foreach (var part in portalStr.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var kv = part.Split(':', 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (kv.Length != 2)
+                        continue;
+                    var key = kv[0].Trim();
+                    var value = kv[1].Trim();
+                    switch (key.ToLowerInvariant())
+                    {
+                        case "id": def.Id = value; hasAny = true; break;
+                        case "worldtag": def.WorldTag = value; hasAny = true; break;
+                        case "worldtemplate": def.WorldTemplate = value; hasAny = true; break;
+                        case "maptag": def.MapTag = value; hasAny = true; break;
+                        case "mapname": def.MapName = value; hasAny = true; break;
+                        case "activation": def.Activation = value; hasAny = true; break;
+                    }
+                }
+                if (hasAny)
+                    result.Add(def);
+            }
+
             return result;
         }
 
-        private List<WorldLocation> FindPortalLocations(World world, WorldGenerationContext context, Random rng)
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        private List<WorldLocation> FindPortalLocations(World world, WorldGenerationContext context)
         {
             var locations = new List<WorldLocation>();
 
             try
             {
                 var allLocations = world.EntitiesByLocation?.Keys?.ToList() ?? new List<WorldLocation>();
-
-                // Snapshot potentially nullable context values to avoid racey reads in predicates
                 var objective = context.ObjectiveLocation;
                 var start = context.StartLocation;
 
-                // Prefer locations near objective
                 if (objective != null && allLocations.Count > 0)
                 {
                     foreach (var loc in allLocations)
@@ -244,7 +308,6 @@ namespace Aetherium.WorldGen.Passes
                     }
                 }
 
-                // Prefer start location vicinity
                 if (start != null && allLocations.Count > 0)
                 {
                     foreach (var loc in allLocations)
@@ -260,7 +323,6 @@ namespace Aetherium.WorldGen.Passes
                     }
                 }
 
-                // Prefer locations along primary path
                 if (context.PrimaryPath.Count > 0)
                 {
                     var pathLocations = new List<WorldLocation>();
@@ -272,7 +334,6 @@ namespace Aetherium.WorldGen.Passes
                         }
                     }
 
-                    // Sample points along path (beginning, middle, end)
                     if (pathLocations.Count >= 3)
                     {
                         locations.Add(pathLocations[0]);
@@ -285,35 +346,43 @@ namespace Aetherium.WorldGen.Passes
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Be conservative: if anything goes wrong while selecting candidates,
-                // return what we have so far and let fallback logic handle placement.
+                // Candidate finding is best-effort — failures here are recoverable via the
+                // "any passable terrain" fallback in the callers. Record under PhaseArtifacts
+                // for diagnostics rather than escalating to context.AddError (which would abort).
+                context.GeneratorContext.PhaseArtifacts["portal-network:find-locations-error"] = ex.ToString();
             }
 
-            return locations.Distinct().ToList();
+            // Sort to remove any dependency on Dictionary.Keys enumeration order.
+            return locations.Distinct()
+                .OrderBy(loc => loc.Z).ThenBy(loc => loc.Y).ThenBy(loc => loc.X)
+                .ToList();
         }
 
-        private string? SelectTargetTag(World world, WorldGenerationContext context, Random rng)
+        private static string? SelectTargetTag(WorldGenerationContext context, Random rng)
         {
-            // Determine target tag based on world template or constraints
             var template = context.Request.Template;
-
-            // Could be enhanced with narrative constraints
-            // For now, simple logic:
             if (template == WorldGenerationTemplate.Outdoor)
             {
-                // Outdoor worlds might link to hubs, cities, or other outdoor areas
                 var tags = new[] { "hub", "city", "outdoor" };
                 return tags[rng.Next(tags.Length)];
             }
             else
             {
-                // Dungeon worlds might link to other dungeons or hubs
                 var tags = new[] { "hub", "dungeon" };
                 return tags[rng.Next(tags.Length)];
             }
         }
+
+        internal sealed class PortalDefinitionDto
+        {
+            public string? Id { get; set; }
+            public string? WorldTag { get; set; }
+            public string? WorldTemplate { get; set; }
+            public string? MapTag { get; set; }
+            public string? MapName { get; set; }
+            public string? Activation { get; set; }
+        }
     }
 }
-

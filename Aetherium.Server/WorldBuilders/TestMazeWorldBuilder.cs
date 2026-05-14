@@ -126,6 +126,7 @@ namespace Aetherium.WorldBuilders
             "Indoors",
             "Wall",
             "Mountain",
+            "Hills",
             "Road",
             "Plains",
             "Forest",
@@ -209,6 +210,16 @@ namespace Aetherium.WorldBuilders
                     { "MapCharacter", "." },
                     { "BackgroundColor", ConsoleColor.DarkYellow.ToString() },
                     { "ForegroundColor", ConsoleColor.Yellow.ToString() },
+                }
+            },
+            new TileType
+            {
+                Name = "Hills",
+                Settings = new Dictionary<string, string>
+                {
+                    { "MapCharacter", "n" },
+                    { "BackgroundColor", ConsoleColor.DarkGreen.ToString() },
+                    { "ForegroundColor", ConsoleColor.DarkYellow.ToString() },
                 }
             },
             new TileType

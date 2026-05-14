@@ -92,7 +92,7 @@ namespace Aetherium.WorldGen.Generators.Outdoor
             else if (noiseValue < forestThreshold)
                 return "Forest";
             else if (noiseValue < mountainThreshold)
-                return "Plains"; // Hills
+                return "Hills";
             else
                 return "Mountain";
         }

@@ -42,7 +42,13 @@ namespace Aetherium.WorldGen.Algorithms.Noise
         /// </summary>
         /// <param name="x">X coordinate (not limited to 0-1 range)</param>
         /// <param name="y">Y coordinate (not limited to 0-1 range)</param>
-        /// <returns>Noise value in range [-1, 1]</returns>
+        /// <returns>
+        /// Noise value, empirically in approximately [-0.71, 0.71] for classic 2D Perlin
+        /// (gradient set is 8 directions with magnitude up to √2/2 after bilinear blend).
+        /// Callers should not assume a strict [-1, 1] range when thresholding. Use
+        /// <see cref="NoiseNormalized"/> for a [0, 1] range that maps the empirical
+        /// midpoint to 0.5.
+        /// </returns>
         public double Noise(double x, double y)
         {
             // Find unit grid cell containing point
@@ -82,21 +88,27 @@ namespace Aetherium.WorldGen.Algorithms.Noise
         /// <returns>Fractal noise value, normalized to approximately [-1, 1]</returns>
         public double FractalNoise(double x, double y, int octaves = 4, double persistence = 0.5, double lacunarity = 2.0)
         {
+            if (octaves <= 0)
+                return 0.0;
+
             double total = 0;
             double frequency = 1;
             double amplitude = 1;
             double maxValue = 0;  // For normalization
-            
+
             for (int i = 0; i < octaves; i++)
             {
                 total += Noise(x * frequency, y * frequency) * amplitude;
-                
+
                 maxValue += amplitude;
                 amplitude *= persistence;
                 frequency *= lacunarity;
             }
-            
-            return total / maxValue;
+
+            // Guard against degenerate maxValue (e.g., persistence = 0 with octaves > 1 collapses
+            // amplitude to 0 after the first iteration; maxValue would be 1.0 in that case, but
+            // for safety we never divide by zero).
+            return maxValue > 0 ? total / maxValue : 0.0;
         }
 
         /// <summary>

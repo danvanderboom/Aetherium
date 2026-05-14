@@ -11,6 +11,26 @@ namespace Aetherium.WorldGen.Features
     /// </summary>
     public class RiverCarverFeature : IGenerationFeature
     {
+        // Terrains a river is permitted to flow over. Anything not in this set (walls, doors,
+        // building interiors, dungeon features, roads, etc.) is preserved so rivers don't
+        // clobber content placed by earlier generation passes.
+        private static readonly HashSet<string> CarveableTerrains = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Plains",
+            "Forest",
+            "Mountain",
+            "Hills",
+            "Water",
+            "Sand",
+            "Desert",
+            "Grass",
+            "Dirt"
+        };
+
+        // Probability that the river takes a random jitter step instead of advancing toward
+        // the target (0 = straight line, 1 = pure random walk).
+        private const double RiverJitterProbability = 0.3;
+
         private readonly int _width;
         private readonly bool _connectEdges;
 
@@ -37,7 +57,7 @@ namespace Aetherium.WorldGen.Features
         private void CarveEdgeToEdgeRiver(World world, GeneratorContext context)
         {
             // Pick random start point on one edge
-            var startEdge = context.Random.Next(4); // 0=North, 1=East, 2=South, 3=West
+            var startEdge = context.GetRandom("feature:river").Next(4); // 0=North, 1=East, 2=South, 3=West
             var (startX, startY) = GetEdgePoint(startEdge, context);
 
             // Pick end point on opposite or adjacent edge
@@ -49,50 +69,59 @@ namespace Aetherium.WorldGen.Features
 
         private void CarveRandomRiver(World world, GeneratorContext context)
         {
-            var startX = context.Random.Next(context.Width);
-            var startY = context.Random.Next(context.Height);
-            var endX = context.Random.Next(context.Width);
-            var endY = context.Random.Next(context.Height);
+            var startX = context.GetRandom("feature:river").Next(context.Width);
+            var startY = context.GetRandom("feature:river").Next(context.Height);
+            var endX = context.GetRandom("feature:river").Next(context.Width);
+            var endY = context.GetRandom("feature:river").Next(context.Height);
 
             CarveRiver(world, context, startX, startY, endX, endY);
         }
 
         private void CarveRiver(World world, GeneratorContext context, int startX, int startY, int endX, int endY)
         {
-            // Simple random walk with bias toward target
             int x = startX;
             int y = startY;
             var visited = new HashSet<(int, int)>();
 
-            while ((x != endX || y != endY) && visited.Count < context.Width * context.Height)
+            // Random walks can revisit cells, so cap iterations independently of distinct-cell count.
+            int maxIterations = context.Width * context.Height * 4;
+            int iterations = 0;
+
+            while ((x != endX || y != endY) && iterations < maxIterations)
             {
-                // Widen river at current position
-                for (int dy = -_width / 2; dy <= _width / 2; dy++)
+                iterations++;
+
+                // Emit exactly _width cells per side (asymmetric for even widths).
+                int halfLow = _width / 2;
+                int halfHigh = _width - 1 - halfLow;
+                for (int dy = -halfLow; dy <= halfHigh; dy++)
                 {
-                    for (int dx = -_width / 2; dx <= _width / 2; dx++)
+                    for (int dx = -halfLow; dx <= halfHigh; dx++)
                     {
                         int rx = x + dx;
                         int ry = y + dy;
-                        if (rx >= 0 && rx < context.Width && ry >= 0 && ry < context.Height)
-                        {
-                            var loc = new WorldLocation(rx, ry, context.ZLevel);
-                            world.SetTerrain("Water", loc);
-                        }
+                        if (rx < 0 || rx >= context.Width || ry < 0 || ry >= context.Height)
+                            continue;
+
+                        var loc = new WorldLocation(rx, ry, context.ZLevel);
+                        var existing = world.GetTerrainType(loc)?.Name;
+                        if (existing != null && !CarveableTerrains.Contains(existing))
+                            continue;
+
+                        world.SetTerrain("Water", loc);
                     }
                 }
 
                 visited.Add((x, y));
 
-                // Move toward target with some randomness
                 var directions = new List<(int dx, int dy)>();
-                
+
                 if (x < endX) directions.Add((1, 0));
                 if (x > endX) directions.Add((-1, 0));
                 if (y < endY) directions.Add((0, 1));
                 if (y > endY) directions.Add((0, -1));
 
-                // Add orthogonal directions for variety
-                if (context.Random.NextDouble() < 0.3)
+                if (context.GetRandom("feature:river").NextDouble() < RiverJitterProbability)
                 {
                     directions.Add((0, 1));
                     directions.Add((0, -1));
@@ -102,7 +131,7 @@ namespace Aetherium.WorldGen.Features
 
                 if (directions.Count > 0)
                 {
-                    var (dx, dy) = directions[context.Random.Next(directions.Count)];
+                    var (dx, dy) = directions[context.GetRandom("feature:river").Next(directions.Count)];
                     x += dx;
                     y += dy;
                     x = Math.Clamp(x, 0, context.Width - 1);
@@ -119,10 +148,10 @@ namespace Aetherium.WorldGen.Features
         {
             return edge switch
             {
-                0 => (context.Random.Next(context.Width), 0), // North
-                1 => (context.Width - 1, context.Random.Next(context.Height)), // East
-                2 => (context.Random.Next(context.Width), context.Height - 1), // South
-                3 => (0, context.Random.Next(context.Height)), // West
+                0 => (context.GetRandom("feature:river").Next(context.Width), 0), // North
+                1 => (context.Width - 1, context.GetRandom("feature:river").Next(context.Height)), // East
+                2 => (context.GetRandom("feature:river").Next(context.Width), context.Height - 1), // South
+                3 => (0, context.GetRandom("feature:river").Next(context.Height)), // West
                 _ => (context.Width / 2, context.Height / 2)
             };
         }

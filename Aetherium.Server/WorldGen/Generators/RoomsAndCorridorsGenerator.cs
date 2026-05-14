@@ -6,6 +6,7 @@ using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Entities;
 using Aetherium.WorldBuilders;
+using Aetherium.WorldGen.Algorithms.Graphs;
 
 namespace Aetherium.WorldGen.Generators
 {
@@ -16,6 +17,10 @@ namespace Aetherium.WorldGen.Generators
     /// </summary>
     public class RoomsAndCorridorsGenerator : IMapGenerator
     {
+        // Extra-edge ratio passed to the MST: the fraction of additional non-tree edges added
+        // to create loops. ~20% gives some loop-back paths without flooding the layout.
+        private const double MstExtraEdgeRatio = 0.2;
+
         private readonly WorldBuilder _baseBuilder;
 
         public RoomsAndCorridorsGenerator()
@@ -39,6 +44,10 @@ namespace Aetherium.WorldGen.Generators
                 throw new InvalidOperationException("Expected TestMazeWorldBuilder");
             }
 
+            // Scoped RNG: keep rooms-and-corridors RNG independent from other passes/features
+            // that share the same GeneratorContext.
+            var rng = context.GetRandom("rooms-and-corridors");
+
             // Fill entire area with walls (boundaries)
             for (int y = 0; y < context.Height; y++)
             {
@@ -49,27 +58,25 @@ namespace Aetherium.WorldGen.Generators
             }
 
             // Generate 3-5 rooms
-            var numRooms = context.Random.Next(3, 6);
+            var numRooms = rng.Next(3, 6);
             var rooms = new List<Rectangle>();
 
             for (int i = 0; i < numRooms; i++)
             {
-                // Try to place a room
                 for (int attempt = 0; attempt < 50; attempt++)
                 {
-                    var roomWidth = context.Random.Next(4, 8);
-                    var roomHeight = context.Random.Next(4, 8);
-                    var x = context.Random.Next(1, context.Width - roomWidth - 1);
-                    var y = context.Random.Next(1, context.Height - roomHeight - 1);
+                    var roomWidth = rng.Next(4, 8);
+                    var roomHeight = rng.Next(4, 8);
+                    var x = rng.Next(1, Math.Max(2, context.Width - roomWidth - 1));
+                    var y = rng.Next(1, Math.Max(2, context.Height - roomHeight - 1));
 
                     var room = new Rectangle(x, y, roomWidth, roomHeight);
 
-                    // Check if room overlaps with existing rooms
-                    bool overlaps = rooms.Any(r => room.IntersectsWith(r));
-                    if (overlaps)
+                    // Inflate by 1 before overlap test so adjacent rooms can't share a wall edge.
+                    var inflated = Rectangle.Inflate(room, 1, 1);
+                    if (rooms.Any(r => inflated.IntersectsWith(r)))
                         continue;
 
-                    // Place the room
                     rooms.Add(room);
                     for (int ry = y; ry < y + roomHeight; ry++)
                     {
@@ -82,32 +89,10 @@ namespace Aetherium.WorldGen.Generators
                 }
             }
 
-            // Connect rooms with corridors
-            for (int i = 0; i < rooms.Count - 1; i++)
-            {
-                var room1 = rooms[i];
-                var room2 = rooms[i + 1];
-
-                var center1 = new Point(room1.X + room1.Width / 2, room1.Y + room1.Height / 2);
-                var center2 = new Point(room2.X + room2.Width / 2, room2.Y + room2.Height / 2);
-
-                // L-shaped corridor
-                // Horizontal first
-                int startX = Math.Min(center1.X, center2.X);
-                int endX = Math.Max(center1.X, center2.X);
-                for (int cx = startX; cx <= endX; cx++)
-                {
-                    world.SetTerrain("Indoors", new WorldLocation(cx, center1.Y, context.ZLevel));
-                }
-
-                // Then vertical
-                int startY = Math.Min(center1.Y, center2.Y);
-                int endY = Math.Max(center1.Y, center2.Y);
-                for (int cy = startY; cy <= endY; cy++)
-                {
-                    world.SetTerrain("Indoors", new WorldLocation(center2.X, cy, context.ZLevel));
-                }
-            }
+            // Connect rooms via MST + a small fraction of extra edges (for loop variety).
+            // Each room becomes an MST node at its center; MST guarantees full connectivity
+            // without the serpentine artifacts of i→i+1 pairing.
+            ConnectRoomsViaMST(world, rooms, rng, context.ZLevel);
 
             // Set start location to center of first room
             if (rooms.Count > 0)
@@ -130,6 +115,40 @@ namespace Aetherium.WorldGen.Generators
             }
 
             return world;
+        }
+
+        private static void ConnectRoomsViaMST(World world, List<Rectangle> rooms, Random rng, int z)
+        {
+            if (rooms.Count < 2)
+                return;
+
+            var nodes = rooms
+                .Select(r => new MinimumSpanningTree.Node(r.X + r.Width / 2, r.Y + r.Height / 2))
+                .ToList();
+
+            var edges = MinimumSpanningTree.ComputeMSTWithExtraEdges(nodes, MstExtraEdgeRatio, rng);
+
+            foreach (var edge in edges)
+            {
+                CarveLCorridor(world, edge.From.X, edge.From.Y, edge.To.X, edge.To.Y, z);
+            }
+        }
+
+        private static void CarveLCorridor(World world, int x1, int y1, int x2, int y2, int z)
+        {
+            int startX = Math.Min(x1, x2);
+            int endX = Math.Max(x1, x2);
+            for (int cx = startX; cx <= endX; cx++)
+            {
+                world.SetTerrain("Indoors", new WorldLocation(cx, y1, z));
+            }
+
+            int startY = Math.Min(y1, y2);
+            int endY = Math.Max(y1, y2);
+            for (int cy = startY; cy <= endY; cy++)
+            {
+                world.SetTerrain("Indoors", new WorldLocation(x2, cy, z));
+            }
         }
     }
 }

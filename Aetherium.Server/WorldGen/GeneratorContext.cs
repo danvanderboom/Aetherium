@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
@@ -83,8 +84,14 @@ namespace Aetherium.WorldGen
 
         /// <summary>
         /// Semantic version for the generator logic. Changing this value with the same seed produces new output.
+        /// <para>
+        /// This property is <c>init</c>-only: setting it after construction via an object-initializer
+        /// is fine, but mutating it mid-run would silently change the derived seed for any scope
+        /// not yet created, leading to hidden non-determinism. Use object-initializer syntax:
+        /// <c>new GeneratorContext(w, h, seed) { GeneratorVersion = "2.0.0" }</c>.
+        /// </para>
         /// </summary>
-        public string GeneratorVersion { get; set; } = "1.0.0";
+        public string GeneratorVersion { get; init; } = "1.0.0";
 
         /// <summary>
         /// Metrics collected during generation.
@@ -127,16 +134,25 @@ namespace Aetherium.WorldGen
 
             var seed = DeriveSeed(EffectiveSeed, GeneratorVersion, scope);
             rng = new Random(seed);
+            for (int i = 0; i < RngWarmupDraws; i++)
+                rng.Next();
             _scopedRandoms[scope] = rng;
             return rng;
         }
+
+        // Number of warm-up draws after constructing a scoped Random. Near-seed values
+        // (scopes whose derived seeds differ by only a few bits) produce correlated initial
+        // outputs from .NET's XOSHIRO256** algorithm; a brief warm-up decorrelates them.
+        private const int RngWarmupDraws = 8;
 
         private static int DeriveSeed(int baseSeed, string version, string scope)
         {
             using var sha = SHA256.Create();
             var material = Encoding.UTF8.GetBytes($"{baseSeed}:{version}:{scope}");
             var hash = sha.ComputeHash(material);
-            return BitConverter.ToInt32(hash, 0);
+            // BinaryPrimitives is endianness-explicit (always little-endian) so the derived seed
+            // is identical on both little- and big-endian architectures.
+            return BinaryPrimitives.ReadInt32LittleEndian(hash);
         }
     }
 }

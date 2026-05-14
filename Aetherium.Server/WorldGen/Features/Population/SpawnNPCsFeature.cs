@@ -46,8 +46,8 @@ namespace Aetherium.WorldGen.Features.Population
             {
                 attempts++;
 
-                int x = context.Random.Next(context.Width);
-                int y = context.Random.Next(context.Height);
+                int x = context.GetRandom("feature:spawn-npcs").Next(context.Width);
+                int y = context.GetRandom("feature:spawn-npcs").Next(context.Height);
                 var loc = new WorldLocation(x, y, context.ZLevel);
 
                 if (world.EntitiesByLocation.ContainsKey(loc) && world.PassableTerrain(loc))

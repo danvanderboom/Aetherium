@@ -116,7 +116,9 @@ namespace Aetherium.WorldGen.Generators.Outdoor
             {
                 PrimaryRoute.Clear();
                 var capital = _settlements.First();
-            PrimaryRoute.Add(capital.Center);
+                PrimaryRoute.Add(capital.Center);
+
+                // Carve roads to every village. The PrimaryRoute follows capital -> first village.
                 foreach (var settlement in _settlements.Skip(1))
                 {
                     var path = CarveRoad(capital.Center, settlement.Center);
@@ -125,21 +127,24 @@ namespace Aetherium.WorldGen.Generators.Outdoor
                         PrimaryRoute.AddRange(path);
                     }
                 }
-            PrimaryRoute.Add(_settlements[1].Center);
             }
 
             public void PlacePointsOfInterest()
             {
-                // Dungeon entrance near last village
+                // Dungeon entrance near the last village; route extends from that same anchor.
                 var anchorSettlement = _settlements.Last();
                 var dungeon = anchorSettlement.Center.FromDelta(10, 3, 0);
                 _world.SetTerrain("Cave", dungeon);
                 _poi.Add(dungeon);
-                PrimaryRoute.AddRange(CarveRoad(_settlements[1].Center, dungeon));
+                PrimaryRoute.AddRange(CarveRoad(anchorSettlement.Center, dungeon));
 
-                // Forest shrine near river (search for water tile)
+                // Forest shrine near river (search for water tile).
+                // Always carve a road from the anchor settlement to the shrine so that the
+                // shrine (FinalObjective) is reachable via the road network regardless of
+                // which water tile FindTerrainNear lands on.
                 var shrine = FindTerrainNear("Water", radius: 6) ?? dungeon.FromDelta(-5, -5, 0);
                 _world.SetTerrain("Indoors", shrine);
+                CarveRoad(anchorSettlement.Center, shrine);
                 _poi.Add(shrine);
             }
 
@@ -191,9 +196,11 @@ namespace Aetherium.WorldGen.Generators.Outdoor
 
             private WorldLocation? FindTerrainNear(string terrainName, int radius)
             {
-                foreach (var kvp in _world.EntitiesByLocation)
+                // Sort by (Z, Y, X) so the first match is deterministic regardless of Dictionary
+                // enumeration order, which is implementation-defined and varies across runtimes.
+                foreach (var loc in _world.EntitiesByLocation.Keys
+                    .OrderBy(l => l.Z).ThenBy(l => l.Y).ThenBy(l => l.X))
                 {
-                    var loc = kvp.Key;
                     var terrain = _world.GetTerrain(loc);
                     if (terrain == null || !string.Equals(terrain.Type.Name, terrainName, StringComparison.OrdinalIgnoreCase))
                         continue;
