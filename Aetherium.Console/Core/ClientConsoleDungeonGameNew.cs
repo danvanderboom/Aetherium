@@ -292,7 +292,20 @@ namespace Aetherium.Core
 
                     // UI Controls
                     case ConsoleKey.M:
-                        // Map toggle (existing functionality)
+                        // Toggle compass mode, or cycle the music track when Shift is held.
+                        // (This logic was previously stranded as dead code after the Mode-4
+                        // case's break, so M/Shift+M — advertised in the help panel — did
+                        // nothing.)
+                        if (keyInfo.Modifiers.HasFlag(ConsoleModifiers.Shift))
+                        {
+                            audioSystem.NextMusicTrack();
+                            statusMessage = $"Music: {audioSystem.CurrentTrack ?? "None"}";
+                        }
+                        else if (compassWidget != null && compassWidget.IsVisible)
+                        {
+                            compassWidget.ToggleMode();
+                            statusMessage = $"Compass mode: {compassWidget.Mode}";
+                        }
                         break;
 
                     // Vision/Lighting Mode Switches (Number Keys 1-4)
@@ -327,19 +340,7 @@ namespace Aetherium.Core
                         await gameClient.SetVisionModeAsync(VisionMode.Infrared);
                         statusMessage = "Mode 4: Infrared Vision + Sunlight";
                         break;
-                        // Toggle compass mode or cycle music
-                        if (keyInfo.Modifiers.HasFlag(ConsoleModifiers.Shift))
-                        {
-                            audioSystem.NextMusicTrack();
-                            statusMessage = $"Music: {audioSystem.CurrentTrack ?? "None"}";
-                        }
-                        else if (compassWidget != null && compassWidget.IsVisible)
-                        {
-                            compassWidget.ToggleMode();
-                            statusMessage = $"Compass mode: {compassWidget.Mode}";
-                        }
-                        break;
-                    
+
                     case ConsoleKey.N:
                         // Toggle music on/off
                         audioSystem.IsEnabled = !audioSystem.IsEnabled;

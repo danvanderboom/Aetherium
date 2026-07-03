@@ -363,15 +363,39 @@ namespace Aetherium.Server.Narrative.Consequence
         /// </summary>
         private int GetSeedForEvent(string eventType, Dictionary<string, object> eventData)
         {
-            var seed = eventType.GetHashCode();
-            
-            foreach (var kvp in eventData.OrderBy(k => k.Key))
+            // Use a stable hash, not string.GetHashCode(): the latter is randomized per
+            // process in .NET Core, which made event-driven generation non-reproducible
+            // across server restarts. Hash value objects via their string form so ints/enums
+            // are stable too, and order keys with an ordinal (culture-independent) comparer.
+            var seed = StableHash(eventType);
+
+            foreach (var kvp in eventData.OrderBy(k => k.Key, StringComparer.Ordinal))
             {
-                seed ^= kvp.Key.GetHashCode();
-                seed ^= (kvp.Value?.GetHashCode() ?? 0);
+                seed ^= StableHash(kvp.Key);
+                seed ^= StableHash(kvp.Value?.ToString() ?? string.Empty);
             }
 
             return seed;
+        }
+
+        /// <summary>
+        /// Deterministic 32-bit FNV-1a hash of a string. Stable across processes and runs,
+        /// unlike <see cref="string.GetHashCode()"/>.
+        /// </summary>
+        private static int StableHash(string value)
+        {
+            unchecked
+            {
+                const uint fnvOffsetBasis = 2166136261;
+                const uint fnvPrime = 16777619;
+                uint hash = fnvOffsetBasis;
+                foreach (char c in value)
+                {
+                    hash ^= c;
+                    hash *= fnvPrime;
+                }
+                return (int)hash;
+            }
         }
 
         /// <summary>

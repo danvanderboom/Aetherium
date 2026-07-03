@@ -206,8 +206,16 @@ namespace Aetherium.Server
                 });
             }
             
-            // Add world generation services
-            builder.Services.AddSingleton<MapGeneratorRegistry>();
+            // Add world generation services. Populate the registry at construction via
+            // DiscoverTypes — otherwise GetGenerator returns null in the co-hosted server and
+            // GameMapGrain silently falls back to AdvancedDungeonGenerator for every request,
+            // ignoring the requested generator type (RoomsAndCorridors, GridCity, Maze, …).
+            builder.Services.AddSingleton<MapGeneratorRegistry>(sp =>
+            {
+                var registry = new MapGeneratorRegistry();
+                registry.DiscoverTypes(typeof(Aetherium.WorldGen.IMapGenerator).Assembly);
+                return registry;
+            });
             builder.Services.AddSingleton<MapValidator>();
             
             // Add hub world services
@@ -242,12 +250,14 @@ namespace Aetherium.Server
             builder.Services.AddSingleton<PrefabLibrary>(sp =>
             {
                 var library = new PrefabLibrary(useFileStorage);
-                // Load prefabs from file system in development
+                // Load prefabs from file system in development. LoadFromDirectory tolerates a
+                // missing directory (logs and returns) and catches per-file errors, so this is
+                // safe to call unconditionally in file mode.
                 if (useFileStorage)
                 {
                     var prefabPath = Environment.GetEnvironmentVariable("PREFAB_PATH") ?? "./Data/Prefabs";
                     Console.WriteLine($"Loading prefabs from: {prefabPath}");
-                    // TODO: Implement file loading in PrefabLibrary
+                    library.LoadFromDirectory(prefabPath);
                 }
                 return library;
             });
@@ -276,17 +286,25 @@ namespace Aetherium.Server
                     
                     // Configure grain storage. Resolution centralized in ResolveStorageConfiguration
                     // so the snapshot-store DI binding (above) and the grain-storage providers stay in sync.
+                    // Every [PersistentState(..., "<storeName>")] declared by a grain must have a
+                    // matching provider here or that grain throws on activation. The full set:
+                    //   narrativeStore  — NarrativeStateGrain
+                    //   worldStore      — WorldGrain / ClusterGrain
+                    //   mapStore        — GameMapGrain / MapRegionGrain
+                    //   metaStore       — MetaProgressionGrain (previously unregistered → activation failed)
+                    var grainStoreNames = new[] { "narrativeStore", "worldStore", "mapStore", "metaStore" };
                     if (storageMode == "memory")
                     {
                         Console.WriteLine("Using in-memory grain storage (development mode)");
-                        siloBuilder.AddMemoryGrainStorage("narrativeStore");
-                        siloBuilder.AddMemoryGrainStorage("worldStore");
-                        siloBuilder.AddMemoryGrainStorage("mapStore");
+                        foreach (var storeName in grainStoreNames)
+                        {
+                            siloBuilder.AddMemoryGrainStorage(storeName);
+                        }
                     }
                     else if (storageMode == "sqlite")
                     {
                         Console.WriteLine($"Using SQLite grain storage at {sqliteConnectionString}");
-                        foreach (var storeName in new[] { "narrativeStore", "worldStore", "mapStore" })
+                        foreach (var storeName in grainStoreNames)
                         {
                             var capturedName = storeName;
                             var capturedConnString = sqliteConnectionString!;
@@ -299,82 +317,30 @@ namespace Aetherium.Server
                         }
                     }
 
-                    // Configure Orleans Streams for world events
+                    // Configure Orleans Streams for world events. The memory stream provider's
+                    // pubsub requires a grain storage named "PubSubStore" (or "Default"); without
+                    // it the silo fails its configuration validation at startup. PubSub state is
+                    // transient coordination, so an in-memory store is correct even under SQLite.
+                    siloBuilder.AddMemoryGrainStorage("PubSubStore");
                     siloBuilder.AddMemoryStreams("Default");
                     
-                    // Ensure grains can resolve the same singletons from host
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<PromptRegistry>());
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<MapGeneratorRegistry>());
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<MapValidator>());
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<PrefabLibrary>());
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<Aetherium.Server.Agents.Tools.AgentToolRegistry>());
-                    
-                    // Register hub world services for grains
-                    siloBuilder.Services.AddSingleton(sp =>
-                    {
-                        var host = sp.GetRequiredService<IHost>();
-                        return host.Services.GetRequiredService<Aetherium.Server.HubWorld.HubWorldLoader>();
-                    });
-                    siloBuilder.Services.AddSingleton(sp =>
-                    {
-                        var host = sp.GetRequiredService<IHost>();
-                        return host.Services.GetRequiredService<Aetherium.Server.HubWorld.HubWorldGenerator>();
-                    });
-                    siloBuilder.Services.AddSingleton(sp =>
-                    {
-                        var host = sp.GetRequiredService<IHost>();
-                        return host.Services.GetRequiredService<Aetherium.Server.HubWorld.HubTemplateResolver>();
-                    });
-                    
-                    // Register simulation services for grains
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<WorldClock>());
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<SeasonManager>());
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<WeatherSystem>());
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<SpawnManager>());
-                    siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<IEventScheduler>());
-                    
-                    // Register GameSessionManager for GameManagementGrain
-                    siloBuilder.Services.AddSingleton<GameSessionManager>(sp =>
-                    {
-                        var host = sp.GetRequiredService<IHost>();
-                        return host.Services.GetRequiredService<GameSessionManager>();
-                    });
-                    
-                    // Register IHubContext<GameHub> for GameManagementGrain
-                    siloBuilder.Services.AddSingleton<IHubContext<GameHub>>(sp =>
-                    {
-                        var host = sp.GetRequiredService<IHost>();
-                        return host.Services.GetRequiredService<IHubContext<GameHub>>();
-                    });
-                    
-                    // Register IHubContext<AgentDashboardHub> for AgentRunnerGrain
-                    siloBuilder.Services.AddSingleton<IHubContext<Hubs.AgentDashboardHub>>(sp =>
-                    {
-                        var host = sp.GetRequiredService<IHost>();
-                        return host.Services.GetRequiredService<IHubContext<Hubs.AgentDashboardHub>>();
-                    });
-                    
-                    // Note: Orleans itself registers IGrainFactory inside the silo container.
-                    // A `sp.GetRequiredService<IGrainFactory>()` self-resolving registration is a
-                    // recursive cycle, so we deliberately omit it and rely on Orleans's default.
+                    // NOTE: In Orleans co-hosting, `siloBuilder.Services` IS the ASP.NET Core
+                    // host's IServiceCollection — grains resolve services from the very same
+                    // container the web host uses. Every host singleton registered above
+                    // (GameSessionManager, WorldClock/SeasonManager/WeatherSystem/SpawnManager,
+                    // IEventScheduler, PromptRegistry, MapGeneratorRegistry, MapValidator,
+                    // PrefabLibrary, AgentToolRegistry, the HubWorld services, IWorldHost) plus
+                    // the framework-provided IHubContext<> instances and Orleans's own
+                    // IClusterClient/IGrainFactory are therefore already visible to grains with
+                    // no bridging required.
+                    //
+                    // A previous "bridge" here re-registered each of those services with a
+                    // factory that resolved the same service type. Because MS.DI applies
+                    // last-registration-wins, each such descriptor resolved *itself*, producing
+                    // unbounded self-recursion that hung the server at startup (the resolution of
+                    // IClusterClient during host build never returned, so the startup banner
+                    // never printed). The bridge is deliberately removed — do not reintroduce it.
 
-                    // Register IClusterClient for ManagementHub
-                    siloBuilder.Services.AddSingleton<IClusterClient>(sp =>
-                    {
-                        var host = sp.GetRequiredService<IHost>();
-                        return host.Services.GetRequiredService<IClusterClient>();
-                    });
-                    
-                    // Register IWorldHost for grains (GameManagementGrain needs it) - only if it exists
-                    siloBuilder.Services.AddSingleton<Aetherium.Server.Services.IWorldHost>(sp =>
-                    {
-                        var host = sp.GetRequiredService<IHost>();
-                        var worldHost = host.Services.GetService<Aetherium.Server.Services.IWorldHost>();
-                        if (worldHost == null)
-                            throw new InvalidOperationException("IWorldHost service not found in host services");
-                        return worldHost;
-                    });
-                    
                     // SignalR backplane with Orleans is configured via AddOrleans() on signalRBuilder above
                 });
             }

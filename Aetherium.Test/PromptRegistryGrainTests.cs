@@ -5,12 +5,11 @@ using NUnit.Framework;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using Orleans.Hosting;
-using Orleans.Hosting;
 using Aetherium.Server.Agents;
 
 namespace Aetherium.Test
 {
-    [TestFixture, Ignore("Enable when Orleans codegen packages are available in CI environment")]
+    [TestFixture]
     public class PromptRegistryGrainTests
     {
         private TestCluster _cluster = null!;

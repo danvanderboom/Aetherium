@@ -32,7 +32,11 @@ namespace Aetherium.Components
         {
             SpaceTimeMemories.TryAdd(newMemory.Location, new List<SpaceTimeMemory>());
 
-            var locationMemories = SpaceTimeMemories[newMemory.Location].ToList();
+            // Operate on the stored list directly. A previous `.ToList()` here copied the
+            // list, so the Add below wrote to a throwaway copy and new memories were silently
+            // lost (existing-memory updates happened to work because they mutate shared
+            // references). RemoveMemory already uses the stored list; this keeps them consistent.
+            var locationMemories = SpaceTimeMemories[newMemory.Location];
 
             var matchingMemory = locationMemories.FirstOrDefault(m => 
                 m.Location == newMemory.Location 

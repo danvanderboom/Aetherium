@@ -21,35 +21,6 @@ namespace Aetherium.Test
             return world;
         }
 
-        [Test, Ignore("ConsoleMapView moved to client project - TODO: refactor test")]
-        public void ConsoleMapView_ComputesLighting_WithLightSources()
-        {
-            /*
-            var world = CreateWorldWithTiles();
-            for (int x = 0; x < 10; x++)
-                world.SetTerrain("Indoors", new WorldLocation(x, 0, 0));
-
-            var lightEntity = new Aetherium.Entities.LightEntity();
-            lightEntity.Set(new LightSource(1.0, 5));
-            lightEntity.Set(new WorldLocation(5, 0, 0));
-            world.AddEntity(lightEntity);
-
-            // var mapView = new ConsoleMapView(); // Moved to client
-            // mapView.World = world;
-            // mapView.WorldLocation = new WorldLocation(5, 0, 0);
-            // mapView.Size = new Size(20, 10);
-
-            // Trigger computation by accessing Lighting (internal computation)
-            // We'll test that lighting system integration works
-            var lightingSystem = new LightingSystem();
-            var bounds = new Rectangle(0, -1, 11, 3);
-            var frame = lightingSystem.ComputeLighting(world, bounds, 0);
-
-            Assert.IsNotNull(frame);
-            Assert.Greater(frame.GetLightLevel(new WorldLocation(5, 0, 0)), 0.0);
-            */
-        }
-
         [Test]
         public void LightFrame_ProvidesData_ForRendering()
         {

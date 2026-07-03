@@ -23,4 +23,11 @@
     <ProjectReference Include="..\Aetherium.Model\Aetherium.Model.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Prompt templates are read from "<output>/Prompts" at runtime (PromptRegistry uses
+         AppDomain.BaseDirectory/Prompts). Without copying them the registry loads an empty
+         directory and every agent prompt lookup returns null. -->
+    <None Update="Prompts\**\*.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

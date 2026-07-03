@@ -214,8 +214,12 @@ namespace WorldGenCLI.Api
 
                 // Generate candidates
                 var count = Math.Min(request.Count, request.Limit);
+                // Vary the auto-seed by the range index. The previous `Environment.TickCount +
+                // candidates.Count` produced the SAME seed for every candidate (candidates is
+                // empty here, and TickCount is effectively constant across this tight loop), so
+                // the A/B comparison compared N identical maps.
                 var seeds = request.Seeds ?? Enumerable.Range(0, count)
-                    .Select(_ => Environment.TickCount + candidates.Count)
+                    .Select(i => Environment.TickCount + i)
                     .ToList();
 
                 foreach (var seed in seeds.Take(count))
