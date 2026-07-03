@@ -44,14 +44,23 @@ The game features a comprehensive extensible agent tool system:
 **Deep dive:** [Tool System Architecture](agents/TOOLS.md)
 
 ### Architecture & Design
+- ✅ [Architecture Overview](architecture/overview.md) - System topology, protocol, data flow, configuration
+- ✅ [Server Architecture](architecture/server.md) - Grains, simulation, ECS, perception, worldgen, agents, narrative
+- ✅ [Client Architecture](architecture/clients.md) - Console, Unity, Dashboard, and planned Unreal clients
+- ✅ [Tooling & Data](architecture/tooling-and-data.md) - aetherctl, WorldGenCLI, scripts, Data/ assets
 - ✅ [Agent Tool System](agents/TOOLS.md) - Extensible tool architecture
 - ✅ [Narrative Systems](narrative-systems.md) - Procedural storytelling and emergent narratives
 - ✅ [Instance System](instances.md) - Dungeon instances, lockouts, and party support
 - ✅ [Development Guide](development.md) - Developer setup, testing, and workflow
-- ✅ [Client-Server Architecture](../CLIENT_SERVER_README.md) - SignalR, Orleans, and communication protocol
 - ✅ [Multi-World Ecosystems](multiworld-ecosystems.md) - World clusters, portals, cross-world economy, meta-progression, and hub worlds
-- Coming soon: System architecture overview
-- Coming soon: Entity-Component-System (ECS) guide
+- ✅ [Monitoring Guide](monitoring.md) - Real-time game monitoring quick start
+
+### Quality & Audits
+- 📋 [Audit Index & Scorecard](audits/README.md) - Per-subsystem audit reports with build/test ground truth
+- 📋 [Recommendations](audits/RECOMMENDATIONS.md) - Prioritized findings register
+- 📋 [Design Analysis](audits/DESIGN_ANALYSIS.md) - High-level system design assessment
+- 📋 [Improvement Plan](audits/IMPROVEMENT_PLAN.md) - Phased quality-improvement roadmap
+- 🗄️ [Historical documents](history/README.md) - Archived point-in-time status reports
 
 ### SignalR Hubs
 
@@ -122,25 +131,28 @@ See [Development Guide - Unified CLI](development.md#unified-cli-aetherctl) for 
 ## Project Structure
 
 ```
-Aetherium.Console/
-├── docs/                          # Documentation (you are here)
-│   ├── README.md                  # This file
-│   ├── console/                   # Console client docs
-│   │   └── user/                  # User guides
-│   │       ├── README.md          # Console docs index
-│   │       ├── quick-reference.md # Fast lookup
-│   │       ├── controls.md        # Key bindings
-│   │       └── gameplay.md        # Mechanics & strategy
-│   ├── agents/                    # Agent system docs
-│   │   └── README.md              # Agent system guide
-│   └── [future client docs]/
-│
-├── Aetherium.Server/             # Server-side game logic
-├── Aetherium.Console/                   # Console client
-├── Aetherium.Model/              # Shared DTOs
-├── Aetherium.Test/              # Tests
-├── openspec/                      # Specifications
-└── README.md                      # Project README
+docs/                              # Documentation (you are here)
+├── README.md                      # This file
+├── architecture/                  # System architecture (overview, server, clients, tooling)
+├── audits/                        # Subsystem audits, recommendations, improvement plan
+├── history/                       # Archived point-in-time status docs
+├── clients/                       # Client guides (Unreal migration guide)
+├── console/user/                  # Console client user guides
+├── agents/                        # Agent system docs
+├── training/                      # Agent training & benchmark docs
+├── unity/                         # Unity client docs
+├── monitoring.md                  # Monitoring quick start
+└── development.md                 # Developer guide
+
+Aetherium.Server/                  # Server: engine, grains, hubs
+Aetherium.Model/                   # Shared DTOs
+Aetherium.Console/                 # Terminal client
+Aetherium.Unity/                   # Unity 2D client
+Aetherium.Dashboard/               # Blazor ops/training dashboard
+Aetherctl/                         # Operator CLI
+WorldGenCLI/                       # PCG client library
+Aetherium.Test/  Aetherctl.Test/   # Test suites
+openspec/                          # Specifications & change proposals
 ```
 
 ## Documentation Standards
@@ -192,7 +204,7 @@ Aetherium.Console/
 - [x] Agent tool system architecture
 - [x] Narrative systems guide
 - [x] Development guide (testing, workflow, best practices)
-- [ ] System architecture overview
+- [x] System architecture overview (architecture/)
 - [ ] ECS system guide
 - [ ] Perception system deep dive
 - [ ] Network protocol specification
@@ -206,8 +218,8 @@ Aetherium.Console/
 
 ---
 
-**Last Updated:** October 2025  
-**Documentation Version:** 1.0  
-**Game Version:** Compatible with current master branch
+**Last Updated:** 2026-07-03  
+**Documentation Version:** 2.0  
+**Game Version:** Compatible with current main branch
 
 

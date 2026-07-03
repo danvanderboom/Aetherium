@@ -27,7 +27,7 @@ Aetherium.sln
 ├── Aetherium.Console/        # Console client application
 ├── Aetherium.Test/           # Test suite
 ├── Aetherium.Dashboard/      # Web dashboard for game management
-├── Aetherctl/                # Unified CLI tool (see a.plan.md)
+├── Aetherctl/                # Unified CLI tool (see architecture/tooling-and-data.md)
 └── WorldGenCLI/              # Library for world generation API/services/rendering (used by aetherctl, dashboard, tests)
 ```
 
@@ -218,7 +218,7 @@ aetherctl world list
 
 If B2C is not configured or SignalR fails, commands automatically fall back to Orleans direct connection.
 
-For more details, see [a.plan.md](../a.plan.md).
+For more details, see [architecture/tooling-and-data.md](architecture/tooling-and-data.md) (original build plan archived at [history/a.plan.md](history/a.plan.md)).
 
 ## Development Workflow
 
@@ -319,7 +319,7 @@ The ManagementHub provides authenticated world management via SignalR:
 - `ResumeWorld(string worldId)`: Resume a world (requires Admin role)
 - `Shutdown(string worldId)`: Shutdown a world (requires Admin role)
 
-See [CLIENT_SERVER_README.md](../CLIENT_SERVER_README.md) for detailed architecture information.
+See [architecture/overview.md](architecture/overview.md) for detailed architecture information.
 
 ### Orleans Grains
 
@@ -398,9 +398,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 - [OpenSpec Workflow](../openspec/AGENTS.md) - For planning and proposing changes
 - [Agent System Guide](agents/README.md) - AI agent system documentation
-- [CLIENT_SERVER_README.md](../CLIENT_SERVER_README.md) - Client-server architecture details
-- [a.plan.md](../a.plan.md) - Unified CLI tool specification
-- [TEST_STATUS.md](../TEST_STATUS.md) - Current test status
+- [Architecture Overview](architecture/overview.md) - Client-server architecture details
+- [Tooling & Data](architecture/tooling-and-data.md) - CLI tools, scripts, and data assets
+- [Audit Reports](audits/README.md) - Current build/test ground truth and subsystem audits
 
 ## Contributing
 

@@ -347,7 +347,7 @@ Unit and integration tests are available in `Aetherium.Test/Orleans/`:
 
 - [Narrative Systems](narrative-systems.md) - Cross-world quests and constraints
 - [Development Guide](development.md) - Developer setup and testing
-- [Client-Server Architecture](../CLIENT_SERVER_README.md) - SignalR and Orleans usage
+- [Client-Server Architecture](architecture/overview.md) - SignalR and Orleans usage
 
 ---
 

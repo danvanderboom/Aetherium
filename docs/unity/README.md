@@ -58,7 +58,7 @@ By default, the client runs in Offline Mock mode, replaying Perception JSON fram
 Live mode connects to the server via SignalR at `http://localhost:5000/gamehub`.
 
 **Prerequisites:**
-- Server must be running (see [CLIENT_SERVER_README.md](../../CLIENT_SERVER_README.md))
+- Server must be running (see [architecture/overview.md](../architecture/overview.md))
 - SignalR client support must be enabled
 
 **Enabling Live Mode:**
@@ -248,7 +248,7 @@ To enable Live mode, you need to add the SignalR client package:
 
 ### Live Mode Not Connecting
 
-- Ensure server is running (see [CLIENT_SERVER_README.md](../../CLIENT_SERVER_README.md))
+- Ensure server is running (see [architecture/overview.md](../architecture/overview.md))
 - Check server URL is correct (default: `http://localhost:5000/gamehub`)
 - Verify `USE_SIGNALR` scripting define is set
 - Check console for connection errors
@@ -261,7 +261,7 @@ To enable Live mode, you need to add the SignalR client package:
 ## Next Steps
 
 - See [Testing Guide](testing.md) for running EditMode and PlayMode tests
-- Review [CLIENT_SERVER_README.md](../../CLIENT_SERVER_README.md) for server startup
+- Review [architecture/overview.md](../architecture/overview.md) for server startup
 - Explore `Assets/Scripts/` for code structure and customization
 
 ## Support
