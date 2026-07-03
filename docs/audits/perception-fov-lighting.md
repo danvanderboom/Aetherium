@@ -2,6 +2,8 @@
 
 *Audit date: 2026-07-03 · Scope: `Aetherium.Server/Perception`, `Lighting`, `PerceptionService.cs`, and the client render consumers. Findings marked **Verified** or **Suspected**.*
 
+> **Reconciliation — `develop` @ 2026-07-03.** The grain-authoritative delta model changed the multiplayer perception story. **PARTIAL FIX (the big one):** "observers never receive perception updates" is now fixed *for grain-hosted maps* — `GameMapGrain.FanOutAsync` broadcasts deltas to the map's SignalR group, `GameSessionManager.NotifyMapMutationAsync` applies each delta to every co-located session's local mirror and recomputes that session's FOV-filtered perception, so co-located players now see each other move. Legacy (non-`JoinWorld`) single-world sessions still get no observer updates. Heat handling also improved: it's now grain-authoritative (`GameMapGrain._heatTracker`, single-threaded by activation) and replayed to sessions via `HeatRecordedDelta`, so the `HeatTrailTracker` thread-safety finding is PARTIAL-fixed for the grain path. **STILL STANDS:** infrared still renders black (heat is still collapsed to a `ThingsSeen` count and `LightLevel` is 0 for infrared), lighting modes still mutually exclusive, NPCs/monsters still not drawn on the client map, the post-hoc sunlight no-op, and the absence of a FOV rotation-invariance regression test. The FOV rotation bug remains fixed-by-design. Detail in the Reconciliation section at the end.
+
 ## Headline: the FOV rotation bug is FIXED (by architectural elimination)
 
 The long-running FOV/rotation bug (`docs/history/FOV_BUG_SUMMARY.md` → `FOV_FIX_SUMMARY.md`) **cannot occur in the active client-server pipeline**, because there is now exactly one coordinate frame on both sides:

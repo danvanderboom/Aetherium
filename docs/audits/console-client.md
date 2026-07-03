@@ -2,6 +2,8 @@
 
 *Audit date: 2026-07-03 · Scope: `Aetherium.Console` (~100 files, 11.3k lines): game loops, `GameClient`, rendering, audio, monitoring, self-test. Findings marked **Verified** or **Suspected**.*
 
+> **Reconciliation — `develop` @ 2026-07-03.** Only two console files changed since baseline (`GameClient.cs`, `Geometry/MazeGenerator.cs`). **FIXED:** the High reconnect soft-lock — `GameClient.cs` now re-raises `Connected` on the auto-`Reconnected` path, so input resumes after a reconnect instead of being ignored forever. **STANDS (files untouched):** the dead input block (Shift+M / compass still unreachable), unsynchronized torn-frame rendering, the ~6k lines of dead legacy client code (`MazeGenerator` was refactored — injected `Random`, `HashSet` membership — but the legacy game loops that use it remain uninstantiated and undeleted), and all the audio/monitoring findings. **New (minor):** during a disconnect the loop sets a `"Reconnecting…"` status but never re-renders, so it stays invisible until the next perception/command.
+
 ## Summary
 
 The console client has a clean presentation abstraction (`IGameRenderer`/`GameViewState`, null-object audio, a coherent theme system) and a genuinely good self-test harness. But it carries three verified **High** runtime bugs — advertised features wired to unreachable code, torn-frame rendering from unsynchronized threads, and a soft-lock after reconnect — and **more than half the project (~5,800–6,300 lines across ~45 files) is dead legacy code** from the pre-client-server era. Several user-facing features silently don't work (status messages never render, audio has no assets and its null-fallback path is dead, map colors ignore the theme).

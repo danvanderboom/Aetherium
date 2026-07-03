@@ -67,7 +67,7 @@ dotnet test Aetherium.Test --filter "FullyQualifiedName~GameMapGrain_LoadMap_Res
 
 ### Test Status
 
-Current test status: **703 passed, 0 failed, 2 skipped** (as of latest run)
+Current test status: **864 passed, 0 failed, 2 skipped** (Aetherium.Test on `develop`, 2026-07-03; run with `DOTNET_ROLL_FORWARD=Major` on machines lacking the .NET 9 runtime)
 
 ### Testing Best Practices
 
@@ -415,5 +415,5 @@ When contributing code:
 ---
 
 **Last Updated**: Based on latest changes (Orleans v9 test config, reentrancy, fixes)  
-**Test Status**: 703 passed, 0 failed, 2 skipped
+**Test Status**: 864 passed, 0 failed, 2 skipped
 
