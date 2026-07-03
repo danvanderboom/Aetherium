@@ -568,6 +568,23 @@ namespace Aetherium.Server
 		}
 	}
 
+	/// <summary>
+	/// Runs <paramref name="action"/> under this session's state lock, serializing it
+	/// against movement, rotation, level changes, and <see cref="GetPerception"/>
+	/// snapshots. Interaction verbs (pickup/drop/use/open/close) route through here so
+	/// that, for legacy (non-grain-bound) sessions, a SignalR hub call and a
+	/// <c>GameManagementGrain</c> call can no longer interleave mutations of the same
+	/// World/Player — closing the cross-path races. Grain-bound sessions are already
+	/// serialized by Orleans' single-threaded grain contract, so their gateway
+	/// (<c>GrainMutationGateway</c>) does not need this. The lock is reentrant
+	/// (Monitor), so nesting inside another locked section on the same thread is safe.
+	/// </summary>
+	public T WithStateLock<T>(Func<T> action)
+	{
+		lock (_stateLock)
+			return action();
+	}
+
 	public Aetherium.Model.PerceptionDto GetPerception()
 	{
 		lock (_stateLock)

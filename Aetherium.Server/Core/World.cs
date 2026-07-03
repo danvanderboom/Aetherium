@@ -252,19 +252,24 @@ namespace Aetherium.Core
                         destination,
                         _ => new ConcurrentDictionary<string, Entity>());
 
-                    if (entitiesAtDestination.TryAdd(Id, entity))
-                    {
-                        // Clean up empty source bucket
-                        if (entitiesAtSource.IsEmpty)
-                            EntitiesByLocation.TryRemove(source, out var _);
+                    // Index the entity at the destination unconditionally. A previous
+                    // TryAdd here could fail (e.g. a concurrent double-move already put
+                    // this id at the destination) *after* we removed it from the source
+                    // bucket, dropping the entity from the location index entirely. The
+                    // indexer is idempotent and always wins, so the entity is guaranteed
+                    // to be indexed at exactly one place when MoveEntity returns.
+                    entitiesAtDestination[Id] = entity;
 
-                        WorldEvents?.Invoke(new WorldEvent
-                        {
-                            EventType = WorldEventType.EntityMoved,
-                            Location = destination,
-                            Entity = entity
-                        });
-                    }
+                    // Clean up empty source bucket
+                    if (entitiesAtSource.IsEmpty)
+                        EntitiesByLocation.TryRemove(source, out var _);
+
+                    WorldEvents?.Invoke(new WorldEvent
+                    {
+                        EventType = WorldEventType.EntityMoved,
+                        Location = destination,
+                        Entity = entity
+                    });
                 }
             }
         }

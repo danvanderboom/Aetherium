@@ -475,7 +475,8 @@ namespace Aetherium.Server.Management
                 if (session == null)
                     return OperationResult.Error("Session not found in manager");
 
-                var result = _interactionSystem.TryPickup(session, targetEntityId);
+                // Serialize against hub-thread mutations on the same legacy session (P0-12).
+                var result = session.WithStateLock(() => _interactionSystem.TryPickup(session, targetEntityId));
 
                 var perception = session.GetPerception();
                 await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
@@ -499,7 +500,7 @@ namespace Aetherium.Server.Management
                 if (session == null)
                     return OperationResult.Error("Session not found in manager");
 
-                var result = _interactionSystem.TryDrop(session, itemEntityId);
+                var result = session.WithStateLock(() => _interactionSystem.TryDrop(session, itemEntityId));
                 var perception = session.GetPerception();
                 await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
                 return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);
@@ -521,7 +522,7 @@ namespace Aetherium.Server.Management
                 if (session == null)
                     return OperationResult.Error("Session not found in manager");
 
-                var result = _interactionSystem.TryUse(session, itemEntityId, onEntityId);
+                var result = session.WithStateLock(() => _interactionSystem.TryUse(session, itemEntityId, onEntityId));
                 var perception = session.GetPerception();
                 await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
                 return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);
@@ -543,7 +544,7 @@ namespace Aetherium.Server.Management
                 if (session == null)
                     return OperationResult.Error("Session not found in manager");
 
-                var result = _interactionSystem.TryOpen(session, targetEntityId);
+                var result = session.WithStateLock(() => _interactionSystem.TryOpen(session, targetEntityId));
                 var perception = session.GetPerception();
                 await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
                 return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);
@@ -565,7 +566,7 @@ namespace Aetherium.Server.Management
                 if (session == null)
                     return OperationResult.Error("Session not found in manager");
 
-                var result = _interactionSystem.TryClose(session, targetEntityId);
+                var result = session.WithStateLock(() => _interactionSystem.TryClose(session, targetEntityId));
                 var perception = session.GetPerception();
                 await _hubContext.Clients.Client(metadata.ConnectionId).SendAsync("ReceivePerceptionUpdate", perception);
                 return result.Success ? OperationResult.Ok() : OperationResult.Error(result.Reason);

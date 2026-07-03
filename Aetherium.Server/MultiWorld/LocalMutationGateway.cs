@@ -61,20 +61,24 @@ namespace Aetherium.Server.MultiWorld
                 : ChangeLevelResult.Fail(outcome.BlockedReason ?? "Blocked"));
         }
 
+        // Interactions run under the session state lock so they serialize against
+        // movement/rotation/level-change/perception on the same legacy session — a
+        // hub call and a management-grain call can no longer interleave mutations of
+        // the same World/Player (P0-12).
         public Task<InteractionResultDto> PickupAsync(string targetEntityId)
-            => Task.FromResult(ToDto(_interactionSystem.TryPickup(_session, targetEntityId)));
+            => Task.FromResult(_session.WithStateLock(() => ToDto(_interactionSystem.TryPickup(_session, targetEntityId))));
 
         public Task<InteractionResultDto> DropAsync(string itemEntityId)
-            => Task.FromResult(ToDto(_interactionSystem.TryDrop(_session, itemEntityId)));
+            => Task.FromResult(_session.WithStateLock(() => ToDto(_interactionSystem.TryDrop(_session, itemEntityId))));
 
         public Task<InteractionResultDto> UseAsync(string itemEntityId, string onEntityId, string? usageId = null)
-            => Task.FromResult(ToDto(_interactionSystem.TryUse(_session, itemEntityId, onEntityId, usageId)));
+            => Task.FromResult(_session.WithStateLock(() => ToDto(_interactionSystem.TryUse(_session, itemEntityId, onEntityId, usageId))));
 
         public Task<InteractionResultDto> OpenAsync(string targetEntityId)
-            => Task.FromResult(ToDto(_interactionSystem.TryOpen(_session, targetEntityId)));
+            => Task.FromResult(_session.WithStateLock(() => ToDto(_interactionSystem.TryOpen(_session, targetEntityId))));
 
         public Task<InteractionResultDto> CloseAsync(string targetEntityId)
-            => Task.FromResult(ToDto(_interactionSystem.TryClose(_session, targetEntityId)));
+            => Task.FromResult(_session.WithStateLock(() => ToDto(_interactionSystem.TryClose(_session, targetEntityId))));
 
         private static InteractionResultDto ToDto(InteractionResult result)
         {

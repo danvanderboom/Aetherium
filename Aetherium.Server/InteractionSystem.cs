@@ -769,12 +769,17 @@ namespace Aetherium.Server
             if (!inventory.Items.TryGetValue(itemId, out var item))
                 return InteractionResult.Fail("Item not in inventory");
 
-            // Equip backpack (increases capacity)
+            // Equip backpack (increases capacity). Guard against re-equipping the
+            // same item: without the IsEquipped check, each call stacked the bonus,
+            // so an agent could equip one backpack repeatedly for unbounded capacity.
             var capacityBoost = item.AllComponents.OfType<CapacityBoost>().FirstOrDefault();
             if (capacityBoost != null)
             {
-                // Increase inventory capacity
+                if (capacityBoost.IsEquipped)
+                    return InteractionResult.Fail("Already equipped");
+
                 inventory.Capacity += capacityBoost.AdditionalCapacity;
+                capacityBoost.IsEquipped = true;
                 return InteractionResult.Ok();
             }
 
