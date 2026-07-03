@@ -4,9 +4,10 @@
 Aetherium is a real-time multiplayer dungeon crawler game with a client-server architecture. The game features a console-based UI with ASCII graphics, real-time lighting, field-of-view calculations, and interactive gameplay elements. The project includes a monitoring system for debugging and automated testing.
 
 ## Tech Stack
-- **Backend**: .NET 9.0, ASP.NET Core, SignalR
-- **Client**: .NET 9.0, Console Application
-- **Testing**: xUnit, NUnit
+- **Backend**: .NET 9.0, ASP.NET Core, SignalR, Microsoft Orleans 9.2 (co-hosted silo)
+- **Clients**: .NET 9.0 console application (Spectre.Console), Unity 2023.3 2D client, Blazor Server dashboard
+- **Tooling**: aetherctl CLI (System.CommandLine), WorldGenCLI library
+- **Testing**: xUnit, NUnit, Orleans TestingHost
 - **Architecture**: Client-Server with WebSocket communication
 - **Monitoring**: Built-in WebSocket server, PowerShell clients
 
@@ -22,25 +23,24 @@ Aetherium is a real-time multiplayer dungeon crawler game with a client-server a
 ### Namespace Conventions
 **CRITICAL**: The project has multiple assemblies with specific namespace patterns:
 
-- **Aetherium.Server** (assembly) uses namespace `Aetherium.Server.*` for server-specific code:
-  - `Aetherium.Server.Agents` - Agent system
-  - `Aetherium.Server.Management` - Orleans management grains
-  - `Aetherium.Server.MultiWorld` - Multi-world hosting
-  - `Aetherium.Server.Narrative` - Narrative system
-  - BUT inherits `Aetherium.*` namespaces from shared assemblies
+- **Aetherium.Server** (assembly) contains BOTH namespace families:
+  - `Aetherium.Server.*` for server infrastructure:
+    - `Aetherium.Server.Agents` - Agent system
+    - `Aetherium.Server.Management` - Orleans management grains
+    - `Aetherium.Server.MultiWorld` - Multi-world hosting
+    - `Aetherium.Server.Narrative` - Narrative system
+  - `Aetherium.*` for engine code that lives in the Server project but keeps the shorter namespace:
+    - `Aetherium.Core` - Core game logic (World, Entity, etc.)
+    - `Aetherium.WorldGen` - Procedural generation (in `Aetherium.Server/WorldGen/`)
+    - `Aetherium.WorldGen.Generators` / `.Algorithms` / `.Prefabs`
+    - `Aetherium.WorldBuilders` - Hand-authored world builders
 
-- **Aetherium.Model** (shared assembly) uses namespace `Aetherium.*`:
-  - `Aetherium.Core` - Core game logic (World, Entity, etc.)
-  - `Aetherium.WorldGen` - Procedural generation (generators, algorithms, prefabs)
-  - `Aetherium.WorldGen.Generators` - Specific generator implementations
-  - `Aetherium.WorldGen.Algorithms` - Reusable algorithms (Perlin, FloodFill, etc.)
-  - `Aetherium.WorldGen.Prefabs` - Prefab system
+- **Aetherium.Model** (shared assembly) holds ONLY serialization DTOs (PerceptionDto, ToolDtos, management/event/group/instance/world contracts) - no game logic
 
 - **Aetherium.Console** (assembly) uses namespace `Aetherium.*` for client code
 
 **Common Mistake**: Using `Aetherium.Server.WorldGen` when it should be `Aetherium.WorldGen`
-- WorldGen is in the **shared model** (Aetherium.Model project)
-- Only server-specific logic goes in `Aetherium.Server.*` namespaces
+- The namespace is `Aetherium.WorldGen`, but the code lives in the **Aetherium.Server project** (`Aetherium.Server/WorldGen/`), not Aetherium.Model
 
 ### Architecture Patterns
 - **ECS (Entity-Component-System)**: Game entities are composed of components
@@ -53,7 +53,7 @@ Aetherium is a real-time multiplayer dungeon crawler game with a client-server a
 ### Orleans Configuration Patterns
 **Storage Configuration**:
 - Development: Use `AddMemoryGrainStorage()` for in-memory persistence
-- Production: Use Azure Table Storage with environment variable `ORLEANS_STORAGE=azure`
+- Production: Azure Table Storage is planned via `ORLEANS_STORAGE=azure`, but the Azure path is currently **commented out** in `Aetherium.Server/Program.cs` (requires the `Microsoft.Orleans.Persistence.AzureStorage` package) - only memory storage works today
 - Storage names: `narrativeStore`, `worldStore`, `mapStore` (consistent naming)
 
 **Service Registration for Grains**:
@@ -87,7 +87,7 @@ siloBuilder.Services.AddSingleton<ServiceType>(sp =>
 - Use xUnit for new tests, maintain existing NUnit tests
 
 ### Git Workflow
-- Main branch: `master`
+- Main branch: `main`
 - Feature branches for larger changes
 - Commit messages: descriptive, include scope
 - All tests must pass before push
