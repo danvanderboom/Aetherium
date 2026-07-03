@@ -1,3 +1,5 @@
+> Status (2026-07-03): verified substantially complete — telemetry, curriculum, benchmarks, dashboard (now builds after Phase 1 fixes), controllers, docs, and tests all exist in code. One gap: no `train` subcommand exists in the CLI (7.2).
+
 ## 1. Telemetry Infrastructure
 - [x] 1.1 Create AgentTelemetryGrain for storing performance data
 - [x] 1.2 Create PerformanceSnapshot model for per-step metrics
@@ -41,7 +43,7 @@
 
 ## 7. CLI Updates
 - [x] 7.1 Add --benchmark flag to WorldGenCLI
-- [x] 7.2 Add train subcommand to AgentCLI (start, status, benchmark)
+- [ ] 7.2 Add train subcommand to AgentCLI (start, status, benchmark) (unchecked 2026-07-03: no `train` subcommand exists anywhere in Aetherctl/Commands — AgentCommands.cs has no train group)
 - [x] 7.3 Update WorldGenCLI to load benchmarks from library
 
 ## 8. Documentation

@@ -1,5 +1,7 @@
 # Implementation Tasks
 
+> Status (2026-07-03): verified effectively complete. SQLite grain storage, snapshot store, delta append in FanOutAsync/SendToActorAsync, snapshot hydration + delta replay, compaction, and version guards all exist in code with tests (Aetherium.Server/Persistence/*, Aetherium.Test/Persistence/*). Only V.5 (cold-start benchmark) remains explicitly deferred. Note: grain heat trails are not persisted — out of scope for this change.
+
 ## Phase A — Durable Orleans grain storage
 
 - [x] A.1 Added `Microsoft.Data.Sqlite` 9.0.0 to [Aetherium.Server/Aetherium.Server.csproj](Aetherium.Server/Aetherium.Server.csproj). Skipped `Microsoft.Orleans.Persistence.AdoNet` — its 9.x schema scripts don't ship a SQLite variant, so a custom `IGrainStorage` is the smaller, more maintainable path

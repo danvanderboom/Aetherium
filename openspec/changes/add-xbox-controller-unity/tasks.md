@@ -1,3 +1,5 @@
+> Status (2026-07-03): verified implemented — Gamepad bindings in InputActions.inputactions, axis rotation/level changes and option-selection mode in PlayerController, async ExecuteToolAsync + ToolExecutionResultDto/UsageOptionDto, HUD support in GameManager, and docs all check out. Caveat: Edit/PlayMode tests exist and now compile (P2-10), but their assertions are shallow (audit-flagged tautologies), so "tested" here means structural, not behavioral, coverage.
+
 ## 1. Implementation
 - [x] 1.1 Add Gamepad control scheme and bindings to InputActions.inputactions
 - [x] 1.2 Update PlayerController to handle axis-based rotation and level changes

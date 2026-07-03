@@ -1,5 +1,7 @@
 # Implementation Tasks
 
+> Status (2026-07-03): verified complete except 6.3 (explicitly deferred). IRandomSource, the three new delta DTOs, ActionContext overloads, GameSession.ApplyDelta handlers, and the GameMapGrain.UseAsync rewrite (GetUseOptions/TryUseWithMode dispatch) all exist in code; the "not supported in grain mode" path is gone, and ExecuteTool is now the only action surface (per-verb hub methods removed).
+
 ## 1. Random source abstraction
 - [x] 1.1 Added [Aetherium.Server/IRandomSource.cs](Aetherium.Server/IRandomSource.cs) defining `IRandomSource { double NextDouble(); int NextInt(int maxExclusive); }`
 - [x] 1.2 Added `DefaultRandomSource` wrapping `System.Random.Shared` plus a `FixedRandomSource(params double[])` test double in the same file
