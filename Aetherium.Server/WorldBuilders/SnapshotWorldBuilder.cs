@@ -68,11 +68,15 @@ namespace Aetherium.WorldBuilders
 
             var world = result.World;
 
-            // Strip generator-placed non-terrain entities. They were re-rolled with fresh
-            // Guid IDs; we overlay the snapshot's entities (with the grain's authoritative
-            // IDs) immediately after.
+            // Strip ALL generator-placed non-terrain entities — including Characters,
+            // now that the population pass places monsters (which are Characters).
+            // They were re-rolled with fresh Guid IDs; we overlay the snapshot's
+            // entities (with the grain's authoritative IDs) immediately after, so
+            // deltas that reference an entity by ID resolve identically on every
+            // session mirror. Keeping regenerated Characters here would duplicate
+            // every monster on join.
             var stripIds = world.Entities.Values
-                .Where(e => e is not Terrain && e is not Character)
+                .Where(e => e is not Terrain)
                 .Select(e => e.EntityId)
                 .ToList();
             foreach (var id in stripIds)
@@ -96,28 +100,9 @@ namespace Aetherium.WorldBuilders
             return world;
         }
 
-        // Mirror of GameMapGrain.BuildPasses so regeneration uses the same pipeline the
-        // grain used originally. Kept in sync manually for phase 1; if the pass list
-        // grows we should consolidate into one place.
+        // Must match GameMapGrain exactly — both delegate to the shared catalog, so
+        // regeneration always replays the same pipeline the grain used originally.
         private static IWorldGenerationPass[] BuildPasses(WorldGenerationTemplate template)
-        {
-            return template switch
-            {
-                WorldGenerationTemplate.Outdoor => new IWorldGenerationPass[]
-                {
-                    new Passes.OutdoorLayoutPass(),
-                    new Passes.OutdoorInteractionsPass(),
-                    new Passes.PortalNetworkPass(),
-                    new Passes.OutdoorValidationPass()
-                },
-                _ => new IWorldGenerationPass[]
-                {
-                    new Passes.DungeonLayoutPass(),
-                    new Passes.DungeonInteractionsPass(),
-                    new Passes.PortalNetworkPass(),
-                    new Passes.DungeonValidationPass()
-                }
-            };
-        }
+            => WorldGenerationPassCatalog.BuildPasses(template);
     }
 }

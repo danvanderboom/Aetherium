@@ -304,6 +304,15 @@ namespace Aetherium.Server.Narrative.State
             _state.State.GeneratedQuests.RemoveAll(q => q.QuestId == quest.QuestId);
             _state.State.GeneratedQuests.Add(quest);
 
+            // The consequence engine generates quests on every qualifying event with no
+            // natural bound; keep the most recent and let stale offers fall off.
+            const int maxGeneratedQuests = 500;
+            if (_state.State.GeneratedQuests.Count > maxGeneratedQuests)
+            {
+                _state.State.GeneratedQuests.RemoveRange(
+                    0, _state.State.GeneratedQuests.Count - maxGeneratedQuests);
+            }
+
             await _state.WriteStateAsync();
         }
 

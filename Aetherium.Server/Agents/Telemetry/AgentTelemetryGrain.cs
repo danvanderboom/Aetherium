@@ -11,6 +11,9 @@ namespace Aetherium.Server.Agents.Telemetry
     /// </summary>
     public class AgentTelemetryGrain : Grain, IAgentTelemetryGrain
     {
+        // Snapshots arrive on every agent run and the grain lives as long as the agent;
+        // without a cap a long-running training session grows this without bound.
+        private const int MaxSnapshots = 1000;
         private readonly List<PerformanceSnapshot> _snapshots = new List<PerformanceSnapshot>();
         private readonly List<string> _failedRunIds = new List<string>();
         private PerformanceAnalysis? _cachedAnalysis;
@@ -32,7 +35,11 @@ namespace Aetherium.Server.Agents.Telemetry
             lock (_snapshots)
             {
                 _snapshots.Add(snapshot);
-                
+                if (_snapshots.Count > MaxSnapshots)
+                {
+                    _snapshots.RemoveRange(0, _snapshots.Count - MaxSnapshots);
+                }
+
                 // Invalidate cached analysis if it's stale
                 if (DateTime.UtcNow - _lastAnalysisTime > AnalysisCacheTimeout)
                 {

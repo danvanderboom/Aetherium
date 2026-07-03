@@ -35,8 +35,15 @@ namespace Aetherium.Server.MultiWorld
             return base.OnActivateAsync(cancellationToken);
         }
 
+        // Accepted invites older than this are history, not pending work; expired ones
+        // are dead immediately. Purged on create (which writes state anyway) so the
+        // dictionary doesn't accumulate every invite ever sent for the world.
+        private static readonly TimeSpan AcceptedInviteRetention = TimeSpan.FromDays(7);
+
         public async Task<InviteId> CreateInviteAsync(PlayerId invitedBy, PlayerId invitedPlayer, TimeSpan? expiry = null)
         {
+            PurgeDeadInvites();
+
             var inviteId = Guid.NewGuid();
             var invite = new WorldInvite
             {
@@ -101,6 +108,20 @@ namespace Aetherium.Server.MultiWorld
             await aclGrain.AddPlayerAsync(invite.InvitedPlayer);
 
             return true;
+        }
+
+        private void PurgeDeadInvites()
+        {
+            var now = DateTime.UtcNow;
+            var deadKeys = _state.State.Invites
+                .Where(kvp =>
+                    (kvp.Value.ExpiresAt.HasValue && kvp.Value.ExpiresAt.Value < now) ||
+                    (kvp.Value.Accepted && kvp.Value.CreatedAt < now - AcceptedInviteRetention))
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var key in deadKeys)
+                _state.State.Invites.Remove(key);
         }
 
         public Task<IReadOnlyList<WorldInvite>> GetPendingInvitesAsync(PlayerId playerId)

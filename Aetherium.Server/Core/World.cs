@@ -365,6 +365,32 @@ namespace Aetherium.Core
         // ==================================================================
 
         /// <summary>
+        /// True when a character could legally stand at <paramref name="location"/>:
+        /// the cell exists, its terrain is passable, and no obstructing entity or
+        /// character occupies it. Location-only variant of <see cref="MovementBlocker"/>
+        /// for spawn placement, where the character isn't in the world yet.
+        /// </summary>
+        public bool IsOpenForOccupancy(WorldLocation location)
+        {
+            if (!EntitiesByLocation.TryGetValue(location, out var atLocation))
+                return false;
+
+            if (!PassableTerrain(location))
+                return false;
+
+            foreach (var entity in atLocation.Values)
+            {
+                if (entity.AllComponents.OfType<ObstructsMovement>().Any(o => o.Obstruction > 0))
+                    return false;
+
+                if (entity is Character)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Returns null when <paramref name="character"/> may enter
         /// <paramref name="destination"/>, otherwise a human-readable reason.
         /// Rules: the destination must be a cell the world knows about (no

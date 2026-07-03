@@ -215,7 +215,7 @@ namespace Aetherium.WorldBuilders.Validation
             if (startLocation is null || startLocation.IsNone)
                 return; // Skip validation if start location is not provided
             
-            // Check that start location 되어
+            // Check that start location exists in the world
             if (!world.EntitiesByLocation.ContainsKey(startLocation))
             {
                 report.AddError(

@@ -35,13 +35,11 @@ namespace Aetherium.Test.MultiWorld
                 GeneratorVersion = "1.0.0",
             };
 
-            var passes = new IWorldGenerationPass[]
-            {
-                new DungeonLayoutPass(),
-                new DungeonInteractionsPass(),
-                new PortalNetworkPass(),
-                new DungeonValidationPass()
-            };
+            // Build the source with the same catalog the grain and SnapshotWorldBuilder
+            // use, so the round-trip exercises the production pipeline (including the
+            // population pass, whose monsters are Characters and must survive the
+            // strip-and-overlay in hydration exactly once).
+            var passes = WorldGenerationPassCatalog.BuildPasses(request.Template);
             var orchestrator = new WorldGenerationOrchestrator(registry, passes);
             var result = orchestrator.Generate(request);
             Assert.True(result.Success, string.Join("; ", result.Errors));

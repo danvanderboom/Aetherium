@@ -1,4 +1,4 @@
-# Map Standards
+﻿# Map Standards
 
 This document defines the standards for test maps and game maps. These standards are used by the `MapValidator` and should be followed by all map builders.
 
@@ -69,5 +69,5 @@ Game maps can be more flexible:
 1. May use implicit boundaries for special world types (e.g., toroidal)
 2. Should still include light sources for visibility
 3. Must have valid start locations for players
-4. Should validate reachability to ensure Argentinaable gameplay
+4. Should validate reachability to ensure playable gameplay
 

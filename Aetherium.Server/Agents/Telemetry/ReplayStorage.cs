@@ -47,15 +47,26 @@ namespace Aetherium.Server.Agents.Telemetry
     /// </summary>
     public static class ReplayStorage
     {
+        // Replays are the heaviest telemetry payload (full world state + per-step
+        // perception JSON, easily MBs each) and this store is process-lifetime static,
+        // so unbounded growth exhausts memory in long training runs. Oldest-first
+        // eviction once the cap is hit.
+        private const int MaxStoredReplays = 200;
+
         private static readonly Dictionary<string, ReplayData> _replays = new Dictionary<string, ReplayData>();
         private static readonly Dictionary<string, string> _replaysJson = new Dictionary<string, string>();
+        private static readonly Queue<string> _replayOrder = new Queue<string>();
+        private static readonly Queue<string> _replayJsonOrder = new Queue<string>();
         private static readonly object _lock = new object();
 
         public static string StoreReplay(ReplayData replay)
         {
             lock (_lock)
             {
+                if (!_replays.ContainsKey(replay.ReplayId))
+                    _replayOrder.Enqueue(replay.ReplayId);
                 _replays[replay.ReplayId] = replay;
+                EvictOldest(_replays, _replayOrder);
                 return replay.ReplayId;
             }
         }
@@ -66,7 +77,20 @@ namespace Aetherium.Server.Agents.Telemetry
             {
                 var id = Guid.NewGuid().ToString();
                 _replaysJson[id] = replayJson;
+                _replayJsonOrder.Enqueue(id);
+                EvictOldest(_replaysJson, _replayJsonOrder);
                 return id;
+            }
+        }
+
+        private static void EvictOldest<T>(Dictionary<string, T> store, Queue<string> order)
+        {
+            while (store.Count > MaxStoredReplays && order.Count > 0)
+            {
+                var oldest = order.Dequeue();
+                // Ids deleted out-of-band (DeleteReplay) may already be gone; the
+                // loop keeps dequeuing until an actual eviction happens.
+                store.Remove(oldest);
             }
         }
 

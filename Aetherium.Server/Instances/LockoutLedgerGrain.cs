@@ -107,6 +107,11 @@ namespace Aetherium.Server.Instances
             var dungeonId = new DungeonId(this.GetPrimaryKeyString());
             var policy = _state.State.Policy ?? CreateDefaultPolicy(dungeonId);
 
+            // The ledger otherwise only ever grows: expired entries stay in the
+            // dictionary forever. Piggyback the purge on record (which writes state
+            // anyway) rather than adding a timer.
+            PurgeStaleLockouts(policy, now);
+
             LockoutKey lockoutKey;
 
             // Record party lockout if party ID provided
@@ -220,6 +225,21 @@ namespace Aetherium.Server.Instances
         public Task<LockoutPolicy?> GetPolicyAsync()
         {
             return Task.FromResult(_state.State.Policy);
+        }
+
+        // How long an unlocked entry is kept (for attempt history) before purging.
+        private static readonly TimeSpan StaleLockoutRetention = TimeSpan.FromDays(7);
+
+        private void PurgeStaleLockouts(LockoutPolicy policy, DateTime now)
+        {
+            var staleBefore = now - StaleLockoutRetention;
+            var staleKeys = _state.State.Lockouts
+                .Where(kvp => !IsLocked(kvp.Value, policy, now) && kvp.Value.LastAttemptAt < staleBefore)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var key in staleKeys)
+                _state.State.Lockouts.Remove(key);
         }
 
         private bool IsLocked(LockoutEntry lockout, LockoutPolicy policy, DateTime now)

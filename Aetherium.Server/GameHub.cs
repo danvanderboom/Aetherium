@@ -613,6 +613,25 @@ namespace Aetherium.Server
                             ["doorId"] = closeTargetId?.ToString() ?? string.Empty
                         });
                     }
+                    else if (toolId == "pickup" && args.TryGetValue("targetEntityId", out var pickupTargetId))
+                    {
+                        var itemId = pickupTargetId?.ToString() ?? string.Empty;
+                        var eventData = new Dictionary<string, object> { ["itemId"] = itemId };
+                        // The consequence engine keys collection quests off itemType.
+                        if (session.World?.Entities.TryGetValue(itemId, out var pickedUp) == true)
+                            eventData["itemType"] = pickedUp.GetType().Name;
+                        await ProcessNarrativeEventAsync(session, "item_collected", eventData);
+                    }
+                    else if (toolId == "use" && args.TryGetValue("itemEntityId", out var usedItemId))
+                    {
+                        await ProcessNarrativeEventAsync(session, "item_used", new Dictionary<string, object>
+                        {
+                            ["itemId"] = usedItemId?.ToString() ?? string.Empty,
+                            ["targetId"] = args.TryGetValue("onEntityId", out var usedOnId)
+                                ? usedOnId?.ToString() ?? string.Empty
+                                : string.Empty
+                        });
+                    }
                 }
                 
                 // Send updated perception to client

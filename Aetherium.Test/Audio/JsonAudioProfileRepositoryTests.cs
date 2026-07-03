@@ -55,9 +55,13 @@ namespace Aetherium.Test.Audio
                 new BiomeAudioProfile { Id = "dungeon", Name = "Dungeon", FootstepMaterial = "stone" }
             };
 
-            await System.Text.Json.JsonSerializer.SerializeAsync(
-                new System.IO.FileStream(_testFilePath, FileMode.Create),
-                testProfiles);
+            // Dispose the stream before handing the file to the repository. The
+            // repository used to run GC.Collect() in InitializeAsync purely to
+            // finalize a stream this test leaked; don't reintroduce that.
+            await using (var fs = new FileStream(_testFilePath, FileMode.Create))
+            {
+                await System.Text.Json.JsonSerializer.SerializeAsync(fs, testProfiles);
+            }
 
             var repo = new JsonAudioProfileRepository(_testFilePath);
 

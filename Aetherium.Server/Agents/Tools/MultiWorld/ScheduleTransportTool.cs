@@ -97,9 +97,13 @@ namespace Aetherium.Server.Agents.Tools.MultiWorld
 
                 var clusterGrain = grainFactory.GetGrain<IClusterGrain>(clusterId);
 
-                // Get route to validate it exists
-                // (In full implementation, we'd fetch the route first)
-                var route = new TradeRoute { RouteId = routeId };
+                // Look up the real route: scheduling against a fabricated TradeRoute
+                // (only RouteId set) would silently produce a transport with default
+                // endpoints and travel time.
+                var economyState = await clusterGrain.GetEconomyStateAsync();
+                var route = economyState?.TradeRoutes.FirstOrDefault(r => r.RouteId == routeId);
+                if (route == null)
+                    return ToolExecutionResult.Error($"Trade route not found in cluster '{clusterId}': {routeId}");
 
                 var schedule = await clusterGrain.ScheduleTransportAsync(route, cargo, departureTime);
 

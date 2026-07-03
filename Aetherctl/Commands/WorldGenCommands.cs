@@ -392,34 +392,7 @@ namespace Aetherctl.Commands
         }
 
         private static IWorldGenerationPass[] BuildPasses(WorldGenerationTemplate template)
-        {
-            var hybridPass = new Aetherium.WorldGen.Hybrid.HybridLayoutPass();
-            return template switch
-            {
-                WorldGenerationTemplate.Outdoor => new IWorldGenerationPass[]
-                {
-                    hybridPass,
-                    new OutdoorLayoutPass(),
-                    new OutdoorThemingPass(),
-                    new OutdoorPopulationPass(),
-                    new EnvironmentalStoryPass(),
-                    new Aetherium.WorldGen.Passes.AudioGenerationPass(),
-                    new OutdoorInteractionsPass(),
-                    new OutdoorValidationPass()
-                },
-                _ => new IWorldGenerationPass[]
-                {
-                    hybridPass,
-                    new DungeonLayoutPass(),
-                    new DungeonThemingPass(),
-                    new DungeonPopulationPass(),
-                    new EnvironmentalStoryPass(),
-                    new Aetherium.WorldGen.Passes.AudioGenerationPass(),
-                    new DungeonInteractionsPass(),
-                    new DungeonValidationPass()
-                }
-            };
-        }
+            => WorldGenerationPassCatalog.BuildPasses(template);
 
         private static void RenderPng(MapRenderDto map, string path, int scale)
         {

@@ -1,23 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-
 namespace Aetherium
 {
-    public enum MazeLocationType
-    {
-        Room,
-        Wall,
-        Pillar
-    }
-
-    public enum Axis
-    {
-        X,
-        Y,
-        Z
-    }
-
     public enum WorldDirection
     {
         North,
@@ -37,52 +19,4 @@ namespace Aetherium
         Up,
         Down
     }
-
-    public enum WorldEventType
-    {
-        EntityAdded,
-        EntityMoved,
-        EntityRemoved
-    }
-
-
-    public enum VisualType
-    {
-        Character,
-        Object,
-        Attack
-    }
-
-    public enum SoundType
-    {
-        None,
-        Movement,
-        MovementObstruction,
-        Attack,
-        Death,
-        TeleportRandomly,
-        SetTeleportHome,
-        Earthquake,
-        Explosion
-    }
-
-    public enum FeelingType
-    {
-        None,
-        Vibration,
-        Pain,
-        Heat,
-        Cold,
-        Hunger
-    }
-
-    public enum ActionType
-    {
-        Move,
-        Attack,
-        Eat,
-        Teleport,
-        Speak
-    }
 }
-

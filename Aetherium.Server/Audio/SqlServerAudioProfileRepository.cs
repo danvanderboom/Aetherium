@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -20,25 +20,25 @@ namespace Aetherium.Server.Audio
         public Task<BiomeAudioProfile?> GetProfileAsync(string id)
         {
             // TODO: Implement SQL Server query
-            throw new NotImplementedException("SQL Server audio profile repository not yet implemented. Use JsonAudioProfileRepository for now.");
+            throw new NotSupportedException("SQL Server audio profile repository not yet implemented. Use JsonAudioProfileRepository for now.");
         }
 
         public Task<IReadOnlyList<BiomeAudioProfile>> GetAllProfilesAsync()
         {
             // TODO: Implement SQL Server query
-            throw new NotImplementedException("SQL Server audio profile repository not yet implemented. Use JsonAudioProfileRepository for now.");
+            throw new NotSupportedException("SQL Server audio profile repository not yet implemented. Use JsonAudioProfileRepository for now.");
         }
 
         public Task SaveProfileAsync(BiomeAudioProfile profile)
         {
             // TODO: Implement SQL Server insert/update
-            throw new NotImplementedException("SQL Server audio profile repository not yet implemented. Use JsonAudioProfileRepository for now.");
+            throw new NotSupportedException("SQL Server audio profile repository not yet implemented. Use JsonAudioProfileRepository for now.");
         }
 
         public Task DeleteProfileAsync(string id)
         {
             // TODO: Implement SQL Server delete
-            throw new NotImplementedException("SQL Server audio profile repository not yet implemented. Use JsonAudioProfileRepository for now.");
+            throw new NotSupportedException("SQL Server audio profile repository not yet implemented. Use JsonAudioProfileRepository for now.");
         }
 
         public Task InitializeAsync()

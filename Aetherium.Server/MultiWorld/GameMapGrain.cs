@@ -419,6 +419,12 @@ namespace Aetherium.Server.MultiWorld
 
             _world = result.World;
 
+            // Runtime map validation (P1-22). Diagnostic, not gating: generation already
+            // ran the pipeline's Validation-phase pass, so a MapValidator failure here
+            // means the standards checker and the pipeline disagree — log it loudly
+            // rather than refusing a world players could still explore.
+            ValidateGeneratedWorld(_world, mapId);
+
             // Partition map into regions and initialize region grains
             await PartitionIntoRegionsAsync();
 
@@ -474,6 +480,27 @@ namespace Aetherium.Server.MultiWorld
             await _mapState.WriteStateAsync();
         }
 
+        private static void ValidateGeneratedWorld(World world, string mapId)
+        {
+            var report = new Aetherium.WorldBuilders.Validation.MapValidator().Validate(
+                world,
+                new Aetherium.WorldBuilders.Validation.MapValidationOptions
+                {
+                    ZLevel = 0,
+                    // Boundary/lighting standards aren't guaranteed by every generator
+                    // yet; terrain-type registration is, and an unregistered terrain
+                    // breaks passability checks silently downstream.
+                    RequireExplicitBoundary = false,
+                    RequireLightSource = false,
+                });
+
+            if (!report.IsValid)
+            {
+                foreach (var error in report.Errors)
+                    Console.WriteLine($"[GameMapGrain] Map validation error ({mapId}): {error}");
+            }
+        }
+
         private static WorldGenerationTemplate ResolveTemplate(string generatorType)
         {
             var normalized = generatorType.ToLowerInvariant();
@@ -483,25 +510,7 @@ namespace Aetherium.Server.MultiWorld
         }
 
         private static IWorldGenerationPass[] BuildPasses(WorldGenerationTemplate template)
-        {
-            return template switch
-            {
-                WorldGenerationTemplate.Outdoor => new IWorldGenerationPass[]
-                {
-                    new Passes.OutdoorLayoutPass(),
-                    new Passes.OutdoorInteractionsPass(),
-                    new Passes.PortalNetworkPass(), // Place portals for cross-world travel
-                    new Passes.OutdoorValidationPass()
-                },
-                _ => new IWorldGenerationPass[]
-                {
-                    new Passes.DungeonLayoutPass(),
-                    new Passes.DungeonInteractionsPass(),
-                    new Passes.PortalNetworkPass(), // Place portals for cross-world travel
-                    new Passes.DungeonValidationPass()
-                }
-            };
-        }
+            => WorldGenerationPassCatalog.BuildPasses(template);
 
         public Task<string?> GetWorldAsync()
         {
@@ -663,14 +672,17 @@ namespace Aetherium.Server.MultiWorld
                 var candidate = _world.SelectRandomPassableLocation();
                 if (candidate is null)
                     return null;
-                if (!_spawnsInUse.Contains(candidate))
+                // Passable terrain isn't enough: population passes place monsters on
+                // passable cells, and spawning a player inside one creates a stacked
+                // state that movement validation would never allow.
+                if (!_spawnsInUse.Contains(candidate) && _world.IsOpenForOccupancy(candidate))
                     return candidate;
             }
 
             // Fall back to exhaustive scan if random retries can't find a free cell.
             foreach (var loc in _world.EntitiesByLocation.Keys)
             {
-                if (_world.PassableTerrain(loc) && !_spawnsInUse.Contains(loc))
+                if (_world.IsOpenForOccupancy(loc) && !_spawnsInUse.Contains(loc))
                     return loc;
             }
 

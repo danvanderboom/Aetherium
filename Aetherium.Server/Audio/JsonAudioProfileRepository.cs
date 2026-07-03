@@ -109,16 +109,6 @@ namespace Aetherium.Server.Audio
                 };
             }
 
-            // Encourage release of any lingering file handles created by poorly scoped writers in tests
-            try
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
-            catch
-            {
-                // Best-effort only
-            }
         }
 
         public async Task<BiomeAudioProfile?> GetProfileAsync(string id)
