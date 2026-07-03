@@ -423,7 +423,9 @@ namespace Aetherium.Server.Management
                         _ => ModelRelativeDirection.Forward
                     };
 
-                    session.MoveView(rel, 1);
+                    var outcome = session.MoveView(rel, 1);
+                    if (!outcome.Success)
+                        return OperationResult.Error(outcome.BlockedReason ?? "Blocked");
                 }
                 else if (d is "N" or "NORTH" or "E" or "EAST" or "S" or "SOUTH" or "W" or "WEST")
                 {
@@ -439,8 +441,10 @@ namespace Aetherium.Server.Management
                     var original = session.HeadingDegrees;
                     int delta = targetDegrees - original;
                     session.RotateView(delta);
-                    session.MoveView(ModelRelativeDirection.Forward, 1);
+                    var outcome = session.MoveView(ModelRelativeDirection.Forward, 1);
                     session.RotateView(-delta);
+                    if (!outcome.Success)
+                        return OperationResult.Error(outcome.BlockedReason ?? "Blocked");
                 }
                 else
                 {

@@ -36,6 +36,9 @@ namespace Aetherium.Test.Agents.Tools.E2E
             // Create a minimal WorldBuilder for testing
             var worldBuilder = new TorusWorldBuilder();
             _session = new GameSession("e2e-test", worldBuilder);
+            // Movement is validated (P0-1); guarantee open ground around the
+            // player so these tool-plumbing tests don't depend on maze geometry.
+            TestWorldMovement.CarveOpenArea(_session, radius: 3);
             _interactionSystem = new InteractionSystem();
         }
 

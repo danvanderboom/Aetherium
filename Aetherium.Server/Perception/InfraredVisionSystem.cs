@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Linq;
 using Aetherium.Components;
 using Aetherium.Core;
+using Aetherium.Lighting;
 
 namespace Aetherium.Server.Perception
 {
@@ -16,13 +17,20 @@ namespace Aetherium.Server.Perception
         /// <summary>
         /// Computes a VisionFrame based on heat signatures rather than light.
         /// Heat vision ignores lighting and shows thermal emissions.
+        /// When <paramref name="heatFrame"/> is provided, each heated location's
+        /// intensity is also recorded there as its "light" level — infrared
+        /// repurposes <c>VisualDto.LightLevel</c> as the heat channel, and the
+        /// clients color by it (see ClientConsoleMapView.GetInfraredColor).
+        /// Without this the DTO conversion reads an empty frame, every visual
+        /// ships with LightLevel = 0, and infrared renders a black map.
         /// </summary>
         public VisionFrame ComputeHeatVision(
             World world,
             WorldLocation playerLocation,
             Rectangle bounds,
             HeatTrailTracker heatTracker,
-            DateTime currentTime)
+            DateTime currentTime,
+            LightFrame? heatFrame = null)
         {
             var visionFrame = new VisionFrame();
 
@@ -44,6 +52,7 @@ namespace Aetherium.Server.Perception
                         if (visual != null)
                         {
                             visionFrame.AddVisual(visual);
+                            heatFrame?.SetLightLevel(location, heatLevel);
                         }
                     }
                 }
@@ -68,7 +77,9 @@ namespace Aetherium.Server.Perception
             {
                 foreach (var entity in entities.Values)
                 {
-                    var heatSig = entity.Get<HeatSignature>();
+                    // Component.Get<T>() throws when the component is absent, so use
+                    // the safe OfType lookup — most entities have no HeatSignature.
+                    var heatSig = entity.AllComponents.OfType<HeatSignature>().FirstOrDefault();
                     if (heatSig != null)
                     {
                         totalHeat += heatSig.Intensity;
@@ -102,8 +113,8 @@ namespace Aetherium.Server.Perception
             var terrain = world.GetTerrain(location);
             if (terrain != null)
             {
-                // Get the tile type from the terrain entity
-                var tile = terrain.Get<Tile>();
+                // Get the tile type from the terrain entity (safe lookup — Get<T> throws when absent)
+                var tile = terrain.AllComponents.OfType<Tile>().FirstOrDefault();
                 if (tile != null && tile.Type != null)
                 {
                     visual.Terrain = tile.Type;
@@ -115,7 +126,7 @@ namespace Aetherium.Server.Perception
             {
                 foreach (var entity in entities.Values)
                 {
-                    var tile = entity.Get<Tile>();
+                    var tile = entity.AllComponents.OfType<Tile>().FirstOrDefault();
                     if (tile != null && tile.Type != null)
                     {
                         // Note: In infrared mode, we're showing heat signatures

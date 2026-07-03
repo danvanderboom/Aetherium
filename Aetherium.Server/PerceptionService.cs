@@ -149,14 +149,19 @@ Light sources found:
 
             if (visionMode == VisionMode.Infrared)
             {
-                // Infrared mode: use heat-based vision
-                lightFrame = new LightFrame(); // Empty light frame
+                // Infrared mode: heat-based vision. The light frame doubles as the
+                // heat channel — ComputeHeatVision records each heated location's
+                // intensity into it, and the DTO conversion below reads it into
+                // VisualDto.LightLevel, which infrared clients color by. (It was
+                // previously left empty, so infrared always rendered black.)
+                lightFrame = new LightFrame();
                 visionFrame = infraredVisionSystem.ComputeHeatVision(
                     world,
                     playerLocation,
                     bounds,
                     heatTracker ?? new HeatTrailTracker(),
-                    currentTime);
+                    currentTime,
+                    lightFrame);
             }
             else
             {

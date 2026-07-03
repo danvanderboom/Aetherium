@@ -13,7 +13,13 @@ namespace Aetherium.Server.Middleware
 {
     /// <summary>
     /// Middleware for API key authentication on control-plane endpoints.
-    /// All /api/management traffic (including reads) requires a valid key in production.
+    /// All /api/management traffic (including reads) requires a valid key in production,
+    /// and every MUTATING request (POST/PUT/PATCH/DELETE) to the other control-plane
+    /// controllers (adaptation, benchmark, cluster, curriculum, meta-progression,
+    /// agent telemetry) requires it too — those were previously fully anonymous, so
+    /// anyone who could reach the port could tick the economy, rewrite adaptation
+    /// rules, or write curriculum files. Reads on those controllers stay open (the
+    /// Dashboard's monitoring pages call them without a key).
     /// In Development the middleware is bypassed only when no key is configured.
     /// </summary>
     public class ApiKeyMiddleware
@@ -21,6 +27,20 @@ namespace Aetherium.Server.Middleware
         private readonly RequestDelegate _next;
         private readonly byte[]? _apiKeyBytes;
         private const string ApiKeyHeaderName = "X-Dashboard-ApiKey";
+
+        /// <summary>Prefix protected for every HTTP method, including reads.</summary>
+        private const string FullyProtectedPrefix = "/api/management";
+
+        /// <summary>Prefixes protected for mutating methods only.</summary>
+        private static readonly string[] MutationProtectedPrefixes =
+        {
+            "/api/adaptation",
+            "/api/agenttelemetry",
+            "/api/benchmark",
+            "/api/cluster",
+            "/api/curriculum",
+            "/api/metaprogression",
+        };
 
         public ApiKeyMiddleware(RequestDelegate next, IConfiguration configuration)
         {
@@ -31,10 +51,7 @@ namespace Aetherium.Server.Middleware
 
         public async Task InvokeAsync(HttpContext context)
         {
-            var path = context.Request.Path.Value ?? "";
-
-            // Only gate /api/management routes.
-            if (!path.StartsWith("/api/management", StringComparison.OrdinalIgnoreCase))
+            if (!RequiresApiKey(context.Request))
             {
                 await _next(context);
                 return;
@@ -69,6 +86,31 @@ namespace Aetherium.Server.Middleware
 
             await _next(context);
         }
+
+        private static bool RequiresApiKey(HttpRequest request)
+        {
+            var path = request.Path.Value ?? "";
+
+            if (path.StartsWith(FullyProtectedPrefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (IsMutatingMethod(request.Method))
+            {
+                foreach (var prefix in MutationProtectedPrefixes)
+                {
+                    if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsMutatingMethod(string method) =>
+            HttpMethods.IsPost(method) ||
+            HttpMethods.IsPut(method) ||
+            HttpMethods.IsPatch(method) ||
+            HttpMethods.IsDelete(method);
 
         private static bool ConstantTimeEquals(string provided, byte[] expectedBytes)
         {

@@ -1106,30 +1106,32 @@ namespace Aetherium.Server.MultiWorld
             var current = player.Get<Aetherium.Components.WorldLocation>();
             if (current is null) return MoveResult.Fail("Player has no location");
 
+            // Enforce the same distance bounds MoveTool advertises (1–100), so a
+            // caller reaching the grain directly can't request an arbitrary jump.
+            if (distance < 1 || distance > 100)
+                return MoveResult.Fail("Distance must be between 1 and 100");
+
             // Translate relative direction against the player's current heading.
             var heading = player.Get<Aetherium.Components.HasHeading>()?.Heading ?? 0;
             var bearing = DegreesToCardinal(heading);
             var rotated = RotateRelativeByHeading(direction, bearing);
 
-            var dest = rotated switch
-            {
-                Aetherium.WorldDirection.North => current.FromDelta(0, -distance, 0),
-                Aetherium.WorldDirection.East  => current.FromDelta(+distance, 0, 0),
-                Aetherium.WorldDirection.South => current.FromDelta(0, +distance, 0),
-                Aetherium.WorldDirection.West  => current.FromDelta(-distance, 0, 0),
-                _ => current,
-            };
-
-            // Preserve old position for the delta before _world.MoveEntity mutates the entity.
+            // Preserve old position for the delta before movement mutates the entity.
             var oldX = current.X; var oldY = current.Y; var oldZ = current.Z;
 
-            _world.MoveEntity(player.EntityId, dest);
+            // Validated, per-step movement: stops at the first wall/closed door/
+            // occupied cell/map edge, so this path can no longer walk through
+            // geometry (it previously applied the full delta unchecked).
+            var outcome = _world.TryMoveSteps(player, rotated, distance);
+            if (!outcome.Success)
+                return MoveResult.Fail(outcome.BlockedReason ?? "Blocked");
 
+            var final = outcome.FinalLocation!;
             await FanOutAsync(new EntityMovedDelta
             {
                 EntityId = player.EntityId,
                 OldX = oldX, OldY = oldY, OldZ = oldZ,
-                NewX = dest.X, NewY = dest.Y, NewZ = dest.Z,
+                NewX = final.X, NewY = final.Y, NewZ = final.Z,
             });
 
             return MoveResult.Ok();
@@ -1168,19 +1170,23 @@ namespace Aetherium.Server.MultiWorld
             var current = player.Get<Aetherium.Components.WorldLocation>();
             if (current is null) return ChangeLevelResult.Fail("Player has no location");
 
-            var dest = current.FromDelta(0, 0, deltaZ);
             var oldX = current.X; var oldY = current.Y; var oldZ = current.Z;
 
-            _world.MoveEntity(player.EntityId, dest);
+            // Validated level change: requires standing on a stair cell and a
+            // passable landing (it previously teleported the player to any Z).
+            var outcome = _world.TryChangeLevel(player, deltaZ);
+            if (!outcome.Success)
+                return ChangeLevelResult.Fail(outcome.BlockedReason ?? "Blocked");
 
+            var final = outcome.FinalLocation!;
             await FanOutAsync(new EntityMovedDelta
             {
                 EntityId = player.EntityId,
                 OldX = oldX, OldY = oldY, OldZ = oldZ,
-                NewX = dest.X, NewY = dest.Y, NewZ = dest.Z,
+                NewX = final.X, NewY = final.Y, NewZ = final.Z,
             });
 
-            return ChangeLevelResult.Ok(dest.Z);
+            return ChangeLevelResult.Ok(final.Z);
         }
 
         // ------------------------------------------------------------------

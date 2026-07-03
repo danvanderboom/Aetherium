@@ -345,6 +345,179 @@ namespace Aetherium.Core
             return false;
         }
 
+        // ==================================================================
+        // Validated movement (the single authoritative movement rule).
+        //
+        // Every live movement path — GameSession.MoveView/ChangeLevel (legacy
+        // sessions and LocalMutationGateway), GameMapGrain.MoveAsync/
+        // ChangeLevelAsync (grain-hosted maps and GrainMutationGateway), and
+        // GameManagementGrain.MoveAsync — routes through TryMoveSteps /
+        // TryChangeLevel below, so a client can never walk through walls,
+        // closed doors, other characters, or off the generated map, regardless
+        // of which protocol path the request arrived on. The older TryMove
+        // above predates this API and is kept for its existing tests; do not
+        // add new callers to it.
+        // ==================================================================
+
+        /// <summary>
+        /// Returns null when <paramref name="character"/> may enter
+        /// <paramref name="destination"/>, otherwise a human-readable reason.
+        /// Rules: the destination must be a cell the world knows about (no
+        /// walking into the void), its terrain must be passable, and it must
+        /// not contain a movement-obstructing entity (wall entity, closed
+        /// door, window, portcullis) or another character.
+        /// </summary>
+        public string? MovementBlocker(Character character, WorldLocation destination)
+        {
+            if (!EntitiesByLocation.TryGetValue(destination, out var atDestination))
+                return "There is nothing there";
+
+            if (!PassableTerrain(destination))
+                return "Blocked by terrain";
+
+            foreach (var entity in atDestination.Values)
+            {
+                if (entity.EntityId == character.EntityId)
+                    continue;
+
+                if (entity.AllComponents.OfType<ObstructsMovement>().Any(o => o.Obstruction > 0))
+                    return "The way is blocked";
+
+                if (entity is Character)
+                    return "Someone is in the way";
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Moves <paramref name="character"/> up to <paramref name="distance"/>
+        /// cells in a cardinal direction, validating every step via
+        /// <see cref="MovementBlocker"/>. Stops at the first blocked cell, so a
+        /// multi-cell request can succeed partially — check
+        /// <see cref="MoveOutcome.StepsTaken"/> and <see cref="MoveOutcome.BlockedReason"/>.
+        /// </summary>
+        public MoveOutcome TryMoveSteps(Character character, WorldDirection direction, int distance)
+        {
+            var location = character.Get<WorldLocation>();
+            if (location == null)
+                return MoveOutcome.Blocked(null, "Character has no location");
+
+            if (distance < 1)
+                return MoveOutcome.Blocked(location, "Distance must be at least 1");
+
+            var (dx, dy) = direction switch
+            {
+                WorldDirection.North => (0, -1),
+                WorldDirection.South => (0, +1),
+                WorldDirection.East => (+1, 0),
+                WorldDirection.West => (-1, 0),
+                _ => (0, 0),
+            };
+            if (dx == 0 && dy == 0)
+                return MoveOutcome.Blocked(location, "Vertical movement goes through TryChangeLevel");
+
+            var current = location;
+            var steps = 0;
+            string? blocked = null;
+
+            for (int i = 0; i < distance; i++)
+            {
+                var next = current.FromDelta(dx, dy, 0);
+                blocked = MovementBlocker(character, next);
+                if (blocked != null)
+                    break;
+
+                MoveEntity(character.EntityId, next);
+                current = next;
+                steps++;
+            }
+
+            if (steps > 0)
+                CharacterMoveTimestamp = Guid.NewGuid();
+
+            return new MoveOutcome
+            {
+                Success = steps > 0,
+                StepsTaken = steps,
+                FinalLocation = current,
+                BlockedReason = blocked,
+            };
+        }
+
+        /// <summary>
+        /// Moves <paramref name="character"/> one level at a time along Z.
+        /// Each step requires standing on a stair cell — terrain named
+        /// "Upstairs"/"Downstairs", or a <see cref="CanAscend"/>/<see cref="CanDescend"/>
+        /// component on the current location — and the landing cell must pass
+        /// <see cref="MovementBlocker"/> like any other move.
+        /// </summary>
+        public MoveOutcome TryChangeLevel(Character character, int deltaZ)
+        {
+            var location = character.Get<WorldLocation>();
+            if (location == null)
+                return MoveOutcome.Blocked(null, "Character has no location");
+
+            if (deltaZ == 0)
+                return MoveOutcome.Blocked(location, "Already on that level");
+
+            var stepZ = Math.Sign(deltaZ);
+            var current = location;
+            var steps = 0;
+            string? blocked = null;
+
+            for (int i = 0; i < Math.Abs(deltaZ); i++)
+            {
+                if (!AllowsVerticalTravel(current, stepZ))
+                {
+                    blocked = "No stairs here";
+                    break;
+                }
+
+                var next = current.FromDelta(0, 0, stepZ);
+                blocked = MovementBlocker(character, next);
+                if (blocked != null)
+                    break;
+
+                MoveEntity(character.EntityId, next);
+                current = next;
+                steps++;
+            }
+
+            if (steps > 0)
+                CharacterMoveTimestamp = Guid.NewGuid();
+
+            return new MoveOutcome
+            {
+                Success = steps > 0,
+                StepsTaken = steps,
+                FinalLocation = current,
+                BlockedReason = blocked,
+            };
+        }
+
+        /// <summary>
+        /// Whether the cell at <paramref name="from"/> grants vertical travel.
+        /// Stair terrain grants travel in either direction — generated stair
+        /// pairs are vertically aligned (see AdvancedDungeonGenerator.ConnectLevels),
+        /// so the same column is a stair cell on both levels. The
+        /// CanAscend/CanDescend components keep the legacy TryMove convention
+        /// (+Z is "ascend") for worlds/tests that grant travel per-location.
+        /// </summary>
+        private bool AllowsVerticalTravel(WorldLocation from, int stepZ)
+        {
+            var terrainName = GetTerrainType(from)?.Name;
+            if (terrainName is "Upstairs" or "Downstairs")
+                return true;
+
+            if (stepZ > 0 && from.Has<CanAscend>())
+                return true;
+            if (stepZ < 0 && from.Has<CanDescend>())
+                return true;
+
+            return false;
+        }
+
         public IDictionary<string, int> GetTerrainDistribution(IEnumerable<WorldLocation> locations)
         {
             var results = new Dictionary<string, int>();

@@ -38,8 +38,10 @@ namespace Aetherium.Server.MultiWorld
             if (_session.ViewLocation is null)
                 return Task.FromResult(MoveResult.Fail("No view location"));
 
-            _session.MoveView(direction, distance);
-            return Task.FromResult(MoveResult.Ok());
+            var outcome = _session.MoveView(direction, distance);
+            return Task.FromResult(outcome.Success
+                ? MoveResult.Ok()
+                : MoveResult.Fail(outcome.BlockedReason ?? "Blocked"));
         }
 
         public Task<RotateResult> RotateAsync(int degrees)
@@ -53,8 +55,10 @@ namespace Aetherium.Server.MultiWorld
             if (_session.ViewLocation is null)
                 return Task.FromResult(ChangeLevelResult.Fail("No view location"));
 
-            _session.ChangeLevel(deltaZ);
-            return Task.FromResult(ChangeLevelResult.Ok(_session.ViewLocation!.Z));
+            var outcome = _session.ChangeLevel(deltaZ);
+            return Task.FromResult(outcome.Success
+                ? ChangeLevelResult.Ok(_session.ViewLocation!.Z)
+                : ChangeLevelResult.Fail(outcome.BlockedReason ?? "Blocked"));
         }
 
         public Task<InteractionResultDto> PickupAsync(string targetEntityId)

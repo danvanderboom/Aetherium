@@ -49,7 +49,7 @@ namespace Aetherium.Test.MultiWorld
         }
 
         [Fact]
-        public async Task ChangeLevelAsync_Updates_ViewLocation_Z()
+        public async Task ChangeLevelAsync_Fails_Without_Stairs()
         {
             var session = NewSession();
             var beforeZ = session.ViewLocation!.Z;
@@ -57,11 +57,29 @@ namespace Aetherium.Test.MultiWorld
             var gateway = new LocalMutationGateway(session);
             var result = await gateway.ChangeLevelAsync(1);
 
-            // ChangeLevel may not actually succeed if the destination has no
-            // terrain entry — the legacy method itself doesn't validate that.
-            // Result reflects the post-call ViewLocation.Z value.
+            // Movement is validated now (P0-1): open_space has no stair cells,
+            // so the level change is refused and Z is unchanged. (The legacy
+            // behavior teleported the player onto a nonexistent level.)
+            Assert.False(result.Success);
+            Assert.NotNull(result.Reason);
+            Assert.Equal(beforeZ, session.ViewLocation!.Z);
+        }
+
+        [Fact]
+        public async Task ChangeLevelAsync_Succeeds_On_Stairs()
+        {
+            var session = NewSession();
+            var loc = session.ViewLocation!;
+            session.World.SetTerrain("Upstairs", new WorldLocation(loc.X, loc.Y, loc.Z));
+            session.World.SetTerrain("Indoors", new WorldLocation(loc.X, loc.Y, loc.Z + 1));
+            var beforeZ = loc.Z;
+
+            var gateway = new LocalMutationGateway(session);
+            var result = await gateway.ChangeLevelAsync(1);
+
             Assert.True(result.Success);
             Assert.Equal(beforeZ + 1, session.ViewLocation!.Z);
+            Assert.Equal(beforeZ + 1, result.NewZ);
         }
 
         [Fact]

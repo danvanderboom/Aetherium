@@ -86,6 +86,9 @@ namespace Aetherium.Test.Agents.Tools
         {
             var worldBuilder = new TorusWorldBuilder();
             var session = new GameSession("test", worldBuilder);
+            // Movement is validated (P0-1); carve open ground so the forward
+            // step doesn't depend on maze geometry at the spawn point.
+            TestWorldMovement.CarveOpenArea(session);
             var startX = session.ViewLocation?.X ?? 0;
             var startY = session.ViewLocation?.Y ?? 0;
             

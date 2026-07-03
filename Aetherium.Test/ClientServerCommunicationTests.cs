@@ -149,18 +149,37 @@ namespace Aetherium.Test
         }
 
         [Fact]
-        public void GameSession_ChangeLevelUpdatesZ()
+        public void GameSession_ChangeLevel_Blocked_Without_Stairs()
         {
-            // Arrange
+            // Arrange: open_space has no stair cells, so a level change must be
+            // refused (the old behavior teleported the player into the void).
             var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
             var initialZ = session.ViewLocation?.Z ?? 0;
 
             // Act
-            session.ChangeLevel(1);
+            var outcome = session.ChangeLevel(1);
 
             // Assert
+            Assert.False(outcome.Success);
             Assert.NotNull(session.ViewLocation);
-            Assert.Equal(initialZ + 1, session.ViewLocation.Z);
+            Assert.Equal(initialZ, session.ViewLocation.Z);
+        }
+
+        [Fact]
+        public void GameSession_ChangeLevel_Succeeds_On_Stairs()
+        {
+            // Arrange: put the player on a stair cell with a valid landing above.
+            var session = new GameSession("test-connection", new FovDiagnosticWorldBuilder("open_space"));
+            var playerLoc = session.Player!.Get<Aetherium.Components.WorldLocation>()!;
+            session.World.SetTerrain("Upstairs", new Aetherium.Components.WorldLocation(playerLoc.X, playerLoc.Y, playerLoc.Z));
+            session.World.SetTerrain("Indoors", new Aetherium.Components.WorldLocation(playerLoc.X, playerLoc.Y, playerLoc.Z + 1));
+
+            // Act
+            var outcome = session.ChangeLevel(1);
+
+            // Assert
+            Assert.True(outcome.Success);
+            Assert.Equal(playerLoc.Z + 1, session.ViewLocation!.Z);
         }
 
         [Fact]

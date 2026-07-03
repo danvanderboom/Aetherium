@@ -622,12 +622,12 @@ namespace Aetherium.Server
 			return gameTime.TimeOfDay.TotalHours % 24.0;
 		}
 
-		public void MoveView(Aetherium.Model.RelativeDirection direction, int distance = 1)
+		public Aetherium.Core.MoveOutcome MoveView(Aetherium.Model.RelativeDirection direction, int distance = 1)
 		{
 			lock (_stateLock)
 			{
 				if (ViewLocation == null)
-					return;
+					return Aetherium.Core.MoveOutcome.Blocked(null, "No view location");
 
 				var engineDirection = direction.ToEngineRelativeDirection();
 
@@ -644,6 +644,22 @@ namespace Aetherium.Server
 				for (int i = 0; i < rightAngleRotationsCounterclockwise; i++)
 					bearing = bearing.RotateLeft();
 
+				if (Player != null)
+				{
+					// Player-backed session: the character is authoritative. Every
+					// step is validated by the engine (walls, closed doors, other
+					// characters, map bounds) and the view follows wherever the
+					// character actually ended up — the camera can no longer drift
+					// through geometry the player couldn't cross.
+					var outcome = World.TryMoveSteps(Player, bearing, distance);
+					if (outcome.FinalLocation != null)
+						ViewLocation = new WorldLocation(
+							outcome.FinalLocation.X, outcome.FinalLocation.Y, outcome.FinalLocation.Z);
+					return outcome;
+				}
+
+				// Observer session with no character: the view is a free camera and
+				// nothing world-authoritative moves, so no validation applies.
 				ViewLocation = bearing switch
 				{
 					Aetherium.WorldDirection.North => ViewLocation.FromDelta(0, -distance, 0),
@@ -652,13 +668,12 @@ namespace Aetherium.Server
 					Aetherium.WorldDirection.West => ViewLocation.FromDelta(-distance, 0, 0),
 					_ => ViewLocation
 				};
-
-				if (Player != null)
+				return new Aetherium.Core.MoveOutcome
 				{
-					// Keep player entity co-located with the view
-					var destination = new WorldLocation(ViewLocation.X, ViewLocation.Y, ViewLocation.Z);
-					World.MoveEntity(Player.EntityId, destination);
-				}
+					Success = true,
+					StepsTaken = distance,
+					FinalLocation = ViewLocation,
+				};
 			}
 		}
 
@@ -715,19 +730,33 @@ namespace Aetherium.Server
 			};
 		}
 
-		public void ChangeLevel(int deltaZ)
+		public Aetherium.Core.MoveOutcome ChangeLevel(int deltaZ)
 		{
 			lock (_stateLock)
 			{
-				if (ViewLocation != null)
+				if (ViewLocation == null)
+					return Aetherium.Core.MoveOutcome.Blocked(null, "No view location");
+
+				if (Player != null)
 				{
-					ViewLocation = ViewLocation.FromDelta(0, 0, deltaZ);
-					if (Player != null)
-					{
-						var destination = new WorldLocation(ViewLocation.X, ViewLocation.Y, ViewLocation.Z);
-						World.MoveEntity(Player.EntityId, destination);
-					}
+					// Player-backed session: level changes require standing on a
+					// stair cell and a valid landing (see World.TryChangeLevel) —
+					// no more teleporting between floors or into the void.
+					var outcome = World.TryChangeLevel(Player, deltaZ);
+					if (outcome.FinalLocation != null)
+						ViewLocation = new WorldLocation(
+							outcome.FinalLocation.X, outcome.FinalLocation.Y, outcome.FinalLocation.Z);
+					return outcome;
 				}
+
+				// Observer session: free camera, no validation.
+				ViewLocation = ViewLocation.FromDelta(0, 0, deltaZ);
+				return new Aetherium.Core.MoveOutcome
+				{
+					Success = true,
+					StepsTaken = System.Math.Abs(deltaZ),
+					FinalLocation = ViewLocation,
+				};
 			}
 		}
 

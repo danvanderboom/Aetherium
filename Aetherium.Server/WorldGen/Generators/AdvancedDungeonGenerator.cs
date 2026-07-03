@@ -224,15 +224,27 @@ namespace Aetherium.WorldGen.Generators
                 var upperRoom = upperRooms[rng.Next(upperRooms.Count)];
                 var lowerRoom = lowerRooms[rng.Next(lowerRooms.Count)];
 
+                // The stair pair must be vertically aligned — validated movement
+                // (World.TryChangeLevel) moves straight along Z, so the landing
+                // cell is the same X/Y one level down. (Previously the two stair
+                // cells sat at unrelated room centers, making the "stairs"
+                // physically impossible to traverse.)
                 var connectorLoc = upperRoom.Center;
-                var downstairsLoc = lowerRoom.Center;
+                var downstairsLoc = new WorldLocation(connectorLoc.X, connectorLoc.Y, lowerRoom.Level);
 
                 world.SetTerrain("Downstairs", connectorLoc);
                 world.SetTerrain("Upstairs", downstairsLoc);
 
+                // The aligned landing may sit inside the lower level's wall mass;
+                // carve a corridor from it to the lower room so the stairs connect
+                // to the rest of the level.
+                var landingPath = CarveLShapedPath(world, context, downstairsLoc, lowerRoom.Center, lowerRoom.Level, rng);
+
                 globals.Graph.AddEdge(upperRoom.Id, lowerRoom.Id);
 
-                var corridor = new DungeonCorridor(upperRoom, lowerRoom, new List<WorldLocation> { connectorLoc, downstairsLoc }, primary: true)
+                var corridorTiles = new List<WorldLocation> { connectorLoc, downstairsLoc };
+                corridorTiles.AddRange(landingPath);
+                var corridor = new DungeonCorridor(upperRoom, lowerRoom, corridorTiles, primary: true)
                 {
                     IsVerticalConnector = true
                 };

@@ -45,6 +45,7 @@ namespace Aetherium.Test.Agents.Tools.Integration
             // Arrange
             var worldBuilder = new TorusWorldBuilder();
             var session = new GameSession("test", worldBuilder);
+            TestWorldMovement.CarveOpenArea(session); // movement is validated (P0-1)
             var interactionSystem = new InteractionSystem();
             var profile = AgentToolProfile.FullAccess;
             
@@ -154,6 +155,7 @@ namespace Aetherium.Test.Agents.Tools.Integration
             // Arrange
             var worldBuilder = new TorusWorldBuilder();
             var session = new GameSession("test", worldBuilder);
+            TestWorldMovement.CarveOpenArea(session); // movement is validated (P0-1)
             var context = new ToolExecutionContext
             {
                 Session = session,
@@ -223,7 +225,8 @@ namespace Aetherium.Test.Agents.Tools.Integration
             // Arrange
             var worldBuilder = new TorusWorldBuilder();
             var session = new GameSession("test", worldBuilder);
-            
+            TestWorldMovement.CarveOpenArea(session); // movement is validated (P0-1)
+
             // Context 1: Direct session access (GameHub style)
             var hubContext = new ToolExecutionContext
             {
@@ -510,6 +513,9 @@ namespace Aetherium.Test.Agents.Tools.Integration
             // Arrange
             var worldBuilder = new TorusWorldBuilder();
             var session = new GameSession("test", worldBuilder);
+            // Level changes are validated (P0-1): the player must be on stairs
+            // with an open landing above.
+            TestWorldMovement.CarveStairsAtPlayer(session, deltaZ: 1);
             var initialZ = session.ViewLocation!.Z;
 
             var context = new ToolExecutionContext
@@ -653,6 +659,7 @@ namespace Aetherium.Test.Agents.Tools.Integration
             // Arrange
             var worldBuilder = new TorusWorldBuilder();
             var session = new GameSession("test", worldBuilder);
+            TestWorldMovement.CarveOpenArea(session); // movement is validated (P0-1)
             var startX = session.ViewLocation!.X;
             var startY = session.ViewLocation!.Y;
             var startZ = session.ViewLocation!.Z;
@@ -683,7 +690,9 @@ namespace Aetherium.Test.Agents.Tools.Integration
                 ["degrees"] = 90
             });
 
-            // Act - Change level
+            // Act - Change level (stairs must be under the player's CURRENT
+            // position, i.e. after the move above — level changes are validated)
+            TestWorldMovement.CarveStairsAtPlayer(session, deltaZ: 1);
             var changeLevelResult = await changeLevelTool.ExecuteAsync(context, new Dictionary<string, object>
             {
                 ["delta"] = 1
@@ -753,6 +762,7 @@ namespace Aetherium.Test.Agents.Tools.Integration
             // Arrange
             var worldBuilder = new TorusWorldBuilder();
             var session = new GameSession("test", worldBuilder);
+            TestWorldMovement.CarveOpenArea(session); // movement is validated (P0-1)
             var startX = session.ViewLocation!.X;
             var startY = session.ViewLocation!.Y;
 

@@ -151,6 +151,26 @@ namespace Aetherium.Server
         public InteractionResult TryClose(ActionContext ctx, string targetEntityId)
             => ToggleDoor(ctx, targetEntityId, open: false);
 
+        /// <summary>
+        /// Fails unless <paramref name="target"/> is at the actor's location or an
+        /// adjacent cardinal cell on the same Z level. This is the range rule for
+        /// direct physical interactions (doors, locks, activation) — without it a
+        /// client could act on any entity map-wide by ID. Returns null when in range.
+        /// </summary>
+        private static InteractionResult? NotWithinReach(ActionContext ctx, Entity target)
+        {
+            var targetLoc = target.Get<WorldLocation>();
+            if (targetLoc == null)
+                return InteractionResult.Fail("Target has no location");
+
+            var distance = System.Math.Abs(targetLoc.X - ctx.ViewLocation.X) +
+                           System.Math.Abs(targetLoc.Y - ctx.ViewLocation.Y);
+            if (distance > 1 || targetLoc.Z != ctx.ViewLocation.Z)
+                return InteractionResult.Fail("Too far away");
+
+            return null;
+        }
+
         public InteractionResult TryUse(GameSession session, string itemEntityId, string onEntityId, string? usageId = null)
         {
             if (session.Player == null || session.ViewLocation == null)
@@ -325,6 +345,13 @@ namespace Aetherium.Server
                     if (!ctx.World.Entities.TryGetValue(targetEntityId, out var target))
                         return InteractionResult.Fail("Target not found");
 
+                    // Direct TryUseWithMode calls bypass GetUseOptions' context
+                    // filtering, so enforce reach here — a key must not unlock a
+                    // door on the other side of the map.
+                    var keyOutOfRange = NotWithinReach(ctx, target);
+                    if (keyOutOfRange != null)
+                        return keyOutOfRange;
+
                     var key = item.AllComponents.OfType<Key>().FirstOrDefault();
                     var door = target.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
                     if (key != null && door != null)
@@ -364,6 +391,21 @@ namespace Aetherium.Server
         }
 
         private InteractionResult ToggleDoor(ActionContext ctx, string targetEntityId, bool open)
+        {
+            if (!ctx.World.Entities.TryGetValue(targetEntityId, out var target))
+                return InteractionResult.Fail("Entity not found");
+
+            // Direct open/close is a physical act — the actor must be next to the
+            // door. (ToggleDoorCore stays unchecked: TryActivate's lever mechanisms
+            // legitimately open doors at a distance via TargetEntityIds.)
+            var outOfRange = NotWithinReach(ctx, target);
+            if (outOfRange != null)
+                return outOfRange;
+
+            return ToggleDoorCore(ctx, targetEntityId, open);
+        }
+
+        private InteractionResult ToggleDoorCore(ActionContext ctx, string targetEntityId, bool open)
         {
             if (!ctx.World.Entities.TryGetValue(targetEntityId, out var target))
                 return InteractionResult.Fail("Entity not found");
@@ -422,12 +464,11 @@ namespace Aetherium.Server
             if (!ctx.World.Entities.TryGetValue(entityId, out var target))
                 return InteractionResult.Fail("Entity not found");
 
-            // Check if entity is adjacent or at same location
-            var targetLoc = target.Get<WorldLocation>();
-            var distance = System.Math.Abs(targetLoc.X - ctx.ViewLocation.X) +
-                          System.Math.Abs(targetLoc.Y - ctx.ViewLocation.Y);
-            if (distance > 1)
-                return InteractionResult.Fail("Too far away");
+            // The activatable itself must be within reach (including same Z —
+            // previously only X/Y were checked, so a lever one floor away worked).
+            var outOfRange = NotWithinReach(ctx, target);
+            if (outOfRange != null)
+                return outOfRange;
 
             var activatable = target.AllComponents.OfType<Activatable>().FirstOrDefault();
             if (activatable == null)
@@ -455,7 +496,9 @@ namespace Aetherium.Server
                         door.IsLocked = false;
                         if (!door.IsOpen)
                         {
-                            ToggleDoor(ctx, targetId, open: true);
+                            // Mechanism-driven: the lever was reach-checked above;
+                            // its linked door may legitimately be far away.
+                            ToggleDoorCore(ctx, targetId, open: true);
                         }
                     }
 
@@ -613,6 +656,10 @@ namespace Aetherium.Server
             if (!ctx.World.Entities.TryGetValue(doorId, out var door))
                 return InteractionResult.Fail("Door not found");
 
+            var outOfRange = NotWithinReach(ctx, door);
+            if (outOfRange != null)
+                return outOfRange;
+
             var forcesDoor = item.AllComponents.OfType<ForcesDoor>().FirstOrDefault();
             if (forcesDoor == null)
                 return InteractionResult.Fail("Item cannot force doors");
@@ -661,6 +708,10 @@ namespace Aetherium.Server
 
             if (!ctx.World.Entities.TryGetValue(doorId, out var door))
                 return InteractionResult.Fail("Door not found");
+
+            var outOfRange = NotWithinReach(ctx, door);
+            if (outOfRange != null)
+                return outOfRange;
 
             var lockpick = item.AllComponents.OfType<Lockpick>().FirstOrDefault();
             if (lockpick == null)
