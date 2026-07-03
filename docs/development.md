@@ -14,7 +14,7 @@ Developer documentation for the Aetherium Console Game project.
 
 ### Prerequisites
 
-- .NET 9.0 SDK or later
+- .NET 10.0 SDK or later
 - PowerShell (for Windows development)
 - Git
 
@@ -67,7 +67,7 @@ dotnet test Aetherium.Test --filter "FullyQualifiedName~GameMapGrain_LoadMap_Res
 
 ### Test Status
 
-Current test status: **864 passed, 0 failed, 2 skipped** (Aetherium.Test on `develop`, 2026-07-03; run with `DOTNET_ROLL_FORWARD=Major` on machines lacking the .NET 9 runtime)
+Current test status: **865 passed, 0 failed, 0 skipped** (Aetherium.Test on `develop`, 2026-07-03). All projects target net10.0; no `DOTNET_ROLL_FORWARD` workaround is needed on machines with the .NET 10 SDK.
 
 ### Testing Best Practices
 
@@ -414,6 +414,6 @@ When contributing code:
 
 ---
 
-**Last Updated**: Based on latest changes (Orleans v9 test config, reentrancy, fixes)  
-**Test Status**: 864 passed, 0 failed, 2 skipped
+**Last Updated**: Phase 1 foundation fixes landed 2026-07-03 (boot-hang fix, Dashboard build restored, net10.0 migration)  
+**Test Status**: 865 passed, 0 failed, 0 skipped
 

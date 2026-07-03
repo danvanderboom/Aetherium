@@ -4,8 +4,8 @@
 Aetherium is a real-time multiplayer dungeon crawler game with a client-server architecture. The game features a console-based UI with ASCII graphics, real-time lighting, field-of-view calculations, and interactive gameplay elements. The project includes a monitoring system for debugging and automated testing.
 
 ## Tech Stack
-- **Backend**: .NET 9.0, ASP.NET Core, SignalR, Microsoft Orleans 9.2 (co-hosted silo)
-- **Clients**: .NET 9.0 console application (Spectre.Console), Unity 2023.3 2D client, Blazor Server dashboard
+- **Backend**: .NET 10.0, ASP.NET Core, SignalR, Microsoft Orleans 9.2 (co-hosted silo)
+- **Clients**: .NET 10.0 console application (Spectre.Console), Unity 2023.3 2D client, Blazor Server dashboard
 - **Tooling**: aetherctl CLI (System.CommandLine), WorldGenCLI library
 - **Testing**: xUnit, NUnit, Orleans TestingHost
 - **Architecture**: Client-Server with WebSocket communication
@@ -203,7 +203,7 @@ openspec archive [change-id] --yes
 - **Console UI**: Must work in standard Windows console
 - **Real-time**: Game must maintain 60+ FPS for smooth gameplay
 - **Memory**: Efficient rendering to avoid console flicker
-- **Compatibility**: .NET 9.0+ required
+- **Compatibility**: .NET 10.0+ required
 - **Platform**: Primarily Windows (uses Console.Beep, Console.CapsLock)
 
 ## External Dependencies

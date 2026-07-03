@@ -1,6 +1,6 @@
 # Aetherium
 
-Aetherium is a server-authoritative multiplayer dungeon crawler built on .NET 9, Microsoft Orleans, and SignalR. The server simulates the entire game world — procedural generation, field-of-view and lighting, entities, interactions, weather and seasons, AI agents, and emergent narrative — and streams each player only what their character can perceive. Clients are thin renderers: a Spectre.Console terminal client, a Unity 2D client, and a planned Unreal Engine client all consume the same perception protocol.
+Aetherium is a server-authoritative multiplayer dungeon crawler built on .NET 10, Microsoft Orleans, and SignalR. The server simulates the entire game world — procedural generation, field-of-view and lighting, entities, interactions, weather and seasons, AI agents, and emergent narrative — and streams each player only what their character can perceive. Clients are thin renderers: a Spectre.Console terminal client, a Unity 2D client, and a planned Unreal Engine client all consume the same perception protocol.
 
 ## Project map
 

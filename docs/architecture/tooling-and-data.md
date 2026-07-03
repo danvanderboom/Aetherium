@@ -22,7 +22,7 @@ The unified operator CLI, built on System.CommandLine. It is stateless — all s
 
 Auth: Azure AD B2C device flow (`Auth/`) for management writes when the server has auth enabled.
 
-Known issue (2026-07-03): Aetherctl pins `Microsoft.Orleans.Client` **8.0.0** while the server runs Orleans **9.2.1** — a version skew to resolve (see [docs/audits/tooling-testing-devex.md](../audits/tooling-testing-devex.md)).
+Aetherctl pins `Microsoft.Orleans.Client` **9.2.1**, matching the server (previously pinned to 8.0.0 — fixed on `develop`; see [docs/audits/tooling-testing-devex.md](../audits/tooling-testing-devex.md)).
 
 ## WorldGenCLI (`WorldGenCLI/`)
 
