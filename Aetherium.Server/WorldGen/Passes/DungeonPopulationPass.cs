@@ -40,8 +40,20 @@ namespace Aetherium.WorldGen.Passes
             if (candidateLocations.Count == 0)
                 return;
 
-            PlaceMonsters(world, candidateLocations, rng);
-            PlaceTreasure(world, candidateLocations, rng);
+            var gc = context.GeneratorContext;
+            // enemyCount, when supplied, sets the monster count exactly (clamped to available tiles);
+            // absent, we keep the historical one-per-MonsterTileRatio density (min 2).
+            int monsterCount = gc.HasParam("enemyCount")
+                ? Math.Min(gc.GetIntParam("enemyCount", 0, min: 0, max: 100000), candidateLocations.Count)
+                : Math.Max(2, candidateLocations.Count / MonsterTileRatio);
+            // resourceAvailability scales treasure around the historical baseline of 2 items
+            // (restorative + lantern); absent => 2. Values >1 add restoratives, <1 thin them out.
+            int treasureCount = gc.HasParam("resourceAvailability")
+                ? Math.Max(1, (int)Math.Round(2 * gc.GetDoubleParam("resourceAvailability", 1.0, min: 0, max: 10)))
+                : 2;
+
+            PlaceMonsters(world, candidateLocations, rng, monsterCount);
+            PlaceTreasure(world, candidateLocations, rng, treasureCount);
         }
 
         private static WorldLocation TakeRandom(List<WorldLocation> candidates, Random rng)
@@ -52,9 +64,8 @@ namespace Aetherium.WorldGen.Passes
             return loc;
         }
 
-        private static void PlaceMonsters(World world, List<WorldLocation> candidates, Random rng)
+        private static void PlaceMonsters(World world, List<WorldLocation> candidates, Random rng, int monstersToPlace)
         {
-            int monstersToPlace = Math.Max(2, candidates.Count / MonsterTileRatio);
             for (int i = 0; i < monstersToPlace && candidates.Count > 0; i++)
             {
                 var location = TakeRandom(candidates, rng);
@@ -65,29 +76,43 @@ namespace Aetherium.WorldGen.Passes
             }
         }
 
-        private static void PlaceTreasure(World world, List<WorldLocation> candidates, Random rng)
+        private static void PlaceTreasure(World world, List<WorldLocation> candidates, Random rng, int treasureCount)
         {
-            if (candidates.Count == 0)
+            if (candidates.Count == 0 || treasureCount <= 0)
                 return;
 
+            // First treasure: the restorative "chest".
             var chestLocation = TakeRandom(candidates, rng);
             var restorative = new HealthRestorativeItem();
             restorative.Set(chestLocation);
             world.AddEntity(restorative);
 
-            // Lantern sits adjacent to the chest. Validate the neighbor is in-bounds and passable
-            // before placing — otherwise pick a nearby passable cell from the remaining candidates.
-            var lanternLocation = chestLocation.FromDelta(1, 0, 0);
-            if (!world.EntitiesByLocation.ContainsKey(lanternLocation) || !world.PassableTerrain(lanternLocation))
+            // Second treasure (the historical pair): a lantern adjacent to the chest. Validate the
+            // neighbor is in-bounds and passable before placing — otherwise pick a nearby passable
+            // cell from the remaining candidates.
+            if (treasureCount >= 2)
             {
-                if (candidates.Count == 0)
-                    return;
-                lanternLocation = TakeRandom(candidates, rng);
+                var lanternLocation = chestLocation.FromDelta(1, 0, 0);
+                if (!world.EntitiesByLocation.ContainsKey(lanternLocation) || !world.PassableTerrain(lanternLocation))
+                {
+                    if (candidates.Count == 0)
+                        return;
+                    lanternLocation = TakeRandom(candidates, rng);
+                }
+
+                var lantern = new LanternItem();
+                lantern.Set(lanternLocation);
+                world.AddEntity(lantern);
             }
 
-            var lantern = new LanternItem();
-            lantern.Set(lanternLocation);
-            world.AddEntity(lantern);
+            // Any treasure beyond the default pair is additional restoratives.
+            for (int i = 2; i < treasureCount && candidates.Count > 0; i++)
+            {
+                var extraLocation = TakeRandom(candidates, rng);
+                var extra = new HealthRestorativeItem();
+                extra.Set(extraLocation);
+                world.AddEntity(extra);
+            }
         }
 
         private static void EnsureMonsterTileType(World world)
