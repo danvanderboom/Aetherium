@@ -27,15 +27,22 @@ namespace Aetherium.Server.Narrative.State
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            // Initialize with defaults if needed
+            // Orleans always hands back a non-null default state instance when nothing is persisted
+            // yet, so a `== null` check never fires and the key-derived identity was never set —
+            // leaving NarrativeId empty and every internal GetGrain<INarrativeGrain>(NarrativeId)
+            // throwing on an empty primary key. Initialize identity whenever the state is fresh
+            // (StateId not yet assigned).
             if (_state.State == null)
             {
-                _state.State = new NarrativeState
-                {
-                    StateId = this.GetPrimaryKeyString(),
-                    NarrativeId = ExtractNarrativeId(this.GetPrimaryKeyString()),
-                    WorldId = ExtractWorldId(this.GetPrimaryKeyString())
-                };
+                _state.State = new NarrativeState();
+            }
+
+            if (string.IsNullOrEmpty(_state.State.StateId))
+            {
+                var key = this.GetPrimaryKeyString();
+                _state.State.StateId = key;
+                _state.State.NarrativeId = ExtractNarrativeId(key);
+                _state.State.WorldId = ExtractWorldId(key);
             }
 
             return base.OnActivateAsync(cancellationToken);
@@ -212,6 +219,19 @@ namespace Aetherium.Server.Narrative.State
             var constraint = ExtractCrossWorldConstraintFromObjective(objective);
             if (constraint == null)
                 return false;
+
+            // Direct-target fast path: when the objective names its destination outright (a world id
+            // and/or map id), match arrival against it directly. This completes single-cluster and
+            // direct-target travel objectives even before cluster metadata is populated, and avoids a
+            // grain round-trip. Tag/template selectors fall through to the cluster resolver below.
+            var directWorldId = constraint.WorldSelector?.WorldId;
+            var directMapId = constraint.MapSelector?.MapId;
+            if (!string.IsNullOrEmpty(directWorldId) || !string.IsNullOrEmpty(directMapId))
+            {
+                bool worldMatches = string.IsNullOrEmpty(directWorldId) || directWorldId == arrivedWorldId;
+                bool mapMatches = string.IsNullOrEmpty(directMapId) || directMapId == arrivedMapId;
+                return worldMatches && mapMatches;
+            }
 
             // Get cluster ID from world
             var worldGrain = GrainFactory.GetGrain<IWorldGrain>(arrivedWorldId);
@@ -401,6 +421,48 @@ namespace Aetherium.Server.Narrative.State
             }
 
             return true;
+        }
+
+        public async Task<bool> StartQuestAsync(string questId)
+        {
+            if (_state.State == null || string.IsNullOrEmpty(questId))
+                return false;
+
+            // CanStartQuestAsync enforces: not already completed, not already active, prerequisites met.
+            if (!await CanStartQuestAsync(questId))
+                return false;
+
+            var quest = await FindQuestAsync(questId);
+            if (quest == null)
+                return false; // unknown quest id
+
+            _state.State.ActiveQuestIds.Add(questId);
+            _state.State.ActiveQuestObjectives[questId] =
+                quest.Objectives?.Select(o => o.ObjectiveId).ToList() ?? new List<string>();
+            if (!_state.State.CompletedObjectives.ContainsKey(questId))
+                _state.State.CompletedObjectives[questId] = new HashSet<string>();
+
+            await _state.WriteStateAsync();
+            return true;
+        }
+
+        public Task<HashSet<string>> GetActiveQuestIdsAsync()
+        {
+            return Task.FromResult(_state.State?.ActiveQuestIds ?? new HashSet<string>());
+        }
+
+        /// <summary>
+        /// Resolves a quest definition by id from the base narrative or the generated quests.
+        /// </summary>
+        private async Task<QuestDefinition?> FindQuestAsync(string questId)
+        {
+            if (_state.State == null)
+                return null;
+
+            var narrativeGrain = GrainFactory.GetGrain<INarrativeGrain>(_state.State.NarrativeId);
+            var narrative = await narrativeGrain.GetNarrativeAsync();
+            var quest = narrative?.Quests?.FirstOrDefault(q => q.QuestId == questId);
+            return quest ?? _state.State.GeneratedQuests.FirstOrDefault(q => q.QuestId == questId);
         }
 
         public async Task UpdateRelationshipAsync(string npc1Id, string npc2Id, float relationshipValue)
