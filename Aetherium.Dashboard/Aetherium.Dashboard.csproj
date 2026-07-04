@@ -16,7 +16,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aetherium.Model\Aetherium.Model.csproj" />
-    <ProjectReference Include="..\Aetherium.Server\Aetherium.Server.csproj" />
+    <!-- Aetherium.Server reference removed (P3-10): the dashboard's agent telemetry/analysis and
+         training (curriculum/benchmark) contracts now live in Aetherium.Model, so the dashboard's
+         own code no longer touches any Aetherium.Server type. NOTE: Server is still pulled in
+         transitively via WorldGenCLI (below), whose PCG models the PCG page uses; fully eliminating
+         that is a separate follow-up (move WorldGenCLI.Models to Model / decouple WorldGenCLI). -->
     <ProjectReference Include="..\WorldGenCLI\WorldGenCLI.csproj" />
   </ItemGroup>
 
