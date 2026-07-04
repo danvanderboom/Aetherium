@@ -146,9 +146,51 @@ namespace Aetherium.Rendering
                 }
             }
 
+            // Status line (pickup results, failure reasons, mode changes). Was never
+            // rendered anywhere before — every piece of feedback was invisible.
+            if (!string.IsNullOrWhiteSpace(state.StatusMessage))
+            {
+                RenderStatusPanel(state.StatusMessage, state.Theme, startX, currentY, width);
+                currentY += 4;
+            }
+
             // Help panel beneath widgets - add some spacing
             currentY += 2;
             RenderHelpPanel(state.Theme, startX, currentY, width);
+        }
+
+        /// <summary>
+        /// Builds the inventory item list as safe Spectre markup. Labels and key ids
+        /// come from server data and can contain <c>[...]</c> (e.g. "[gold-key]"),
+        /// which Markup would otherwise parse as a style tag — crashing the frame on
+        /// unknown tags or silently restyling the text on known ones.
+        /// </summary>
+        public static string BuildInventoryItemsMarkup(InventoryRenderData data)
+        {
+            var itemsList = string.Join("\n", data.Items.Select(item => $"• {Markup.Escape(item)}"));
+            return string.IsNullOrEmpty(itemsList) ? "[dim]Empty[/]" : itemsList;
+        }
+
+        /// <summary>
+        /// Builds the status-line markup, escaping the message for the same reason
+        /// as <see cref="BuildInventoryItemsMarkup"/> — status text echoes item
+        /// labels and server-supplied failure reasons.
+        /// </summary>
+        public static string BuildStatusMarkup(string statusMessage)
+            => Markup.Escape(statusMessage);
+
+        private void RenderStatusPanel(string statusMessage, ThemeConfig theme, int x, int y, int width)
+        {
+            var borderStyle = GetBoxBorder(theme.BorderStyle);
+            var borderColor = GetSpectreColor(theme.BorderColor);
+            var titleColor = GetSpectreColor(theme.GetColor("widget_title", ConsoleColor.White));
+
+            var panel = new Panel(new Markup(BuildStatusMarkup(statusMessage)))
+                .Header($"[{titleColor.ToMarkup()}]STATUS[/]")
+                .Border(borderStyle)
+                .BorderColor(borderColor);
+
+            WriteAtWithWidth(panel, x, y, width);
         }
 
         private void RenderCompassWidget(CompassRenderData data, ThemeConfig theme, int x, int y, int width)
@@ -193,9 +235,7 @@ namespace Aetherium.Rendering
             var borderColor = GetSpectreColor(theme.BorderColor);
             var titleColor = GetSpectreColor(theme.GetColor("widget_title", ConsoleColor.White));
 
-            var itemsList = string.Join("\n", data.Items.Select(item => $"• {item}"));
-            if (string.IsNullOrEmpty(itemsList))
-                itemsList = "[dim]Empty[/]";
+            var itemsList = BuildInventoryItemsMarkup(data);
 
             var content = new Rows(
                 new Markup($"[{titleColor.ToMarkup()}]Capacity: {data.Count}/{data.Capacity}[/]"),

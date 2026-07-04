@@ -16,6 +16,14 @@ namespace Aetherctl.Commands
         public static Option<bool>? VerboseOption { get; set; }
         public static Option<bool>? QuietOption { get; set; }
 
+        /// <summary>
+        /// Exit code recorded by <see cref="WriteError"/>. Main folds it into the
+        /// process exit code. This used to be Environment.Exit(1), which skipped
+        /// awaiting disposal (`await using` handlers) and killed the host process
+        /// when commands run in-process (tests). Reset before each invocation.
+        /// </summary>
+        public static int ProcessExitCode { get; set; }
+
         public static bool IsJsonOutput(ParseResult parseResult)
         {
             if (JsonOption == null) return false;
@@ -60,7 +68,7 @@ namespace Aetherctl.Commands
                 {
                     Console.Error.WriteLine($"✗ {error}");
                 }
-                Environment.Exit(1);
+                ProcessExitCode = 1;
                 return;
             }
 

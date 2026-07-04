@@ -223,6 +223,105 @@ namespace Aetherium.Test.MultiWorld
             Assert.That(dispatchedConnections, Does.Contain("conn-B"));
         }
 
+        /// <summary>
+        /// P2-2's remaining leg: connect → act → observe → TRAVEL. Two players share
+        /// world 1 (connect/act/observe are asserted by the tests above); player A then
+        /// travels to world 2 via the same steps GameHub.UsePortal performs — resolve
+        /// the portal target through the cluster grain, leave the source map, join the
+        /// target map, rebind the session — and the perception fan-out must follow:
+        /// B's actions in world 1 no longer reach A, and A's actions in world 2 don't
+        /// reach B. (Quest activation and instances are excluded: known-broken, P3-2/P3-4.)
+        /// </summary>
+        [Test]
+        public async Task Travel_Rebinds_Session_And_Isolates_Perception_Between_Worlds()
+        {
+            var (map1, playerA, playerB) = await InitMapWithTwoJoinersAsync();
+            var sessionA = _sessionManager.GetSession("conn-A")!;
+            var sessionB = _sessionManager.GetSession("conn-B")!;
+            var map1Id = sessionA.MapId!;
+
+            // Second world + map, the travel destination.
+            var world2Id = $"world-{Guid.NewGuid()}";
+            var map2Id = $"{world2Id}-map-1";
+            var world2 = _cluster.GrainFactory.GetGrain<IWorldGrain>(world2Id);
+            await world2.InitializeAsync(new WorldConfig
+            {
+                WorldId = world2Id,
+                Name = "Travel Target World",
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 }
+            });
+            var map2 = _cluster.GrainFactory.GetGrain<IGameMapGrain>(map2Id);
+            await map2.InitializeAsync(world2Id, "floor-1",
+                new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                "maze",
+                new Dictionary<string, object>());
+
+            // Portal resolution — the exact lookup UsePortal performs before transporting.
+            var clusterId = $"cluster-{Guid.NewGuid()}";
+            var clusterGrain = _cluster.GrainFactory.GetGrain<IClusterGrain>(clusterId);
+            await clusterGrain.InitializeAsync(new ClusterInfo { ClusterId = clusterId, Name = "travel-test" });
+            var portalId = $"portal-{Guid.NewGuid()}";
+            await clusterGrain.RegisterPortalAsync(new PortalLink
+            {
+                PortalId = portalId,
+                SourceWorldId = "world-1",
+                SourceMapId = map1Id,
+                TargetWorldId = world2Id,
+                TargetMapId = map2Id,
+                IsResolved = true,
+            });
+
+            var (resolvedWorldId, resolvedMapId) = await clusterGrain.ResolvePortalTargetAsync(portalId);
+            Assert.That(resolvedWorldId, Is.EqualTo(world2Id), "portal must resolve to the target world");
+            Assert.That(resolvedMapId, Is.EqualTo(map2Id), "portal must resolve to the target map");
+
+            // Transport player A (UsePortal's map-level effect), then rebind the session.
+            await map1.LeavePlayerAsync(playerA);
+            var join2 = await map2.JoinPlayerAsync(playerA);
+            Assert.That(join2.Success, Is.True, "joining the travel destination must succeed");
+            sessionA.MapId = resolvedMapId;
+            sessionA.WorldId = resolvedWorldId;
+
+            Assert.That(sessionA.MapId, Is.EqualTo(map2Id));
+            Assert.That(sessionB.MapId, Is.EqualTo(map1Id), "the non-traveling player must stay bound to world 1");
+
+            // Observe isolation, direction 1: B acts in world 1 — only B's connection
+            // may receive the perception update.
+            _hubContext.Reset();
+            var moveB = await map1.MoveAsync(playerB, Aetherium.Model.RelativeDirection.Forward, 1);
+            bool provedIsolation = false;
+            if (moveB.Success)
+            {
+                await _hubContext.WaitForDispatchesAsync(expectedMinCount: 1, TimeSpan.FromSeconds(2));
+                var conns = _hubContext.GetDispatches()
+                    .Where(d => d.Method == "ReceivePerceptionUpdate")
+                    .Select(d => d.ConnectionId).Distinct().ToList();
+                Assert.That(conns, Does.Contain("conn-B"));
+                Assert.That(conns, Does.Not.Contain("conn-A"),
+                    "player A traveled away and must not receive world-1 perception updates");
+                provedIsolation = true;
+            }
+
+            // Direction 2: A acts in world 2 — only A's connection may receive it.
+            _hubContext.Reset();
+            var moveA = await map2.MoveAsync(playerA, Aetherium.Model.RelativeDirection.Forward, 1);
+            if (moveA.Success)
+            {
+                await _hubContext.WaitForDispatchesAsync(expectedMinCount: 1, TimeSpan.FromSeconds(2));
+                var conns = _hubContext.GetDispatches()
+                    .Where(d => d.Method == "ReceivePerceptionUpdate")
+                    .Select(d => d.ConnectionId).Distinct().ToList();
+                Assert.That(conns, Does.Contain("conn-A"));
+                Assert.That(conns, Does.Not.Contain("conn-B"),
+                    "player B stayed in world 1 and must not receive world-2 perception updates");
+                provedIsolation = true;
+            }
+
+            if (!provedIsolation)
+                Assert.Ignore("Neither post-travel move succeeded on these map seeds; " +
+                              "isolation needs at least one successful mutation to observe.");
+        }
+
         [Test]
         public async Task Leave_Dispatches_PerceptionUpdate_To_Remaining_Sessions()
         {

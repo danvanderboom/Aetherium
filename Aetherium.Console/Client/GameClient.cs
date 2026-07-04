@@ -43,10 +43,18 @@ namespace Aetherium.Client
             connection.Closed += async (error) =>
             {
                 Disconnected?.Invoke();
-                await Task.Delay(new Random().Next(0, 5) * 1000);
+                // Closed fires only after WithAutomaticReconnect gives up, so this
+                // manual restart is the last-resort path. Minimum 1s delay — a 0ms
+                // retry hammers a server that just dropped us.
+                await Task.Delay(Random.Shared.Next(1, 5) * 1000);
                 try
                 {
                     await connection.StartAsync();
+                    // A successful manual restart must re-raise Connected just like
+                    // the auto-Reconnected path does — HandleCommand ignores all
+                    // input while the app-level connected flag is false, so missing
+                    // this event soft-locks the client forever.
+                    Connected?.Invoke();
                 }
                 catch
                 {

@@ -6,6 +6,9 @@ using Xunit;
 
 namespace Aetherctl.Test.Commands
 {
+    // Same collection as CommandInvocationTests: both mutate the static
+    // Common.*Option properties, so running them in parallel races.
+    [Collection("cli-invocation")]
     public class CommonTests
     {
         [Fact]

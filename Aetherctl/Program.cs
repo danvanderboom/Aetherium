@@ -5,9 +5,25 @@ using Aetherctl.Orleans;
 
 namespace Aetherctl
 {
-    internal static class Program
+    public static class Program
     {
         private static async Task<int> Main(string[] args)
+        {
+            Commands.Common.ProcessExitCode = 0;
+            var parserExitCode = await BuildRootCommand().InvokeAsync(args);
+            // Command handlers report failures via Common.WriteError (which records
+            // an exit code instead of calling Environment.Exit — that killed the
+            // process before `await using` cleanup and made in-process tests
+            // impossible). Parse errors take precedence.
+            return parserExitCode != 0 ? parserExitCode : Commands.Common.ProcessExitCode;
+        }
+
+        /// <summary>
+        /// Builds the full command tree. Public so tests can invoke commands
+        /// in-process (Aetherctl.Test previously only asserted parse results;
+        /// real invocation goes through the same object Main uses).
+        /// </summary>
+        public static RootCommand BuildRootCommand()
         {
             var rootCommand = new RootCommand("Aetherctl - unified cross-platform CLI for Aetherium");
 
@@ -63,8 +79,7 @@ namespace Aetherctl
             Commands.WorldGenCommands.AddToRoot(rootCommand);
             Commands.MonitorCommands.AddToRoot(rootCommand);
 
-            return await rootCommand.InvokeAsync(args);
+            return rootCommand;
         }
     }
 }
-

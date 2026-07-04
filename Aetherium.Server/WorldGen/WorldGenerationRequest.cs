@@ -30,7 +30,12 @@ namespace Aetherium.WorldGen
         public string GeneratorVersion { get; set; } = "1.0.0";
         public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public NarrativeGenerationConstraints Narrative { get; set; } = new NarrativeGenerationConstraints();
-        public TimeSpan PhaseTimeout { get; set; } = TimeSpan.FromSeconds(2);
+        // Safety net against a hung pass, not a QoS bound. Passes normally finish in
+        // milliseconds, but this is wall-clock time: on a loaded machine (parallel
+        // test runs, CI) a healthy pass can stall past 2s on scheduling alone, which
+        // failed real generations and snapshot hydrations intermittently. Keep the
+        // margin generous; callers with hard latency needs can lower it per-request.
+        public TimeSpan PhaseTimeout { get; set; } = TimeSpan.FromSeconds(15);
         public bool EnableMetrics { get; set; } = true;
         public bool EnableLogging { get; set; } = true;
 

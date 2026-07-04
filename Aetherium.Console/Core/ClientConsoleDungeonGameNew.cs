@@ -178,27 +178,36 @@ namespace Aetherium.Core
             }
         }
 
+        // Rendering happens from two threads: the input loop (post-command) and
+        // SignalR thread-pool threads (OnPerceptionUpdated). The console is drawn
+        // with hundreds of non-atomic SetCursorPosition+Write pairs, so overlapping
+        // renders tear the frame. One lock serializes whole frames.
+        private readonly object renderLock = new object();
+
         private void RenderCurrentState()
         {
-            // Build view state
-            var viewState = new GameViewState
+            lock (renderLock)
             {
-                Perception = currentPerception,
-                Widgets = widgetManager.GetAllWidgets(),
-                Theme = currentTheme,
-                IsConnected = connected,
-                StatusMessage = statusMessage,
-                Timestamp = DateTime.UtcNow
-            };
+                // Build view state
+                var viewState = new GameViewState
+                {
+                    Perception = currentPerception,
+                    Widgets = widgetManager.GetAllWidgets(),
+                    Theme = currentTheme,
+                    IsConnected = connected,
+                    StatusMessage = statusMessage,
+                    Timestamp = DateTime.UtcNow
+                };
 
-            // For now, we render the map view directly (hybrid approach)
-            // Clear the map region (including frame) to avoid ghosting from previous frames
-            mapView.Clear(clearFrame: true);
-            mapView.DrawFrame();
-            mapView.DrawContents();
+                // For now, we render the map view directly (hybrid approach)
+                // Clear the map region (including frame) to avoid ghosting from previous frames
+                mapView.Clear(clearFrame: true);
+                mapView.DrawFrame();
+                mapView.DrawContents();
 
-            // Render widgets using the renderer
-            renderer.RenderFrame(viewState);
+                // Render widgets using the renderer
+                renderer.RenderFrame(viewState);
+            }
         }
 
         private async Task HandleCommand(ConsoleKeyInfo keyInfo)

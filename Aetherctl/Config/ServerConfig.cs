@@ -43,6 +43,13 @@ namespace Aetherctl.Config
     {
         private static string GetConfigDirectory()
         {
+            // Explicit override for tests and multi-profile operator setups.
+            var overrideDir = Environment.GetEnvironmentVariable("AETHERCTL_CONFIG_DIR");
+            if (!string.IsNullOrEmpty(overrideDir))
+            {
+                return overrideDir;
+            }
+
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
                 var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
