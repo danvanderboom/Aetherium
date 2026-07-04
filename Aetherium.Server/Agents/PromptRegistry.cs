@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Aetherium.Server.Agents
 {
@@ -50,6 +51,41 @@ namespace Aetherium.Server.Agents
         {
             _templates.TryGetValue(name, out var template);
             return template;
+        }
+
+        /// <summary>
+        /// Renders a template by substituting <c>{{variable}}</c> placeholders with the supplied
+        /// values (placeholder names are matched case-insensitively and may include surrounding
+        /// whitespace, e.g. <c>{{ goal }}</c>). Returns null if the template is not found.
+        /// Placeholders with no matching variable are left intact so a missing value is visible
+        /// rather than silently blanked.
+        /// </summary>
+        public string? Render(string name, IReadOnlyDictionary<string, string> variables)
+        {
+            var template = GetTemplate(name);
+            if (template is null) return null;
+            return Substitute(template, variables);
+        }
+
+        /// <summary>
+        /// Substitutes <c>{{variable}}</c> placeholders in <paramref name="template"/> using
+        /// <paramref name="variables"/>. Exposed for callers that already hold a template string.
+        /// </summary>
+        public static string Substitute(string template, IReadOnlyDictionary<string, string> variables)
+        {
+            if (string.IsNullOrEmpty(template) || variables is null || variables.Count == 0)
+                return template;
+
+            return Regex.Replace(template, @"\{\{\s*(\w+)\s*\}\}", match =>
+            {
+                var key = match.Groups[1].Value;
+                foreach (var kvp in variables)
+                {
+                    if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+                        return kvp.Value ?? string.Empty;
+                }
+                return match.Value; // leave unknown placeholders untouched
+            });
         }
 
         /// <summary>
