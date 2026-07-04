@@ -11,12 +11,14 @@ A clarification the audit understates: the four "placement" features (`SpawnNPCs
 - `GenerationMetrics.CalculateDifficultyProfile` is invoked in the orchestrator from the effective params + measured layout metrics, and the resulting `DifficultyProfile` (+ `PredictedAgentSuccessRate`) is exposed on `GenerationMetrics`, so difficulty is finally introspectable end-to-end (benchmarks/analytics/curriculum register). Best-effort — never fails a generation.
 - Tests: params measurably change output (room count, trap count, monster count, treasure count), the difficulty profile is computed with and without params, and default-path determinism is preserved (existing `DeterminismTests` stay green).
 
-**Slice 2 — deeper parameterization + dead-stub resolution (follow-up, not this pass):**
-- `keyLockChainDepth` → multiple gated key/lock pairs on the critical path (needs the access-proof invariant generalized from one pair to N — real algorithmic work, kept out of slice 1 to avoid weakening the gating guarantee).
-- `secretRoomDensity` → multiple secret rooms; `OutdoorPopulationPass` param support.
-- Implement `PrefabStamper.SpawnEntity` (prefab entity stamping — a genuine capability gap, can reuse the world-building entity factory), and either wire in or delete `SpawnNPCsFeature`/`ItemDistributionFeature`/`AdaptationPass` per the honest-stub rule (P1-14).
+**Slice 2 — deeper parameterization + dead-stub resolution:**
+- `keyLockChainDepth` → **N gated key/lock pairs** on the critical path. The bridge door remains the guaranteed cut; extra gates go on other primary-path corridors, and **every key sits in the start room** — exactly the model the validator enforces (each key reachable from start without crossing any locked door; the doors collectively gate the objective). The `LockedDoors` metric is fixed to count all gates. A test confirms the validator's gating access proof passes for the whole chain.
+- `secretRoomDensity` → **N secret rooms** (extracted `PlaceSecretRoom`, looping over eligible corridors; default one).
+- `OutdoorPopulationPass` honors `enemyCount` (default one trader + snake).
+- **`PrefabStamper.SpawnEntity` implemented** via a new shared `Aetherium.Entities.SpawnableEntityFactory` (name → entity), which also now backs `SpawnEntityTool` — removing its duplicated reflection map. (Kept distinct from the snapshot-oriented `MultiWorld.EntityFactory`.)
+- **Deleted** the dead, unreferenced stubs `SpawnNPCsFeature` / `ItemDistributionFeature` / `AdaptationPass` (superseded by the live `DungeonPopulationPass`; not in any pass list) per the honest-stub rule (P1-14).
 
-Note: the computed difficulty *profile* already reads `keyLockChainDepth`/`combatDifficulty`/etc. for its score — it reflects the curriculum's *intended* difficulty even before slice 2 makes every knob alter layout.
+Note: the computed difficulty *profile* reads `keyLockChainDepth`/`combatDifficulty`/etc. for its score — reflecting the curriculum's *intended* difficulty, now backed by layout that actually honors those knobs.
 
 ## Impact
 - Affected specs: `pcg-dungeons` (ADDED: difficulty-parameterized generation), `pcg-core` (MODIFIED: difficulty profile in metrics)
@@ -29,4 +31,4 @@ Note: the computed difficulty *profile* already reads `keyLockChainDepth`/`comba
 - Build impact: no breaking changes; default generation output unchanged.
 
 ## Status
-Slice 1 implemented on `feat/phase5-pcg-placement-difficulty` (branched from `develop`). Verified: Server + Test build 0 errors; `GeneratorParameterEffectTests` (8) + existing `DeterminismTests` green (defaults byte-preserved); 141 worldgen/training/benchmark tests pass, 0 regressions. Slice 2 (key/lock chain depth, secret density, outdoor params, dead-stub resolution) tracked below but out of scope for this pass.
+Slices 1 and 2 implemented on `feat/phase5-pcg-placement-difficulty` (branched from `develop`). Every P3-6 parameter now drives the live generation paths and the difficulty profile is computed end-to-end. Verified: full solution build 0 errors; **978 tests pass / 0 failed / 0 skipped** (+~14 new parameter-effect/factory tests). Defaults are byte-preserved (existing `DeterminismTests` and the single-gate/secret regression tests stay green); the key/lock chain passes the validator's gating access proof. Remaining P3-6 work is genuinely out of scope for this change: making generator *params affect layout geometry beyond counts* (e.g. `puzzleComplexity`, `branchingFactor` targets) and `resourceAvailability` on the outdoor path.

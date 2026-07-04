@@ -130,22 +130,14 @@ namespace Aetherium.WorldGen.Prefabs
 
         private void SpawnEntity(World world, PrefabTile tile, WorldLocation location)
         {
-            // Basic entity spawning - can be extended based on EntityType
-            // For now, this is a placeholder that would be implemented
-            // with actual entity factories based on game needs
-
-            // Example:
-            // switch (tile.EntityType)
-            // {
-            //     case "Door":
-            //         var door = new Door();
-            //         door.Set(location);
-            //         world.AddEntity(door);
-            //         break;
-            //     // ... other entity types
-            // }
-
-            Console.WriteLine($"[PrefabStamper] Would spawn {tile.EntityType} at {location}");
+            // Resolve the prefab tile's EntityType to a concrete entity and place it. Unknown types
+            // are skipped (the terrain the tile carried was already stamped) rather than failing the
+            // whole stamp — a prefab authored against a future entity type degrades gracefully.
+            if (Aetherium.Entities.SpawnableEntityFactory.TryCreate(tile.EntityType, out var entity))
+            {
+                entity.Set(location);
+                world.AddEntity(entity);
+            }
         }
     }
 }

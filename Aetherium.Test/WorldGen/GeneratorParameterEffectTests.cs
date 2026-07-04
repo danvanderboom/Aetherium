@@ -186,5 +186,95 @@ namespace Aetherium.Test.WorldGen
             Assert.That(HashWorld(r1.World!), Is.EqualTo(HashWorld(r2.World!)),
                 "Same seed + same parameters must produce an identical world.");
         }
+
+        // ── Key/lock chain depth (slice 2) ────────────────────────────────────
+
+        private WorldGenerationResult GenerateFull(int seed, Dictionary<string, string>? parameters, int width = 80, int height = 80, int levels = 1)
+        {
+            var passes = new IWorldGenerationPass[]
+            {
+                new DungeonLayoutPass(),
+                new DungeonInteractionsPass(),
+                new DungeonPopulationPass(),
+                new DungeonValidationPass()
+            };
+            var request = new WorldGenerationRequest
+            {
+                Template = WorldGenerationTemplate.Dungeon,
+                LayoutGenerator = "AdvancedDungeon",
+                Width = width, Height = height, Levels = levels, Seed = seed,
+                RecordTimings = false
+            };
+            if (parameters != null)
+                foreach (var kv in parameters) request.Parameters[kv.Key] = kv.Value;
+            return new WorldGenerationOrchestrator(_registry, passes).Generate(request);
+        }
+
+        [Test]
+        public void KeyLockChainDepth_PlacesMultipleValidGates()
+        {
+            var roomParams = new Dictionary<string, string> { ["minRooms"] = "12", ["maxRooms"] = "12" };
+            var single = GenerateFull(42, new(roomParams)); // no depth => historical single gate
+            var chain = GenerateFull(42, new(roomParams) { ["keyLockChainDepth"] = "4" }, levels: 2);
+
+            Assert.That(single.Success, Is.True, string.Join("; ", single.Errors));
+            Assert.That(single.Metrics.LockedDoors, Is.EqualTo(1), "Default generation gates exactly one door.");
+
+            Assert.That(chain.Success, Is.True,
+                $"Chained gates should still generate + validate.\nErrors: {string.Join("; ", chain.Errors)}\n" +
+                $"Validation: {string.Join("; ", chain.Validation?.Errors ?? System.Linq.Enumerable.Empty<string>())}");
+            Assert.That(chain.Metrics.LockedDoors, Is.GreaterThan(1), "keyLockChainDepth=4 should place more than one gate.");
+            Assert.That(chain.Metrics.KeysPlaced, Is.EqualTo(chain.Metrics.LockedDoors),
+                "Every gated door must have a matching key.");
+            // The access-proof invariant (each key reachable from start without crossing a locked
+            // door; doors collectively cut the objective) is enforced by the validator.
+            Assert.That(chain.Validation, Is.Not.Null);
+            Assert.That(chain.Validation!.Success, Is.True,
+                $"Gating access proof failed for the chain: {string.Join("; ", chain.Validation.Errors)}");
+        }
+
+        // ── Secret room density (slice 2) ─────────────────────────────────────
+
+        [Test]
+        public void SecretRoomDensity_PlacesMoreSecrets()
+        {
+            var one = Generate(42); // absent => one secret
+            var many = Generate(42, new() { ["secretRoomDensity"] = "1.0" });
+
+            Assert.That(one.Success, Is.True, string.Join("; ", one.Errors));
+            Assert.That(many.Success, Is.True, string.Join("; ", many.Errors));
+            Assert.That(one.Metrics.SecretsPlaced, Is.EqualTo(1), "Default generation places one secret room.");
+            Assert.That(many.Metrics.SecretsPlaced, Is.GreaterThan(1),
+                $"secretRoomDensity=1.0 placed {many.Metrics.SecretsPlaced} secrets, expected more than one.");
+        }
+
+        // ── Outdoor population (slice 2) ──────────────────────────────────────
+
+        [Test]
+        public void OutdoorEnemyCount_ControlsMonsterCount()
+        {
+            WorldGenerationResult Outdoor(int seed, int enemies)
+            {
+                var passes = new IWorldGenerationPass[] { new OutdoorLayoutPass(), new OutdoorPopulationPass() };
+                var request = new WorldGenerationRequest
+                {
+                    Template = WorldGenerationTemplate.Outdoor,
+                    LayoutGenerator = "PerlinTerrain",
+                    Width = 60, Height = 60, Seed = seed, RecordTimings = false
+                };
+                request.Parameters["enemyCount"] = enemies.ToString();
+                return new WorldGenerationOrchestrator(_registry, passes).Generate(request);
+            }
+
+            var few = Outdoor(99, 1);
+            var many = Outdoor(99, 8);
+            Assert.That(few.Success, Is.True, string.Join("; ", few.Errors));
+            Assert.That(many.Success, Is.True, string.Join("; ", many.Errors));
+
+            int fewMonsters = few.World!.Entities.Values.OfType<Monster>().Count();
+            int manyMonsters = many.World!.Entities.Values.OfType<Monster>().Count();
+            Assert.That(manyMonsters, Is.GreaterThan(fewMonsters),
+                $"enemyCount=8 placed {manyMonsters} monsters, not more than enemyCount=1's {fewMonsters}.");
+        }
     }
 }
