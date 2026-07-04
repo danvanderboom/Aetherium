@@ -46,6 +46,13 @@ namespace Aetherium.Server.MultiWorld
         Task<string> AddMapAsync(string mapName, string generatorType, Dictionary<string, object> parameters);
 
         /// <summary>
+        /// Removes a map from the world so it is no longer ticked, saved, or loaded, and drops any
+        /// player locations that pointed at it. Used to free abandoned dungeon-instance maps.
+        /// Returns true if the map was present and removed.
+        /// </summary>
+        Task<bool> RemoveMapAsync(string mapId);
+
+        /// <summary>
         /// Gets all map IDs in this world.
         /// </summary>
         Task<List<string>> GetMapIdsAsync();

@@ -33,6 +33,13 @@ namespace Aetherium.Server.Instances
         /// Releases an instance when it's no longer needed.
         /// </summary>
         Task ReleaseInstanceAsync(InstanceId instanceId);
+
+        /// <summary>
+        /// Reaps instances that are abandoned/stopped or idle past the threshold: shuts each down
+        /// (freeing its map) and drops its allocation. Runs on a grain timer and can be invoked
+        /// directly. Returns the number of instances reaped.
+        /// </summary>
+        Task<int> SweepAbandonedInstancesAsync();
     }
 }
 

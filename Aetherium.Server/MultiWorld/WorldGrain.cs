@@ -171,6 +171,29 @@ namespace Aetherium.Server.MultiWorld
             return mapId;
         }
 
+        public async Task<bool> RemoveMapAsync(string mapId)
+        {
+            if (string.IsNullOrEmpty(mapId) || !_worldState.State.Info.MapIds.Remove(mapId))
+                return false;
+
+            // Drop any player locations pointing at the removed map so the world's player
+            // bookkeeping doesn't reference a map that is no longer ticked. (Instance maps are
+            // normally emptied before release, but this keeps state consistent either way.)
+            var strandedPlayers = _worldState.State.PlayerLocations
+                .Where(kvp => kvp.Value == mapId)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            foreach (var playerId in strandedPlayers)
+            {
+                _worldState.State.PlayerLocations.Remove(playerId);
+                if (_worldState.State.Info.PlayerCount > 0)
+                    _worldState.State.Info.PlayerCount--;
+            }
+
+            await _worldState.WriteStateAsync();
+            return true;
+        }
+
         public Task<List<string>> GetMapIdsAsync()
         {
             return Task.FromResult(_worldState.State.Info.MapIds);

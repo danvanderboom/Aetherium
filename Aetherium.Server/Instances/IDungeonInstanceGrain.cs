@@ -55,9 +55,16 @@ namespace Aetherium.Server.Instances
         Task<string?> GetMapIdAsync();
 
         /// <summary>
-        /// Shuts down the instance and releases resources.
+        /// Shuts down the instance and releases resources, notifying the allocator to release it.
         /// </summary>
         Task ShutdownAsync();
+
+        /// <summary>
+        /// Tears the instance down (removes players, marks Stopped, deactivates) WITHOUT calling
+        /// back into the allocator. Used by the allocator's sweeper, which owns the release itself —
+        /// calling <see cref="ShutdownAsync"/> from within the allocator would re-enter it and deadlock.
+        /// </summary>
+        Task TeardownAsync();
     }
 }
 
