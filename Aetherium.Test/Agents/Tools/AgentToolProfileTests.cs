@@ -5,6 +5,7 @@ using Aetherium.Server.Agents.Tools.Movement;
 using Aetherium.Server.Agents.Tools.Interaction;
 using Aetherium.Server.Agents.Tools.Narrative;
 using Aetherium.Server.Agents.Tools.Instances;
+using Aetherium.Server.Agents.Tools.Combat;
 
 namespace Aetherium.Test.Agents.Tools
 {
@@ -118,6 +119,21 @@ namespace Aetherium.Test.Agents.Tools
 
             Assert.That(profile.IsToolAllowed(new EnterDungeonTool()), Is.False);
             Assert.That(profile.IsToolAllowed(new CreatePartyTool()), Is.False);
+        }
+
+        [Test]
+        public void Player_ShouldAllowAttackTool()
+        {
+            // The GameHub enforces the Player profile at its boundary, so the attack tool must be
+            // reachable by it for combat to work.
+            Assert.That(AgentToolProfile.Player.IsToolAllowed(new AttackTool()), Is.True);
+        }
+
+        [Test]
+        public void Explorer_ShouldNotAllowAttackTool()
+        {
+            // The attack tool lives in the "combat" category, which Explorer lacks.
+            Assert.That(AgentToolProfile.Explorer.IsToolAllowed(new AttackTool()), Is.False);
         }
 
         [Test]

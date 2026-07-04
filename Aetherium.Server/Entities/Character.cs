@@ -10,7 +10,9 @@ namespace Aetherium
     {
         public Character() : base()
         {
-            Set(new Health());
+            // Characters spawn at full health. Previously this was Health(0,0), which left every
+            // character "dead" the moment combat could read it; combat (P3-7) now depends on this.
+            Set(new Health(100, 100));
             Set(new HasHeading());
             Set(new Perception());
             Set(new Memory());

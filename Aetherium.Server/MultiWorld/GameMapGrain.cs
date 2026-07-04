@@ -1310,6 +1310,7 @@ namespace Aetherium.Server.MultiWorld
         // ------------------------------------------------------------------
 
         private readonly InteractionSystem _interactionSystem = new InteractionSystem();
+        private readonly CombatSystem _combatSystem = new CombatSystem();
 
         private ActionContext? TryBuildActionContext(string sessionId)
         {
@@ -1369,6 +1370,51 @@ namespace Aetherium.Server.MultiWorld
             });
 
             return Ok();
+        }
+
+        public async Task<Aetherium.Model.AttackResultDto> AttackAsync(string sessionId, string targetEntityId)
+        {
+            var ctx = TryBuildActionContext(sessionId);
+            if (ctx is null)
+                return Aetherium.Model.AttackResultDto.Fail("Map not initialized or player not on map");
+
+            // Capture the target's location BEFORE resolving — a lethal hit removes it from _world.
+            int lx = 0, ly = 0, lz = 0;
+            if (_world!.Entities.TryGetValue(targetEntityId, out var preTarget))
+            {
+                var tl = preTarget.Get<Aetherium.Components.WorldLocation>();
+                if (tl is not null) { lx = tl.X; ly = tl.Y; lz = tl.Z; }
+            }
+
+            var result = _combatSystem.TryAttack(_world!, ctx.Player, targetEntityId);
+            if (!result.Success)
+                return new Aetherium.Model.AttackResultDto { Success = false, Reason = result.Reason };
+
+            await _mapState.WriteStateAsync();
+
+            if (result.TargetDefeated)
+            {
+                await FanOutAsync(new EntityRemovedDelta
+                {
+                    MapId = _mapState.State.MapId,
+                    EntityId = targetEntityId,
+                    LastX = lx, LastY = ly, LastZ = lz,
+                });
+            }
+            else
+            {
+                await FanOutAsync(IntFieldDelta(targetEntityId, "Health", "Level", result.RemainingHealth));
+            }
+
+            return new Aetherium.Model.AttackResultDto
+            {
+                Success = true,
+                Damage = result.Damage,
+                RemainingHealth = result.RemainingHealth,
+                TargetDefeated = result.TargetDefeated,
+                TargetType = result.TargetType,
+                TargetEntityId = targetEntityId,
+            };
         }
 
         public async Task<Aetherium.Model.InteractionResultDto> OpenAsync(string sessionId, string targetEntityId)
