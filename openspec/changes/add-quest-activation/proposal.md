@@ -9,15 +9,15 @@ The narrative system has a complete, wired objective-completion loop — `GameHu
 - Tests (the grain had **zero**): quest activation populates `ActiveQuestIds`; prerequisites gate activation; and the full loop — add quest → start → `player_arrived` → objective completes → quest moves to `CompletedQuestIds`.
 - **Latent bug fixed (found by the new tests):** `OnActivateAsync` guarded identity initialization on `_state.State == null`, but Orleans always supplies a non-null default state — so `NarrativeId` was never set from the grain key, and every internal `GetGrain<INarrativeGrain>(NarrativeId)` threw on an empty primary key. Guard now keys off an unset `StateId`. This is why the grain worked in no real scenario and had no tests.
 
-**Slice 2 — player-facing surface + broader objectives (follow-up, not this pass):**
-- A player/agent activation path: `GameHub.AcceptQuest`/`ListAvailableQuests`/`GetQuestLog` (+ an agent tool and `aetherctl quest` command), resolving the narrative-state grain from the session's world like `ProcessNarrativeEventAsync` does.
-- Objective completion for more of the existing types (`collect` on the already-emitted `item_collected` event, `reach_location`, `kill`).
-- Emit `player_arrived` on `JoinWorld` (only `UsePortal` emits it today).
+**Slice 2 — player-facing surface + broader objectives (this pass):**
+- A player/agent activation path: `GameHub.AcceptQuest`/`ListAvailableQuests`/`GetQuestLog`, plus player-profile agent tools (`accept_quest`/`list_quests`/`quest_log`) and an `aetherctl quest available|accept|log <worldId>` command. All resolve the narrative-state grain from the world via a shared `NarrativeStateResolver` (worldId → narrativeId → scope → grain).
+- Objective completion for `collect` (on `item_collected`, count-based), `kill` (on `enemy_defeated`, count-based — engine-ready ahead of combat), and `reach_location` (on `player_arrived`/`location_reached`). New `NarrativeState.ObjectiveProgress` tracks partial counts. Existing `travel_to` completion is preserved verbatim.
+- `player_arrived` is now emitted on `JoinWorld` (only `UsePortal` emitted it before), so quests whose destination is the joined world can complete.
 
 ## Impact
-- Affected specs: `narrative` (ADDED: quest activation & progression)
-- Affected code: `Aetherium.Server/Narrative/State/INarrativeStateGrain.cs`, `NarrativeStateGrain.cs`; new `Aetherium.Test/Narrative/NarrativeStateGrainTests.cs`
-- Build impact: additive grain API; no breaking changes. Existing `MarkQuestCompletedAsync`/`RecordEventAsync`/`HandlePlayerArrivedEventAsync` behavior is unchanged except that active quests now exist for them to act on.
+- Affected specs: `narrative` (ADDED: quest activation & progression; broader objective completion; player-facing quest surface)
+- Affected code (slice 2): `INarrativeStateGrain.cs`/`NarrativeStateGrain.cs` (broader objectives, `ObjectiveProgress`, `GetActiveQuestsAsync`), new `NarrativeStateResolver.cs`, `GameHub.cs` (quest methods + `JoinWorld` arrival), new `Aetherium.Model/QuestDtos.cs`, new quest tools under `Agents/Tools/Narrative/`, `AgentToolProfile.cs` (`quest` category), new `Aetherctl/Commands/QuestCommands.cs`; tests in `NarrativeStateGrainTests.cs` + `AgentToolProfileTests.cs`.
+- Build impact: additive grain/hub/tool/CLI API; no breaking changes. `NarrativeState` gains `[Id(10)] ObjectiveProgress` (additive Orleans serialization id). Existing `travel_to` behavior is unchanged.
 
 ## Status
-Slice 1 implemented on `feat/phase5-quest-activation` (branched from `develop`). Verified: full solution build 0 errors; new `NarrativeStateGrainTests` (6) green — activation, prerequisites, and the full add→start→arrive→complete loop; **983 tests pass / 0 failed** (1 pre-existing seed-tolerant skip). Slice 2 (player-facing `GameHub`/tool/CLI surface, broader objective types, `JoinWorld` arrival) tracked but out of scope for this pass.
+Slices 1 and 2 implemented (slice 1 on `feat/phase5-quest-activation`, slice 2 on `feat/phase5-quest-surface`, both branched from `develop`). Slice 1 verified: activation, prerequisites, and the add→start→arrive→complete loop. Slice 2 adds count-based `collect`/`kill` and `reach_location` completion, the player/agent/CLI surface, and `JoinWorld` arrival, with grain tests for each objective type (12 grain tests) plus profile-reachability tests. Verified: full solution build 0 errors; **full suite green**. Deferred: rich reward granting; `kill` has no production emitter until combat (P3-7); objective types `talk_to`/`explore`/`rescue`/`defend` remain unwired.

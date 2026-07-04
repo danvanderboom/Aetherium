@@ -121,86 +121,255 @@ namespace Aetherium.Server.Narrative.State
                 _state.State.Events.RemoveAt(0);
             }
 
-            // Handle player_arrived events for travel_to objectives
-            if (eventType == "player_arrived" && eventData != null)
-            {
-                await HandlePlayerArrivedEventAsync(eventData);
-            }
+            // Advance any active-quest objectives this event can progress or complete
+            // (travel_to / reach_location on arrival, collect on item_collected, kill on
+            // enemy_defeated). Prior to this only travel_to on player_arrived was handled.
+            await AdvanceObjectivesForEventAsync(eventType, eventData ?? new Dictionary<string, object>());
 
             await _state.WriteStateAsync();
         }
 
         /// <summary>
-        /// Handles player_arrived events by checking if any travel_to objectives are complete.
+        /// Walks every active quest's incomplete objectives and lets the given event advance
+        /// or complete them. When an objective completes and it was the quest's last, the quest
+        /// is marked complete. Count-based objectives (collect/kill) accumulate in
+        /// <see cref="NarrativeState.ObjectiveProgress"/> until they reach their required count.
         /// </summary>
-        private async Task HandlePlayerArrivedEventAsync(Dictionary<string, object> eventData)
+        private async Task AdvanceObjectivesForEventAsync(string eventType, Dictionary<string, object> eventData)
         {
             if (_state.State == null)
                 return;
 
-            // Extract arrival location from event
+            // Snapshot: MarkQuestCompletedAsync mutates ActiveQuestIds mid-iteration.
+            var activeQuestIds = _state.State.ActiveQuestIds.ToList();
+            if (activeQuestIds.Count == 0)
+                return;
+
+            foreach (var questId in activeQuestIds)
+            {
+                var quest = await FindQuestAsync(questId);
+                if (quest?.Objectives == null || quest.Objectives.Count == 0)
+                    continue;
+
+                bool anyObjectiveCompleted = false;
+
+                foreach (var objective in quest.Objectives)
+                {
+                    // Skip objectives already completed.
+                    if (_state.State.CompletedObjectives.TryGetValue(questId, out var done) &&
+                        done.Contains(objective.ObjectiveId))
+                        continue;
+
+                    if (await TryCompleteObjectiveAsync(questId, objective, eventType, eventData))
+                        anyObjectiveCompleted = true;
+                }
+
+                // Only re-check quest completion when an objective actually finished.
+                if (anyObjectiveCompleted && AreAllObjectivesComplete(quest))
+                    await MarkQuestCompletedAsync(questId);
+            }
+        }
+
+        /// <summary>
+        /// Attempts to complete a single objective in response to an event. Returns true only when
+        /// the objective transitions to complete (a mere progress increment on a counting objective
+        /// returns false — its progress is still persisted by the caller).
+        /// </summary>
+        private async Task<bool> TryCompleteObjectiveAsync(
+            string questId, QuestObjective objective, string eventType, Dictionary<string, object> eventData)
+        {
+            switch (objective.Type?.ToLowerInvariant())
+            {
+                case "travel_to":
+                    if (eventType != "player_arrived")
+                        return false;
+                    return await TryCompleteTravelToAsync(questId, objective, eventData);
+
+                case "reach_location":
+                    if (eventType != "player_arrived" && eventType != "location_reached")
+                        return false;
+                    if (!MatchesReachLocation(objective, eventData))
+                        return false;
+                    MarkObjectiveComplete(questId, objective.ObjectiveId);
+                    return true;
+
+                case "collect":
+                    if (eventType != "item_collected")
+                        return false;
+                    return TryAdvanceCountingObjective(questId, objective, eventData, MatchesCollect);
+
+                case "kill":
+                    if (eventType != "enemy_defeated")
+                        return false;
+                    return TryAdvanceCountingObjective(questId, objective, eventData, MatchesKill);
+
+                default:
+                    return false;
+            }
+        }
+
+        private async Task<bool> TryCompleteTravelToAsync(
+            string questId, QuestObjective objective, Dictionary<string, object> eventData)
+        {
+            // travel_to matching requires both a world and a map on the arrival event.
             if (!eventData.TryGetValue("worldId", out var worldIdObj) ||
                 !eventData.TryGetValue("mapId", out var mapIdObj))
-                return;
+                return false;
 
             var arrivedWorldId = worldIdObj?.ToString();
             var arrivedMapId = mapIdObj?.ToString();
-
             if (string.IsNullOrEmpty(arrivedWorldId) || string.IsNullOrEmpty(arrivedMapId))
+                return false;
+
+            if (await IsTravelToObjectiveCompleteAsync(objective, arrivedWorldId, arrivedMapId))
+            {
+                MarkObjectiveComplete(questId, objective.ObjectiveId);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Advances a count-based objective (collect/kill) by one when <paramref name="matcher"/>
+        /// accepts the event, completing it once the accumulated count reaches the required count.
+        /// </summary>
+        private bool TryAdvanceCountingObjective(
+            string questId,
+            QuestObjective objective,
+            Dictionary<string, object> eventData,
+            Func<QuestObjective, Dictionary<string, object>, bool> matcher)
+        {
+            if (!matcher(objective, eventData))
+                return false;
+
+            int required = GetRequiredCount(objective);
+            int current = IncrementProgress(questId, objective.ObjectiveId);
+
+            if (current >= required)
+            {
+                MarkObjectiveComplete(questId, objective.ObjectiveId);
+                return true;
+            }
+            // Progressed but not yet complete — progress is persisted by the caller.
+            return false;
+        }
+
+        private void MarkObjectiveComplete(string questId, string objectiveId)
+        {
+            if (_state.State == null)
                 return;
 
-            // Get all active quests and check for travel_to objectives
-            var activeQuestIds = _state.State.ActiveQuestIds.ToList();
-            
-            foreach (var questId in activeQuestIds)
+            if (!_state.State.CompletedObjectives.TryGetValue(questId, out var set))
             {
-                // Get quest definition
-                var narrativeGrain = GrainFactory.GetGrain<INarrativeGrain>(_state.State.NarrativeId);
-                var narrative = await narrativeGrain.GetNarrativeAsync();
-                
-                QuestDefinition? quest = null;
-                if (narrative != null)
-                {
-                    quest = narrative.Quests.FirstOrDefault(q => q.QuestId == questId);
-                }
-                
-                if (quest == null)
-                {
-                    quest = _state.State.GeneratedQuests.FirstOrDefault(q => q.QuestId == questId);
-                }
+                set = new HashSet<string>();
+                _state.State.CompletedObjectives[questId] = set;
+            }
+            set.Add(objectiveId);
 
-                if (quest == null || quest.Objectives == null)
-                    continue;
+            // Once complete, partial progress is no longer needed.
+            if (_state.State.ObjectiveProgress.TryGetValue(questId, out var prog))
+                prog.Remove(objectiveId);
+        }
 
-                // Check each objective for travel_to type
-                foreach (var objective in quest.Objectives)
-                {
-                    if (objective.Type != "travel_to")
-                        continue;
+        private int IncrementProgress(string questId, string objectiveId)
+        {
+            if (_state.State == null)
+                return 0;
 
-                    // Check if this objective is already completed
-                    if (_state.State.CompletedObjectives.TryGetValue(questId, out var completed) &&
-                        completed.Contains(objective.ObjectiveId))
-                        continue;
+            if (!_state.State.ObjectiveProgress.TryGetValue(questId, out var prog))
+            {
+                prog = new Dictionary<string, int>();
+                _state.State.ObjectiveProgress[questId] = prog;
+            }
+            int next = (prog.TryGetValue(objectiveId, out var c) ? c : 0) + 1;
+            prog[objectiveId] = next;
+            return next;
+        }
 
-                    // Check if arrival matches this objective's target
-                    if (await IsTravelToObjectiveCompleteAsync(objective, arrivedWorldId, arrivedMapId))
-                    {
-                        // Mark objective as complete
-                        if (!_state.State.CompletedObjectives.ContainsKey(questId))
-                        {
-                            _state.State.CompletedObjectives[questId] = new HashSet<string>();
-                        }
-                        
-                        _state.State.CompletedObjectives[questId].Add(objective.ObjectiveId);
+        private static bool MatchesCollect(QuestObjective objective, Dictionary<string, object> eventData)
+        {
+            var wantType = GetStringParam(objective.Parameters, "itemType");
+            if (string.IsNullOrEmpty(wantType))
+                return true; // any collected item counts
 
-                        // Check if all objectives are complete
-                        if (AreAllObjectivesComplete(quest))
-                        {
-                            await MarkQuestCompletedAsync(questId);
-                        }
-                    }
-                }
+            var gotType = GetStringValue(eventData, "itemType") ?? GetStringValue(eventData, "itemId");
+            return !string.IsNullOrEmpty(gotType) &&
+                   string.Equals(gotType, wantType, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool MatchesKill(QuestObjective objective, Dictionary<string, object> eventData)
+        {
+            var want = GetStringParam(objective.Parameters, "enemyType")
+                       ?? GetStringParam(objective.Parameters, "target");
+            if (string.IsNullOrEmpty(want))
+                return true; // any defeated enemy counts
+
+            var got = GetStringValue(eventData, "enemyType")
+                      ?? GetStringValue(eventData, "target")
+                      ?? GetStringValue(eventData, "enemyId");
+            return !string.IsNullOrEmpty(got) &&
+                   string.Equals(got, want, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool MatchesReachLocation(QuestObjective objective, Dictionary<string, object> eventData)
+        {
+            // An explicit world/map target takes priority and matches exactly.
+            var wantWorld = GetStringParam(objective.Parameters, "worldId");
+            var wantMap = GetStringParam(objective.Parameters, "mapId");
+            if (!string.IsNullOrEmpty(wantWorld) || !string.IsNullOrEmpty(wantMap))
+            {
+                var gotWorld = GetStringValue(eventData, "worldId");
+                var gotMap = GetStringValue(eventData, "mapId");
+                bool worldOk = string.IsNullOrEmpty(wantWorld) ||
+                               string.Equals(wantWorld, gotWorld, StringComparison.OrdinalIgnoreCase);
+                bool mapOk = string.IsNullOrEmpty(wantMap) ||
+                             string.Equals(wantMap, gotMap, StringComparison.OrdinalIgnoreCase);
+                return worldOk && mapOk;
+            }
+
+            // Otherwise fuzzy-match a locationHint against common arrival fields.
+            var hint = GetStringParam(objective.Parameters, "locationHint")
+                       ?? GetStringParam(objective.Parameters, "location");
+            if (string.IsNullOrEmpty(hint))
+                return true; // no constraint → any arrival satisfies it
+
+            foreach (var key in new[] { "location", "zone", "locationHint", "mapId", "mapName", "worldId" })
+            {
+                var val = GetStringValue(eventData, key);
+                if (!string.IsNullOrEmpty(val) &&
+                    val.IndexOf(hint, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+            return false;
+        }
+
+        private static string? GetStringParam(Dictionary<string, object>? parameters, string key)
+            => parameters != null && parameters.TryGetValue(key, out var v) ? v?.ToString() : null;
+
+        private static string? GetStringValue(Dictionary<string, object>? data, string key)
+            => data != null && data.TryGetValue(key, out var v) ? v?.ToString() : null;
+
+        private static int GetRequiredCount(QuestObjective objective)
+        {
+            foreach (var key in new[] { "requiredCount", "count", "requiredQuantity", "quantity" })
+            {
+                if (objective.Parameters != null &&
+                    objective.Parameters.TryGetValue(key, out var v) &&
+                    TryToInt(v, out var n) && n > 0)
+                    return n;
+            }
+            return 1;
+        }
+
+        private static bool TryToInt(object? value, out int result)
+        {
+            switch (value)
+            {
+                case int i: result = i; return true;
+                case long l: result = (int)l; return true;
+                case double d: result = (int)d; return true;
+                default:
+                    return int.TryParse(value?.ToString(), out result);
             }
         }
 
@@ -449,6 +618,21 @@ namespace Aetherium.Server.Narrative.State
         public Task<HashSet<string>> GetActiveQuestIdsAsync()
         {
             return Task.FromResult(_state.State?.ActiveQuestIds ?? new HashSet<string>());
+        }
+
+        public async Task<List<QuestDefinition>> GetActiveQuestsAsync()
+        {
+            var result = new List<QuestDefinition>();
+            if (_state.State == null)
+                return result;
+
+            foreach (var questId in _state.State.ActiveQuestIds)
+            {
+                var quest = await FindQuestAsync(questId);
+                if (quest != null)
+                    result.Add(quest);
+            }
+            return result;
         }
 
         /// <summary>

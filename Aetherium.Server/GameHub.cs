@@ -10,7 +10,9 @@ using Aetherium.Model;
 using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Management;
 using Aetherium.Server.MultiWorld;
+using Aetherium.Server.Narrative;
 using Aetherium.Server.Narrative.Consequence;
+using Aetherium.Server.Narrative.State;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
@@ -505,6 +507,16 @@ namespace Aetherium.Server
                 var perception = session.GetPerception();
                 await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
 
+                // Emit an arrival event so travel_to / reach_location objectives that target this
+                // world can complete on join. Previously only UsePortal emitted player_arrived, so
+                // quests whose destination is the world a player joins into never progressed.
+                await ProcessNarrativeEventAsync(session, "player_arrived", new Dictionary<string, object>
+                {
+                    ["worldId"] = worldId,
+                    ["mapId"] = resolvedMapId!,
+                    ["playerId"] = session.SessionId
+                });
+
                 return JoinWorldResult.Ok(worldId, resolvedMapId, joinResult.SpawnLocation());
             }
             catch (Exception ex)
@@ -677,6 +689,168 @@ namespace Aetherium.Server
                 Console.WriteLine($"[GameHub] Error listing tools: {ex.Message}");
                 return new List<ToolInfoDto>();
             }
+        }
+
+        // ============================================================
+        // Quest Surface (P3-2)
+        // ============================================================
+
+        /// <summary>
+        /// Resolves the narrative-state grain governing the caller's current world, or null when
+        /// Orleans is unavailable, there is no session/world, or the world has no narrative.
+        /// </summary>
+        private async Task<INarrativeStateGrain?> ResolveNarrativeStateGrainAsync()
+        {
+            if (clusterClient == null)
+                return null;
+
+            var session = sessionManager.GetSession(Context.ConnectionId);
+            if (session == null)
+                return null;
+
+            return await NarrativeStateResolver.ResolveForWorldAsync(clusterClient, session.WorldId);
+        }
+
+        /// <summary>
+        /// Lists quests the caller can currently start (prerequisites met, not active/completed)
+        /// in their current world's narrative.
+        /// </summary>
+        public async Task<List<QuestSummaryDto>> ListAvailableQuests()
+        {
+            try
+            {
+                var grain = await ResolveNarrativeStateGrainAsync();
+                if (grain == null)
+                    return new List<QuestSummaryDto>();
+
+                var available = await grain.GetAvailableQuestsAsync();
+                return available.Select(q => ToSummaryDto(q, isActive: false, isCompleted: false, state: null)).ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Error listing available quests: {ex.Message}");
+                return new List<QuestSummaryDto>();
+            }
+        }
+
+        /// <summary>
+        /// Accepts (activates) a quest for the caller's current world. Returns true when the quest
+        /// was started; false when unknown, already active/completed, prerequisites unmet, or no
+        /// narrative context is available.
+        /// </summary>
+        public async Task<bool> AcceptQuest(string questId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(questId))
+                    return false;
+
+                var grain = await ResolveNarrativeStateGrainAsync();
+                if (grain == null)
+                    return false;
+
+                return await grain.StartQuestAsync(questId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Error accepting quest '{questId}': {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns the caller's quest log: active quests with per-objective progress, plus the set
+        /// of completed quest IDs.
+        /// </summary>
+        public async Task<QuestLogDto> GetQuestLog()
+        {
+            var log = new QuestLogDto();
+            try
+            {
+                var grain = await ResolveNarrativeStateGrainAsync();
+                if (grain == null)
+                    return log;
+
+                var state = await grain.GetStateAsync();
+                var active = await grain.GetActiveQuestsAsync();
+
+                log.Active = active.Select(q => ToSummaryDto(q, isActive: true, isCompleted: false, state)).ToList();
+                log.Completed = state?.CompletedQuestIds.ToList() ?? new List<string>();
+                return log;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] Error getting quest log: {ex.Message}");
+                return log;
+            }
+        }
+
+        /// <summary>
+        /// Maps a server-side quest definition onto the standalone player-facing DTO, filling in
+        /// per-objective completion and progress from narrative state when provided.
+        /// </summary>
+        private static QuestSummaryDto ToSummaryDto(
+            Aetherium.Server.Narrative.QuestDefinition quest, bool isActive, bool isCompleted, NarrativeState? state)
+        {
+            var dto = new QuestSummaryDto
+            {
+                QuestId = quest.QuestId,
+                Title = quest.Title,
+                Description = quest.Description,
+                IsActive = isActive,
+                IsCompleted = isCompleted
+            };
+
+            HashSet<string>? completedObjectives = null;
+            Dictionary<string, int>? progress = null;
+            state?.CompletedObjectives.TryGetValue(quest.QuestId, out completedObjectives);
+            state?.ObjectiveProgress.TryGetValue(quest.QuestId, out progress);
+
+            foreach (var objective in quest.Objectives ?? new List<Aetherium.Server.Narrative.QuestObjective>())
+            {
+                int required = QuestObjectiveRequiredCount(objective);
+                bool done = completedObjectives != null && completedObjectives.Contains(objective.ObjectiveId);
+                int current = done
+                    ? required
+                    : (progress != null && progress.TryGetValue(objective.ObjectiveId, out var p) ? p : 0);
+
+                dto.Objectives.Add(new QuestObjectiveDto
+                {
+                    ObjectiveId = objective.ObjectiveId,
+                    Type = objective.Type,
+                    Completed = done,
+                    Progress = current,
+                    Required = required
+                });
+            }
+
+            return dto;
+        }
+
+        /// <summary>
+        /// Mirrors NarrativeStateGrain's required-count parsing for count-based objectives so the
+        /// log surfaces the same target the grain enforces. Defaults to 1.
+        /// </summary>
+        private static int QuestObjectiveRequiredCount(Aetherium.Server.Narrative.QuestObjective objective)
+        {
+            foreach (var key in new[] { "requiredCount", "count", "requiredQuantity", "quantity" })
+            {
+                if (objective.Parameters != null &&
+                    objective.Parameters.TryGetValue(key, out var v))
+                {
+                    switch (v)
+                    {
+                        case int i when i > 0: return i;
+                        case long l when l > 0: return (int)l;
+                        case double d when d > 0: return (int)d;
+                        default:
+                            if (int.TryParse(v?.ToString(), out var n) && n > 0)
+                                return n;
+                            break;
+                    }
+                }
+            }
+            return 1;
         }
     }
 }

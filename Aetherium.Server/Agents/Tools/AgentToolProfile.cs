@@ -86,7 +86,7 @@ namespace Aetherium.Server.Agents.Tools
         public static AgentToolProfile Player => new()
         {
             ProfileName = "player",
-            AllowedCategories = new() { "movement", "navigation", "inventory", "interaction", "perception", "vision" },
+            AllowedCategories = new() { "movement", "navigation", "inventory", "interaction", "perception", "vision", "quest" },
             GrantedCapabilities = new() { "basic_movement", "inventory_access", "interaction", "vision" }
         };
         

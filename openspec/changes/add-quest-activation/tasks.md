@@ -15,8 +15,29 @@
 - [x] 3.3 Full loop: add quest (travel_to, direct target) → start → `RecordEventAsync("player_arrived")` → objective in `CompletedObjectives`, quest in `CompletedQuestIds`, removed from `ActiveQuestIds` (+ negative case: wrong arrival doesn't complete)
 - [x] 3.4 Full solution build + suite green (983 passed / 0 failed / 1 seed-tolerant skip)
 
-## Slice 2 — player surface + broader objectives (follow-up, not this pass)
-- [ ] 4.1 `GameHub.AcceptQuest` / `ListAvailableQuests` / `GetQuestLog` (resolve narrative-state grain from session world)
-- [ ] 4.2 Agent tool + `aetherctl quest` command
-- [ ] 4.3 Objective completion for `collect` (on `item_collected`), `reach_location`, `kill`
-- [ ] 4.4 Emit `player_arrived` on `JoinWorld`
+## Slice 2 — player surface + broader objectives (this pass)
+
+### 4. Broader objective completion
+- [x] 4.3 Generalize `RecordEventAsync` → `AdvanceObjectivesForEventAsync`: `collect` (on `item_collected`, count-based via new `ObjectiveProgress`), `kill` (on `enemy_defeated`, count-based), `reach_location` (on `player_arrived`/`location_reached`, explicit world/map or fuzzy locationHint). Existing `travel_to` path preserved verbatim.
+- [x] 4.3a Add `NarrativeState.ObjectiveProgress` (`[Id(10)]`, QuestId→ObjectiveId→count) for partial progress on count-based objectives.
+
+### 5. Player-facing surface
+- [x] 5.1 `GameHub.ListAvailableQuests` / `AcceptQuest` / `GetQuestLog` resolving the narrative-state grain from the session world; new `QuestSummaryDto`/`QuestObjectiveDto`/`QuestLogDto`.
+- [x] 5.2 Shared `NarrativeStateResolver` (worldId → narrativeId → scope → grain) reused by hub, tools, and CLI.
+- [x] 5.3 `GetActiveQuestsAsync()` on the state grain for the quest log.
+
+### 6. Agent tools + CLI
+- [x] 6.1 Player-profile quest tools: `list_quests`, `accept_quest`, `quest_log` (category `quest`); add `quest` to the Player profile.
+- [x] 6.2 `aetherctl quest available|accept|log <worldId>` command.
+
+### 7. Arrival on join
+- [x] 7.1 Emit `player_arrived` on `GameHub.JoinWorld` (previously only `UsePortal` emitted it).
+
+### 8. Tests
+- [x] 8.1 Grain: collect (single + count accumulation + non-matching item ignored), kill (count), reach_location (hint match + unrelated arrival negative) — 12 grain tests total.
+- [x] 8.2 Profile: quest tools reachable by Player, denied to Explorer.
+- [x] 8.3 Full solution build + suite green.
+
+## Deferred (future)
+- `kill` completion has no production event yet — combat (P3-7) will emit `enemy_defeated`; the grain path is implemented and unit-tested now so it activates as soon as combat lands.
+- Rich reward granting on quest completion, and objective types `talk_to` / `explore` / `rescue` / `defend`, remain unwired.

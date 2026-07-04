@@ -58,6 +58,12 @@ namespace Aetherium.Server.Narrative.State
         Task<HashSet<string>> GetActiveQuestIdsAsync();
 
         /// <summary>
+        /// Gets the full definitions of the currently-active quests (resolved from the base
+        /// narrative and generated quests), for building a player-facing quest log.
+        /// </summary>
+        Task<List<QuestDefinition>> GetActiveQuestsAsync();
+
+        /// <summary>
         /// Updates relationship between two NPCs.
         /// </summary>
         Task UpdateRelationshipAsync(string npc1Id, string npc2Id, float relationshipValue);
@@ -84,6 +90,7 @@ namespace Aetherium.Server.Narrative.State
         [Id(7)] public Dictionary<string, Dictionary<string, float>> Relationships { get; set; } = new Dictionary<string, Dictionary<string, float>>(); // NPC ID -> (NPC ID -> relationship value)
         [Id(8)] public Dictionary<string, List<string>> ActiveQuestObjectives { get; set; } = new Dictionary<string, List<string>>(); // QuestId -> List of ObjectiveIds
         [Id(9)] public Dictionary<string, HashSet<string>> CompletedObjectives { get; set; } = new Dictionary<string, HashSet<string>>(); // QuestId -> Set of completed ObjectiveIds
+        [Id(10)] public Dictionary<string, Dictionary<string, int>> ObjectiveProgress { get; set; } = new Dictionary<string, Dictionary<string, int>>(); // QuestId -> (ObjectiveId -> current count) for count-based objectives (collect/kill)
     }
 
     /// <summary>
