@@ -2,45 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using Orleans;
-using Aetherium.Core;
 
 namespace Aetherium.Server.Agents.Telemetry
 {
-    /// <summary>
-    /// Stores world state and action sequences for failed agent runs to enable replay analysis.
-    /// </summary>
-    public sealed class ReplayData
-    {
-        public string ReplayId { get; set; } = Guid.NewGuid().ToString();
-        public string AgentId { get; set; } = string.Empty;
-        public string SessionId { get; set; } = string.Empty;
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public string BenchmarkName { get; set; } = string.Empty;
-        public string FailureReason { get; set; } = string.Empty;
-        public int TotalSteps { get; set; }
-
-        // Note: InitialWorldState is intentionally not serialized to avoid requiring Orleans serializers for World
-        public World? InitialWorldState { get; set; }
-
-        public List<ReplayStep> Steps { get; set; } = new List<ReplayStep>();
-
-        public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
-    }
-
-    /// <summary>
-    /// A single step in a replay sequence.
-    /// </summary>
-    public sealed class ReplayStep
-    {
-        public int StepNumber { get; set; }
-        public string ActionType { get; set; } = string.Empty;
-        public string ActionSummary { get; set; } = string.Empty;
-
-        public Dictionary<string, object> ActionArgs { get; set; } = new Dictionary<string, object>();
-        public bool Succeeded { get; set; }
-        public string? PerceptionJson { get; set; }
-        public DateTime Timestamp { get; set; }
-    }
+    // ReplayData and ReplayStep (the shared SignalR contracts) now live in Aetherium.Model so the
+    // dashboard can receive the "ReplayStored" payload without referencing Aetherium.Server. This
+    // file keeps only the storage logic. See openspec/changes/move-contracts-to-model.
 
     /// <summary>
     /// In-memory storage for replay data. In production, this could be backed by persistent storage.
