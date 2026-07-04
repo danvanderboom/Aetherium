@@ -191,7 +191,6 @@ namespace Aetherium.Test.Agents.Telemetry
                 BenchmarkName = "test-benchmark",
                 FailureReason = "Multiple consecutive failures",
                 TotalSteps = 5,
-                InitialWorldState = null,
                 Steps = new List<ReplayStep>
                 {
                     new ReplayStep { StepNumber = 1, ActionType = "move", ActionSummary = "move forward", Succeeded = true, Timestamp = DateTime.UtcNow, PerceptionJson = "{}" },
