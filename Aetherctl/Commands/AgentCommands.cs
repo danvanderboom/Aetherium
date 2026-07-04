@@ -54,6 +54,51 @@ namespace Aetherctl.Commands
                 }
             });
 
+            var attachWorldCmd = new Command("attach-world", "Attach an agent as a live participant in a grain-hosted map (no human session needed)");
+            var awWorldArg = new Argument<string>("worldId", "World ID");
+            var awMapArg = new Argument<string>("mapId", "Map ID to join");
+            var awAgentOpt = new Option<string>("--agent", () => "agent-1", "Agent identifier");
+            var awRunnerOpt = new Option<string>("--runner", () => "runner-1", "Runner grain id");
+            attachWorldCmd.AddArgument(awWorldArg);
+            attachWorldCmd.AddArgument(awMapArg);
+            attachWorldCmd.AddOption(awAgentOpt);
+            attachWorldCmd.AddOption(awRunnerOpt);
+            attachWorldCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var worldId = parseResult.GetValueForArgument(awWorldArg);
+                    var mapId = parseResult.GetValueForArgument(awMapArg);
+                    var agent = parseResult.GetValueForOption(awAgentOpt);
+                    var runner = parseResult.GetValueForOption(awRunnerOpt);
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var r = factory.GetAgentRunner(runner);
+                    var ok = await r.AttachToWorldAsync(worldId, mapId, agent);
+
+                    if (Common.IsJsonOutput(parseResult))
+                    {
+                        Common.WriteOutput(parseResult, new
+                        {
+                            success = ok,
+                            runnerId = runner,
+                            worldId = worldId,
+                            mapId = mapId,
+                            agentId = agent
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine(ok ? $"✓ Attached {runner} to map {mapId} as {agent}" : $"✗ Failed to attach {runner} to map {mapId}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Attach-world failed: {ex.Message}");
+                }
+            });
+
             var stepCmd = new Command("step", "Execute one agent step");
             var stepRunnerArg = new Argument<string>("runnerId", "Runner grain id");
             stepCmd.AddArgument(stepRunnerArg);
@@ -206,6 +251,7 @@ namespace Aetherctl.Commands
             });
 
             agentCmd.AddCommand(attachCmd);
+            agentCmd.AddCommand(attachWorldCmd);
             agentCmd.AddCommand(stepCmd);
             agentCmd.AddCommand(runCmd);
             agentCmd.AddCommand(stopCmd);

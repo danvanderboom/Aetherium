@@ -93,6 +93,14 @@ namespace Aetherium.Server.MultiWorld
         Task<List<string>> GetPlayersAsync();
 
         /// <summary>
+        /// Computes a perception snapshot (serialized <c>PerceptionDto</c>) for an
+        /// in-world entity from the canonical world — for autonomous agents that
+        /// occupy the map as a Character but have no SignalR session. Null if the
+        /// map isn't initialized or the entity isn't present.
+        /// </summary>
+        Task<string?> ComputeAgentPerceptionAsync(string entityId);
+
+        /// <summary>
         /// Processes a game tick for this map (NPC movement, etc.).
         /// </summary>
         /// <param name="gameTimeElapsed">Elapsed game time for this tick</param>

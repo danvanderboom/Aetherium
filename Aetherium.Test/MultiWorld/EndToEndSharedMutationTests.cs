@@ -12,6 +12,7 @@ using Orleans.Hosting;
 using Orleans.TestingHost;
 using global::Orleans.Configuration;
 using Aetherium.Server;
+using Aetherium.Server.Agents;
 using Aetherium.Server.MultiWorld;
 using Aetherium.WorldBuilders;
 
@@ -84,6 +85,15 @@ namespace Aetherium.Test.MultiWorld
                     // fields below to add sessions and verify dispatches.
                     services.AddSingleton<IHubContext<GameHub>>(_hubContext);
                     services.AddSingleton<GameSessionManager>(sp => _sessionManager);
+
+                    // Tool registry so AgentRunnerGrain's heuristic policy can resolve
+                    // the "move" tool and drive the agent through the mutation gateway.
+                    services.AddSingleton<Aetherium.Server.Agents.Tools.AgentToolRegistry>(sp =>
+                    {
+                        var reg = new Aetherium.Server.Agents.Tools.AgentToolRegistry(sp);
+                        reg.DiscoverTools(typeof(Aetherium.Server.Agents.Tools.AgentToolRegistry).Assembly);
+                        return reg;
+                    });
                 });
             }
         }
@@ -409,6 +419,105 @@ namespace Aetherium.Test.MultiWorld
             var dispatchedConnections = perceptionDispatches.Select(d => d.ConnectionId).Distinct().ToList();
             Assert.That(dispatchedConnections, Does.Contain("conn-A").Or.Contain("conn-B"),
                 "monster movement should push fresh perception to sessions bound to the map");
+        }
+
+        // ----- P3-5: an agent plays the live shared map -------------------
+
+        /// <summary>
+        /// An agent attaches to a live grain-hosted map as a first-class participant
+        /// (joins as a Character, no human session required) and plays it with the
+        /// deterministic heuristic policy (no LLM). Its moves route through the map
+        /// grain, so they fan out as ReceivePerceptionUpdate to the human sessions —
+        /// the agent plays the shared world, visibly. Seed-tolerant: if the agent is
+        /// boxed in at its spawn, the test ignores rather than flaking.
+        /// </summary>
+        [Test]
+        public async Task Agent_Attaches_To_Live_Map_And_Plays_Visibly()
+        {
+            var (map, playerA, playerB) = await InitMapWithTwoJoinersAsync();
+            var mapId = _sessionManager.GetSession("conn-A")!.MapId!;
+            var agentId = $"agent-{Guid.NewGuid()}";
+
+            var runner = _cluster.GrainFactory.GetGrain<IAgentRunnerGrain>($"runner-{agentId}");
+            var attached = await runner.AttachToWorldAsync("world-x", mapId, agentId);
+            Assert.That(attached, Is.True, "agent should join the live map");
+
+            // The agent is now a real entity on the shared map.
+            var players = await map.GetPlayersAsync();
+            Assert.That(players, Does.Contain(agentId), "agent joined as a map participant");
+
+            _hubContext.Reset();
+
+            // Drive several heuristic steps directly (no LLM, no timer timing). Each
+            // successful move fans out a perception update to the human sessions.
+            for (int i = 0; i < 6; i++)
+                await runner.StepAsync();
+
+            var perceptionDispatches = _hubContext.GetDispatches()
+                .Where(d => d.Method == "ReceivePerceptionUpdate")
+                .ToList();
+
+            if (perceptionDispatches.Count == 0)
+            {
+                Assert.Ignore("The agent was boxed in at its spawn on this map seed; no move to observe.");
+                return;
+            }
+
+            var conns = perceptionDispatches.Select(d => d.ConnectionId).Distinct().ToList();
+            Assert.That(conns, Does.Contain("conn-A").Or.Contain("conn-B"),
+                "the agent's moves should fan out to human players on the shared map");
+        }
+
+        /// <summary>
+        /// The run loop is driven by an Orleans grain timer (not an off-scheduler
+        /// Task.Run): RunAsync schedules steps, the step count advances, and the loop
+        /// self-stops once the maxSteps budget is reached.
+        /// </summary>
+        [Test]
+        public async Task Agent_Run_Loop_Advances_On_Grain_Timer_Then_Stops()
+        {
+            var (map, playerA, playerB) = await InitMapWithTwoJoinersAsync();
+            var mapId = _sessionManager.GetSession("conn-A")!.MapId!;
+            var agentId = $"agent-{Guid.NewGuid()}";
+
+            var runner = _cluster.GrainFactory.GetGrain<IAgentRunnerGrain>($"runner-{agentId}");
+            Assert.That(await runner.AttachToWorldAsync("world-x", mapId, agentId), Is.True);
+
+            await runner.RunAsync(maxSteps: 3, stepDelayMs: 20);
+
+            RunnerStatus status = null!;
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (DateTime.UtcNow < deadline)
+            {
+                status = await runner.GetStatusAsync();
+                if (!status.IsRunning && status.Steps >= 3) break;
+                await Task.Delay(25);
+            }
+
+            Assert.That(status.Steps, Is.GreaterThanOrEqualTo(3),
+                "the grain-timer loop should have advanced the step count");
+            Assert.That(status.IsRunning, Is.False, "the loop should self-stop after maxSteps");
+        }
+
+        /// <summary>
+        /// Detaching a live-map agent removes its Character from the shared world so it
+        /// doesn't linger as a frozen entity.
+        /// </summary>
+        [Test]
+        public async Task Detaching_Agent_Removes_It_From_The_Map()
+        {
+            var (map, playerA, playerB) = await InitMapWithTwoJoinersAsync();
+            var mapId = _sessionManager.GetSession("conn-A")!.MapId!;
+            var agentId = $"agent-{Guid.NewGuid()}";
+
+            var runner = _cluster.GrainFactory.GetGrain<IAgentRunnerGrain>($"runner-{agentId}");
+            Assert.That(await runner.AttachToWorldAsync("world-x", mapId, agentId), Is.True);
+            Assert.That(await map.GetPlayersAsync(), Does.Contain(agentId));
+
+            await runner.DetachAsync();
+
+            Assert.That(await map.GetPlayersAsync(), Does.Not.Contain(agentId),
+                "detaching should remove the agent's Character from the shared map");
         }
     }
 

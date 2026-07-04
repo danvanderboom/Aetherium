@@ -718,6 +718,33 @@ namespace Aetherium.Server.MultiWorld
             return Task.FromResult(new List<string>(_mapState.State.PlayerIds));
         }
 
+        /// <summary>
+        /// Computes a perception snapshot (serialized <c>PerceptionDto</c>) for an
+        /// in-world entity, from the canonical <see cref="_world"/>. Used by
+        /// autonomous agents that occupy the map as a Character (via
+        /// <see cref="JoinPlayerAsync"/>) but have no SignalR session to hydrate a
+        /// local mirror — they pull perception each step instead. Returns null if the
+        /// map isn't initialized or the entity isn't present.
+        /// </summary>
+        public Task<string?> ComputeAgentPerceptionAsync(string entityId)
+        {
+            if (_world is null)
+                return Task.FromResult<string?>(null);
+
+            var character = GetPlayerCharacter(entityId);
+            var location = character?.Get<Aetherium.Components.WorldLocation>();
+            if (character is null || location is null)
+                return Task.FromResult<string?>(null);
+
+            var heading = character.Get<Aetherium.Components.HasHeading>()?.Heading ?? 0;
+            var bearing = DegreesToCardinal(heading);
+
+            var perception = new Aetherium.Server.PerceptionService()
+                .ComputePerception(_world, location, bearing, new System.Drawing.Size(40, 40));
+            var json = System.Text.Json.JsonSerializer.Serialize(perception);
+            return Task.FromResult<string?>(json);
+        }
+
         public async Task TickAsync(TimeSpan gameTimeElapsed)
         {
             if (_mapState.State == null || _regions == null)

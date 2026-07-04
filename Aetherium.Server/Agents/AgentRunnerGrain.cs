@@ -8,8 +8,10 @@ using Aetherium.Server.Agents.Telemetry;
 using Aetherium.Server.Hubs;
 using Aetherium.Server.Management;
 using Aetherium.Server.Agents.Tools;
+using Aetherium.Server.MultiWorld;
 using Microsoft.AspNetCore.SignalR;
 using Orleans;
+using Orleans.Runtime;
 
 namespace Aetherium.Server.Agents
 {
@@ -25,7 +27,19 @@ namespace Aetherium.Server.Agents
         private int _steps;
         private string _lastAction = string.Empty;
         private string _lastResult = string.Empty;
-        private CancellationTokenSource? _cts;
+
+        // Live-map attach state. When _mapId is set, the agent occupies a real
+        // GameMapGrain as a Character (via JoinPlayerAsync) and acts through
+        // _gateway, so its moves fan out to human players. When _mapId is null the
+        // agent uses the legacy session path (_mgmt) instead.
+        private string? _mapId;
+        private IMapMutationGateway? _gateway;
+
+        // Grain-timer run loop. Replaces the previous off-scheduler Task.Run so every
+        // StepAsync runs on the grain's activation turn (serialized, no races).
+        private IDisposable? _timer;
+        private int? _maxSteps;
+        private int _stepsAtRunStart;
 
         private IGameManagementGrain? _mgmt;
         private MicrosoftAgentAdapter? _adapter;
@@ -83,6 +97,39 @@ namespace Aetherium.Server.Agents
             return attached;
         }
 
+        /// <summary>
+        /// Attaches the agent as a first-class participant in a live, grain-hosted map.
+        /// The agent joins the map as a Character (id == agentId, exactly like a
+        /// player) and routes its tool actions through a <see cref="GrainMutationGateway"/>,
+        /// so its moves mutate canonical world state and fan out to every human player
+        /// on the map — it plays the shared world, not a private session copy. Unlike
+        /// <see cref="AttachAsync"/> this needs no pre-existing human session.
+        /// </summary>
+        public async Task<bool> AttachToWorldAsync(string worldId, string mapId, string agentId)
+        {
+            _agentId = agentId;
+            _sessionId = agentId; // the agent's in-world entity id doubles as its session id
+            _mapId = mapId;
+            _mgmt = null;         // map path uses the gateway, not the legacy management path
+            _telemetryGrain = GrainFactory.GetGrain<IAgentTelemetryGrain>(agentId);
+
+            var mapGrain = GrainFactory.GetGrain<IGameMapGrain>(mapId);
+            var join = await mapGrain.JoinPlayerAsync(agentId);
+            if (!join.Success)
+            {
+                Console.WriteLine($"[AgentRunner {this.GetPrimaryKeyString()}] AttachToWorld failed: {join.Reason}");
+                _mapId = null;
+                _sessionId = null;
+                _agentId = null;
+                return false;
+            }
+
+            // Route this agent's tool verbs to the canonical map grain — same gateway a
+            // human player gets after JoinWorld — so observers see the agent act.
+            _gateway = new GrainMutationGateway(GrainFactory, mapId, agentId);
+            return true;
+        }
+
         public async Task DetachAsync()
         {
             // Store current replay if it exists and was a failure
@@ -109,10 +156,28 @@ namespace Aetherium.Server.Agents
                 }
             }
 
+            _isRunning = false;
+            _timer?.Dispose();
+            _timer = null;
+
+            // Live-map agents remove their Character so they don't linger as a frozen
+            // entity after they stop playing.
+            if (_mapId != null && _sessionId != null)
+            {
+                try
+                {
+                    await GrainFactory.GetGrain<IGameMapGrain>(_mapId).LeavePlayerAsync(_sessionId);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AgentRunner {this.GetPrimaryKeyString()}] LeavePlayer failed: {ex.Message}");
+                }
+            }
+
             _sessionId = null;
             _agentId = null;
-            _isRunning = false;
-            _cts?.Cancel();
+            _mapId = null;
+            _gateway = null;
         }
 
         public Task<RunnerStatus> GetStatusAsync()
@@ -128,16 +193,34 @@ namespace Aetherium.Server.Agents
             });
         }
 
+        /// <summary>
+        /// Builds a tool-execution context for this agent. On the live-map path it
+        /// carries the <see cref="GrainMutationGateway"/> (so tools mutate canonical
+        /// state and fan out); on the legacy path it carries the management grain.
+        /// </summary>
+        private ToolExecutionContext BuildContext(HashSet<string> capabilities) => new ToolExecutionContext
+        {
+            SessionId = _sessionId!,
+            AgentId = _agentId,
+            ManagementGrain = _mgmt,
+            MutationGateway = _gateway,
+            GrantedCapabilities = capabilities,
+            ServiceProvider = ServiceProvider
+        };
+
         public async Task StepAsync()
         {
-            if (_mgmt == null || _sessionId == null)
+            if (_sessionId == null || (_mgmt == null && _mapId == null))
             {
-                Console.WriteLine($"[AgentRunner {this.GetPrimaryKeyString()}] Step skipped: No session or management grain");
+                Console.WriteLine($"[AgentRunner {this.GetPrimaryKeyString()}] Step skipped: not attached");
                 return;
             }
 
-            // Pull perception (JSON)
-            var p = await _mgmt.GetPerceptionAsync(_sessionId);
+            // Pull perception (JSON). Live-map agents read the canonical world from
+            // the map grain; legacy agents read their session's mirror via management.
+            var p = _mapId != null
+                ? await GrainFactory.GetGrain<IGameMapGrain>(_mapId).ComputeAgentPerceptionAsync(_sessionId)
+                : await _mgmt!.GetPerceptionAsync(_sessionId);
             if (p == null)
             {
                 Console.WriteLine($"[AgentRunner {this.GetPrimaryKeyString()}] Step skipped: No perception for session {_sessionId}");
@@ -165,16 +248,8 @@ namespace Aetherium.Server.Agents
                 
                 if (tool != null && _toolProfile.IsToolAllowed(tool))
                 {
-                    // Create execution context
-                    var context = new ToolExecutionContext
-                    {
-                        SessionId = _sessionId,
-                        AgentId = _agentId,
-                        ManagementGrain = _mgmt,
-                        GrantedCapabilities = _toolProfile.GrantedCapabilities,
-                        ServiceProvider = ServiceProvider
-                    };
-                    
+                    var context = BuildContext(_toolProfile.GrantedCapabilities);
+
                     // Convert string args to object args
                     var objectArgs = decision.Args?.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value) 
                         ?? new Dictionary<string, object>();
@@ -189,14 +264,7 @@ namespace Aetherium.Server.Agents
                     var moveTool = _toolRegistry.GetTool("move");
                     if (moveTool != null)
                     {
-                        var context = new ToolExecutionContext
-                        {
-                            SessionId = _sessionId,
-                            AgentId = _agentId,
-                            ManagementGrain = _mgmt,
-                            GrantedCapabilities = _toolProfile.GrantedCapabilities,
-                            ServiceProvider = ServiceProvider
-                        };
+                        var context = BuildContext(_toolProfile.GrantedCapabilities);
                         result = await moveTool.ExecuteAsync(context, new Dictionary<string, object> { ["direction"] = "F" });
                         actionSummary = "move F (fallback)";
                         actionType = "move";
@@ -214,15 +282,8 @@ namespace Aetherium.Server.Agents
                 var moveTool = _toolRegistry.GetTool("move");
                 if (moveTool != null)
                 {
-                    var context = new ToolExecutionContext
-                    {
-                        SessionId = _sessionId,
-                        AgentId = _agentId,
-                        ManagementGrain = _mgmt,
-                        GrantedCapabilities = new HashSet<string> { "basic_movement" },
-                        ServiceProvider = ServiceProvider
-                    };
-                    
+                    var context = BuildContext(new HashSet<string> { "basic_movement" });
+
                     result = await moveTool.ExecuteAsync(context, new Dictionary<string, object> { ["direction"] = "F" });
                     actionSummary = "move F";
                     actionType = "move";
@@ -239,20 +300,25 @@ namespace Aetherium.Server.Agents
                     actionSummary = "error";
                 }
             }
-            else
+            else if (_mgmt != null)
             {
                 // Fallback to direct management grain calls if tool system not available
                 var mgmtResult = await _mgmt.MoveAsync(_sessionId, "F");
                 result = mgmtResult.Success ? ToolExecutionResult.Ok("Moved F") : ToolExecutionResult.Error(mgmtResult.Message);
                 actionSummary = "move F (legacy)";
                 actionType = "move";
-                
+
                 if (!mgmtResult.Success)
                 {
                     mgmtResult = await _mgmt.MoveAsync(_sessionId, "R");
                     result = mgmtResult.Success ? ToolExecutionResult.Ok("Moved R") : ToolExecutionResult.Error(mgmtResult.Message);
                     actionSummary = "move R (legacy)";
                 }
+            }
+            else
+            {
+                result = ToolExecutionResult.Error("No execution path available");
+                actionSummary = "error";
             }
 
             stepStartTime.Stop();
@@ -360,30 +426,34 @@ namespace Aetherium.Server.Agents
                 return Task.CompletedTask;
 
             _isRunning = true;
-            _cts = new CancellationTokenSource();
-            var token = _cts.Token;
+            _maxSteps = maxSteps;
+            _stepsAtRunStart = _steps;
 
-            _ = Task.Run(async () =>
-            {
-                try
+            // Grain timer: each tick runs StepAsync on the grain's activation turn,
+            // serialized with every other call to this grain (Interleave = false), so
+            // there is no off-scheduler state mutation. The timer self-disposes once
+            // the requested step budget is reached or on Stop/Detach.
+            var period = TimeSpan.FromMilliseconds(Math.Max(1, stepDelayMs));
+            _timer = this.RegisterGrainTimer(
+                async _ =>
                 {
-                    var remaining = maxSteps ?? int.MaxValue;
-                    while (_isRunning && remaining-- > 0 && !token.IsCancellationRequested)
+                    if (!_isRunning) return;
+                    try
                     {
                         await StepAsync();
-                        await Task.Delay(stepDelayMs, token);
                     }
-                }
-                catch (TaskCanceledException) { }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[AgentRunner] Run loop error: {ex.Message}");
-                }
-                finally
-                {
-                    _isRunning = false;
-                }
-            }, token);
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[AgentRunner {this.GetPrimaryKeyString()}] Step error: {ex.Message}");
+                    }
+
+                    if (_maxSteps.HasValue && (_steps - _stepsAtRunStart) >= _maxSteps.Value)
+                    {
+                        await StopAsync();
+                    }
+                },
+                state: (object?)null,
+                new GrainTimerCreationOptions { DueTime = period, Period = period, Interleave = false });
 
             return Task.CompletedTask;
         }
@@ -391,8 +461,9 @@ namespace Aetherium.Server.Agents
         public async Task StopAsync()
         {
             _isRunning = false;
-            _cts?.Cancel();
-            
+            _timer?.Dispose();
+            _timer = null;
+
             // Broadcast final telemetry state when stopping
             if (_telemetryGrain != null && _dashboardHub != null && _agentId != null)
             {
