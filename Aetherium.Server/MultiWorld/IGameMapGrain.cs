@@ -130,6 +130,14 @@ namespace Aetherium.Server.MultiWorld
         Task<long> ForceSnapshotAsync();
 
         /// <summary>
+        /// Reports persistence health for this map (P3-8): whether the append-only delta log is
+        /// keeping up, the cumulative delta-append-failure count, and the last error. Lets
+        /// operators and tests observe delta-persistence failures rather than having them
+        /// silently swallowed.
+        /// </summary>
+        Task<Aetherium.Model.PersistenceHealthDto> GetPersistenceHealthAsync();
+
+        /// <summary>
         /// Loads map regions from persistent storage.
         /// </summary>
         Task<bool> LoadMapAsync();
