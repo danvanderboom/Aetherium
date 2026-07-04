@@ -1,15 +1,119 @@
 @page "/benchmark-comparison"
+@inject BenchmarkCatalogService BenchmarkCatalog
+@inject AgentTelemetryService TelemetryService
 
 <PageTitle>Benchmark Comparison</PageTitle>
 
 <h1>Benchmark Comparison</h1>
 
-<div class="alert alert-info">
-    <p>Compare agent performance across different benchmark scenarios.</p>
-    <p>This page will show benchmark results, success rates, and performance trends.</p>
+<p class="text-muted">
+    Browse the built-in benchmark catalog and look up an agent's overall performance to compare
+    against the scenarios it should be able to solve.
+</p>
+
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <label for="categorySelect" class="form-label">Filter by category</label>
+        <select id="categorySelect" class="form-select" @bind="selectedCategory">
+            <option value="">All categories</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category">@category</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-8 mb-3">
+        <label for="agentIdInput" class="form-label">Agent ID (optional — shows this agent's performance)</label>
+        <div class="d-flex gap-2">
+            <input type="text" class="form-control" id="agentIdInput" @bind="agentId" />
+            <button class="btn btn-primary" @onclick="LoadAgentPerformance" disabled="@loadingAgent">Load</button>
+        </div>
+    </div>
 </div>
 
-@code {
-    // TODO: Implement benchmark comparison UI
+@if (agentAnalysis != null)
+{
+    <div class="card mb-4">
+        <div class="card-header">Agent performance — <strong>@agentId</strong></div>
+        <div class="card-body">
+            <span class="badge bg-success me-2">Success rate: @($"{agentAnalysis.SuccessRate:P1}")</span>
+            <span class="badge bg-secondary me-2">Total steps: @agentAnalysis.TotalSteps</span>
+            <span class="badge bg-secondary me-2">Successful actions: @agentAnalysis.TotalSuccessfulActions</span>
+            <span class="badge bg-secondary">Failed actions: @agentAnalysis.TotalFailedActions</span>
+        </div>
+    </div>
+}
+else if (agentLoaded)
+{
+    <div class="alert alert-info">No telemetry found for agent: <strong>@agentId</strong></div>
 }
 
+<h3>Benchmark Catalog (@FilteredBenchmarks.Count)</h3>
+@if (FilteredBenchmarks.Count == 0)
+{
+    <div class="alert alert-secondary">No benchmarks in this category.</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Benchmark</th>
+                <th>Description</th>
+                <th>Categories</th>
+                <th>Difficulty</th>
+                <th>Success Criteria</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var b in FilteredBenchmarks)
+            {
+                <tr>
+                    <td><strong>@b.Name</strong><br /><small class="text-muted">@b.BenchmarkId</small></td>
+                    <td>@b.Description</td>
+                    <td>
+                        @foreach (var c in b.Categories)
+                        {
+                            <span class="badge bg-info text-dark me-1">@c</span>
+                        }
+                    </td>
+                    <td>@b.Difficulty</td>
+                    <td>@b.SuccessCriteria.Type</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string selectedCategory = string.Empty;
+    private List<string> categories = new();
+    private List<BenchmarkScenario> benchmarks = new();
+
+    private string agentId = string.Empty;
+    private bool loadingAgent;
+    private bool agentLoaded;
+    private PerformanceAnalysis? agentAnalysis;
+
+    private List<BenchmarkScenario> FilteredBenchmarks =>
+        string.IsNullOrWhiteSpace(selectedCategory)
+            ? benchmarks
+            : benchmarks.Where(b => b.Categories.Contains(selectedCategory)).ToList();
+
+    protected override void OnInitialized()
+    {
+        benchmarks = BenchmarkCatalog.GetAllBenchmarks();
+        categories = BenchmarkCatalog.GetCategories();
+    }
+
+    private async Task LoadAgentPerformance()
+    {
+        if (string.IsNullOrWhiteSpace(agentId))
+            return;
+
+        loadingAgent = true;
+        agentAnalysis = await TelemetryService.GetTelemetryAsync(agentId);
+        agentLoaded = true;
+        loadingAgent = false;
+    }
+}

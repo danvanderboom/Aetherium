@@ -1,15 +1,106 @@
 @page "/curriculum-progress"
+@using CurriculumProgressDto = Aetherium.WorldGen.Training.CurriculumProgress
+@inject CurriculumProgressService CurriculumService
 
 <PageTitle>Curriculum Progress</PageTitle>
 
 <h1>Curriculum Progress</h1>
 
-<div class="alert alert-info">
-    <p>Track agent progression through training curricula.</p>
-    <p>This page will show curriculum stages, completion status, and prerequisites.</p>
+<div class="mb-3">
+    <label for="agentIdInput" class="form-label">Agent ID</label>
+    <input type="text" class="form-control" id="agentIdInput" @bind="agentId" />
+    <button class="btn btn-primary mt-2" @onclick="LoadProgress" disabled="@loading">Load Progress</button>
 </div>
 
-@code {
-    // TODO: Implement curriculum progress tracking UI
+@if (loaded && progress == null)
+{
+    <div class="alert alert-info mt-3">
+        No curriculum progression found for agent: <strong>@agentId</strong>
+    </div>
 }
 
+@if (progress != null)
+{
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h3>Curriculum: @progress.CurriculumId</h3>
+            <table class="table">
+                <tr>
+                    <td><strong>Current Stage:</strong></td>
+                    <td>@progress.CurrentStageId @if (currentStage != null) { <span class="text-muted">(@currentStage.Name)</span> }</td>
+                </tr>
+                <tr>
+                    <td><strong>Stages Completed:</strong></td>
+                    <td>
+                        @progress.CompletedStages / @progress.TotalStages
+                        <div class="progress mt-1" style="height: 1rem;">
+                            <div class="progress-bar" role="progressbar" style="width: @StagePercent%;">@StagePercent%</div>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Runs (successful / total):</strong></td>
+                    <td>@progress.SuccessfulRuns / @progress.TotalRuns</td>
+                </tr>
+                <tr>
+                    <td><strong>Current Success Rate:</strong></td>
+                    <td>@($"{progress.CurrentSuccessRate:P1}")</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    @if (progress.StageProgress != null && progress.StageProgress.Count > 0)
+    {
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <h3>Per-Stage Progress</h3>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th>Total Runs</th>
+                            <th>Successful Runs</th>
+                            <th>Success Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var kvp in progress.StageProgress)
+                        {
+                            <tr class="@(kvp.Key == progress.CurrentStageId ? "table-active" : "")">
+                                <td>@kvp.Key</td>
+                                <td>@kvp.Value.TotalRuns</td>
+                                <td>@kvp.Value.SuccessfulRuns</td>
+                                <td>@($"{kvp.Value.SuccessRate:P1}")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string agentId = string.Empty;
+    private bool loaded;
+    private bool loading;
+    private CurriculumProgressDto? progress;
+    private CurriculumStage? currentStage;
+
+    private int StagePercent => progress is { TotalStages: > 0 }
+        ? (int)Math.Round(100.0 * progress.CompletedStages / progress.TotalStages)
+        : 0;
+
+    private async Task LoadProgress()
+    {
+        if (string.IsNullOrWhiteSpace(agentId))
+            return;
+
+        loading = true;
+        progress = await CurriculumService.GetProgressAsync(agentId);
+        currentStage = progress != null ? await CurriculumService.GetCurrentStageAsync(agentId) : null;
+        loaded = true;
+        loading = false;
+    }
+}

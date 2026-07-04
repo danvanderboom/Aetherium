@@ -69,6 +69,16 @@ builder.Services.AddSingleton<AgentTelemetryService>(sp =>
     return new AgentTelemetryService(orleansClient);
 });
 
+// Curriculum progression (P3-10): reads ICurriculumProgressionGrain via the Orleans client.
+builder.Services.AddSingleton<CurriculumProgressService>(sp =>
+{
+    var orleansClient = sp.GetRequiredService<IClusterClient>();
+    return new CurriculumProgressService(orleansClient);
+});
+
+// Benchmark catalog (P3-10): in-process static library, no Orleans client needed.
+builder.Services.AddSingleton<BenchmarkCatalogService>();
+
 // Add PCG API client
 builder.Services.AddHttpClient<PcgApiClient>(client =>
 {

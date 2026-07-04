@@ -8,48 +8,85 @@
 <div class="mb-3">
     <label for="agentIdInput" class="form-label">Agent ID</label>
     <input type="text" class="form-control" id="agentIdInput" @bind="agentId" />
-    <button class="btn btn-primary mt-2" @onclick="LoadReplays">Load Replays</button>
+    <button class="btn btn-primary mt-2" @onclick="LoadReplays" disabled="@loading">Load Replays</button>
 </div>
 
-@if (replayIds != null && replayIds.Count > 0)
+@if (loaded && replayIds.Count == 0)
+{
+    <div class="alert alert-info mt-3">
+        No failed runs found for agent: <strong>@agentId</strong>
+    </div>
+}
+
+@if (replayIds.Count > 0)
 {
     <div class="row mt-4">
-        <div class="col-md-12">
+        <div class="col-md-5">
             <h3>Failed Runs</h3>
             <ul class="list-group">
                 @foreach (var replayId in replayIds)
                 {
-                    <li class="list-group-item">
-                        <strong>Replay ID:</strong> @replayId
-                        <button class="btn btn-sm btn-secondary float-end" @onclick="() => ViewReplay(replayId)">View</button>
+                    <li class="list-group-item d-flex justify-content-between align-items-center @(replayId == selectedReplayId ? "active" : "")">
+                        <span class="text-truncate" title="@replayId">@replayId</span>
+                        <button class="btn btn-sm btn-secondary" @onclick="() => ViewReplay(replayId)">View</button>
                     </li>
                 }
             </ul>
         </div>
-    </div>
-}
-else if (!string.IsNullOrEmpty(agentId))
-{
-    <div class="alert alert-info mt-3">
-        No failed runs found for agent: @agentId
+        <div class="col-md-7">
+            @if (selectedReplayId != null)
+            {
+                <h3 class="text-truncate" title="@selectedReplayId">Replay: @selectedReplayId</h3>
+                @if (loadingReplay)
+                {
+                    <p><em>Loading replay…</em></p>
+                }
+                else if (selectedReplayJson == null)
+                {
+                    <div class="alert alert-warning">Replay data could not be loaded.</div>
+                }
+                else
+                {
+                    <pre class="border rounded p-2 bg-light" style="max-height: 30rem; overflow: auto;"><code>@selectedReplayJson</code></pre>
+                }
+            }
+            else
+            {
+                <div class="alert alert-secondary mt-4">Select a failed run to inspect its replay.</div>
+            }
+        </div>
     </div>
 }
 
 @code {
     private string agentId = string.Empty;
     private List<string> replayIds = new List<string>();
+    private bool loaded;
+    private bool loading;
+
+    private string? selectedReplayId;
+    private string? selectedReplayJson;
+    private bool loadingReplay;
 
     private async Task LoadReplays()
     {
-        if (!string.IsNullOrEmpty(agentId))
-        {
-            replayIds = await TelemetryService.GetFailedRunIdsAsync(agentId, 10);
-        }
+        if (string.IsNullOrWhiteSpace(agentId))
+            return;
+
+        loading = true;
+        selectedReplayId = null;
+        selectedReplayJson = null;
+        replayIds = await TelemetryService.GetFailedRunIdsAsync(agentId, 10);
+        loaded = true;
+        loading = false;
     }
 
-    private void ViewReplay(string replayId)
+    private async Task ViewReplay(string replayId)
     {
-        // TODO: Implement replay viewer UI
+        selectedReplayId = replayId;
+        selectedReplayJson = null;
+        loadingReplay = true;
+        selectedReplayJson = await TelemetryService.GetReplayAsync(agentId, replayId);
+        loadingReplay = false;
     }
 }
-

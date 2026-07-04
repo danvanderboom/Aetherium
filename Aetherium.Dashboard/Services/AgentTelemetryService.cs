@@ -68,6 +68,27 @@ namespace Aetherium.Dashboard
                 return new List<string>();
             }
         }
+
+        /// <summary>
+        /// Fetches the stored replay JSON for a failed run, or null if it can't be retrieved.
+        /// Backs the Replay Viewer's per-run "View" action (P3-10).
+        /// </summary>
+        public async Task<string?> GetReplayAsync(string agentId, string replayId)
+        {
+            if (_orleansClient == null || string.IsNullOrWhiteSpace(agentId) || string.IsNullOrWhiteSpace(replayId))
+                return null;
+
+            try
+            {
+                var telemetryGrain = _orleansClient.GetGrain<IAgentTelemetryGrain>(agentId);
+                return await telemetryGrain.GetReplayAsync(replayId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AgentTelemetryService] Error getting replay {replayId} for agent {agentId}: {ex.Message}");
+                return null;
+            }
+        }
     }
 }
 
