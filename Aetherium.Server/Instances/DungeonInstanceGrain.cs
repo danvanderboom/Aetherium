@@ -194,9 +194,22 @@ namespace Aetherium.Server.Instances
             if (_state.State == null)
                 return;
 
+            await TeardownAsync();
+
+            // Notify allocator to release this instance (frees its map, drops the allocation).
+            var allocatorGrain = _grainFactory.GetGrain<IInstanceAllocatorGrain>(_state.State.WorldId.Value);
+            await allocatorGrain.ReleaseInstanceAsync(_state.State.InstanceId);
+        }
+
+        public async Task TeardownAsync()
+        {
+            if (_state.State == null)
+                return;
+
             _state.State.State = InstanceState.ShuttingDown;
 
-            // Remove all players from instance
+            // Remove all players from instance. (State is ShuttingDown, so RemovePlayerAsync's
+            // "mark Abandoned when empty" branch — which only fires from Active — won't override it.)
             foreach (var playerId in _state.State.PlayerIds.ToList())
             {
                 await RemovePlayerAsync(playerId);
@@ -204,10 +217,6 @@ namespace Aetherium.Server.Instances
 
             _state.State.State = InstanceState.Stopped;
             await _state.WriteStateAsync();
-
-            // Notify allocator to release this instance
-            var allocatorGrain = _grainFactory.GetGrain<IInstanceAllocatorGrain>(_state.State.WorldId.Value);
-            await allocatorGrain.ReleaseInstanceAsync(_state.State.InstanceId);
 
             DeactivateOnIdle();
         }

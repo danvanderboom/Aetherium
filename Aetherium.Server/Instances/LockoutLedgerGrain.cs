@@ -132,10 +132,7 @@ namespace Aetherium.Server.Instances
 
                 if (_state.State.Lockouts.TryGetValue(lockoutKey.Value, out var existing))
                 {
-                    existing.LockoutUntil = now.Add(policy.Duration);
-                    existing.AttemptsUsed++;
-                    existing.LastAttemptAt = now;
-                    existing.InstanceId = instanceId;
+                    ApplyReEntry(existing, instanceId, policy, now);
                     _state.State.Lockouts[lockoutKey.Value] = existing;
                 }
                 else
@@ -167,10 +164,7 @@ namespace Aetherium.Server.Instances
 
                 if (_state.State.Lockouts.TryGetValue(playerLockoutKey, out var existing))
                 {
-                    existing.LockoutUntil = now.Add(policy.Duration);
-                    existing.AttemptsUsed++;
-                    existing.LastAttemptAt = now;
-                    existing.InstanceId = instanceId;
+                    ApplyReEntry(existing, instanceId, policy, now);
                     _state.State.Lockouts[playerLockoutKey] = existing;
                 }
                 else
@@ -240,6 +234,27 @@ namespace Aetherium.Server.Instances
 
             foreach (var key in staleKeys)
                 _state.State.Lockouts.Remove(key);
+        }
+
+        /// <summary>
+        /// Updates an existing lockout entry for a re-entry. Re-entering the SAME instance only
+        /// touches the timestamp — it does not increment the attempt count or extend the window
+        /// (a player rejoining their own run must not double-count against them). Entering a
+        /// DIFFERENT instance is a genuine new run, so it increments attempts and extends the window.
+        /// </summary>
+        private static void ApplyReEntry(LockoutEntry existing, InstanceId instanceId, LockoutPolicy policy, DateTime now)
+        {
+            bool sameInstance = existing.InstanceId.HasValue && existing.InstanceId.Value.Equals(instanceId);
+
+            existing.LastAttemptAt = now;
+            existing.IsLocked = true;
+
+            if (sameInstance)
+                return;
+
+            existing.InstanceId = instanceId;
+            existing.AttemptsUsed++;
+            existing.LockoutUntil = now.Add(policy.Duration);
         }
 
         private bool IsLocked(LockoutEntry lockout, LockoutPolicy policy, DateTime now)

@@ -20,6 +20,12 @@ namespace Aetherium.Server.Instances
     {
         private readonly IPersistentState<InstanceAllocatorState> _state;
         private readonly IGrainFactory _grainFactory;
+        private IGrainTimer? _sweepTimer;
+
+        // How often the abandoned-instance sweeper runs, and how long an instance may sit idle
+        // (no activity, but not yet marked Abandoned) before it is reaped.
+        private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan IdleReapThreshold = TimeSpan.FromMinutes(30);
 
         public InstanceAllocatorGrain(
             [PersistentState("allocator", "worldStore")] IPersistentState<InstanceAllocatorState> state,
@@ -41,6 +47,14 @@ namespace Aetherium.Server.Instances
                     PlayerInstances = new Dictionary<string, InstanceId>()  // PlayerId -> InstanceId
                 };
             }
+
+            // Reap abandoned/idle instances periodically so dead dungeon maps stop being ticked and
+            // allocations don't accumulate. Errors are swallowed inside the sweep so a bad instance
+            // can't kill the timer.
+            _sweepTimer = this.RegisterGrainTimer(
+                async _ => await SweepAbandonedInstancesAsync(),
+                state: (object?)null,
+                new GrainTimerCreationOptions { DueTime = SweepInterval, Period = SweepInterval, Interleave = true });
 
             return base.OnActivateAsync(cancellationToken);
         }
@@ -84,11 +98,17 @@ namespace Aetherium.Server.Instances
 
                 if (added)
                 {
+                    // Record the lockout on the reuse path too, so re-entry isn't a loophole that
+                    // avoids lockout. RecordLockoutAsync is idempotent for the same instance id, so
+                    // re-entering your own run neither double-counts attempts nor extends the window.
+                    var reuseLockoutKey = await lockoutLedger.RecordLockoutAsync(
+                        request.PartyId, request.PlayerIds, existingInstanceId.Value);
+
                     return new EnterInstanceResult
                     {
                         Success = true,
                         InstanceId = existingInstanceId.Value,
-                        LockoutKey = lockoutCheck.LockoutKey
+                        LockoutKey = reuseLockoutKey
                     };
                 }
             }
@@ -236,6 +256,22 @@ namespace Aetherium.Server.Instances
             if (!_state.State.ActiveInstances.TryGetValue(instanceId.Value, out var allocation))
                 return;
 
+            // Free the instance's map so it stops being ticked/saved by the world. Without this the
+            // abandoned dungeon map lingers in WorldInfo.MapIds and is ticked forever.
+            if (!string.IsNullOrEmpty(allocation.MapId))
+            {
+                try
+                {
+                    var worldGrain = _grainFactory.GetGrain<IWorldGrain>(this.GetPrimaryKeyString());
+                    await worldGrain.RemoveMapAsync(allocation.MapId!);
+                }
+                catch (Exception ex)
+                {
+                    // Non-fatal: still drop the allocation below so the world isn't wedged.
+                    Console.WriteLine($"[InstanceAllocatorGrain] Failed to remove map {allocation.MapId}: {ex.Message}");
+                }
+            }
+
             // Remove party mapping
             if (allocation.PartyId.HasValue)
             {
@@ -252,6 +288,58 @@ namespace Aetherium.Server.Instances
             _state.State.ActiveInstances.Remove(instanceId.Value);
 
             await _state.WriteStateAsync();
+        }
+
+        public async Task<int> SweepAbandonedInstancesAsync()
+        {
+            // Snapshot: ShutdownAsync → ReleaseInstanceAsync mutates ActiveInstances.
+            var candidates = _state.State.ActiveInstances.Values.ToList();
+            if (candidates.Count == 0)
+                return 0;
+
+            var now = DateTime.UtcNow;
+            int reaped = 0;
+
+            foreach (var allocation in candidates)
+            {
+                bool reap;
+                try
+                {
+                    var instanceGrain = _grainFactory.GetGrain<IDungeonInstanceGrain>(allocation.InstanceId.Value);
+                    var info = await instanceGrain.GetInfoAsync();
+
+                    if (info == null)
+                    {
+                        // Instance grain has no live info (never fully created / already gone):
+                        // drop the dangling allocation and free any map it referenced.
+                        await ReleaseInstanceAsync(allocation.InstanceId);
+                        reaped++;
+                        continue;
+                    }
+
+                    bool abandoned = info.State == InstanceState.Abandoned || info.State == InstanceState.Stopped;
+                    bool idle = info.PlayerCount == 0
+                                && info.LastActivityAt.HasValue
+                                && (now - info.LastActivityAt.Value) > IdleReapThreshold;
+                    reap = abandoned || idle;
+
+                    if (reap)
+                    {
+                        // Tear the instance down WITHOUT letting it call back into this allocator
+                        // (ShutdownAsync → ReleaseInstanceAsync would re-enter this grain and
+                        // deadlock), then release it locally to free its map and drop the allocation.
+                        await instanceGrain.TeardownAsync();
+                        await ReleaseInstanceAsync(allocation.InstanceId);
+                        reaped++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[InstanceAllocatorGrain] Sweep failed for {allocation.InstanceId.Value}: {ex.Message}");
+                }
+            }
+
+            return reaped;
         }
     }
 
