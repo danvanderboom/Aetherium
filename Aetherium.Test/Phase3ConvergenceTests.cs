@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 using Aetherium.WorldGen;
 using Aetherium.WorldGen.Hybrid;
 using Aetherium.WorldGen.Passes;

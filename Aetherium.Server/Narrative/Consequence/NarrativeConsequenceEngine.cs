@@ -4,9 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Orleans;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Aetherium.Server.Narrative.Procedural;
 using Aetherium.Server.Narrative.State;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative.Consequence
 {
     /// <summary>

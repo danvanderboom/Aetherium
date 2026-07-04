@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using Aetherium.Server.Agents.Analysis;
+using Aetherium.Model.Analysis;
 using Aetherium.WorldGen;
 
 namespace Aetherium.Server.WorldGen.Adaptation

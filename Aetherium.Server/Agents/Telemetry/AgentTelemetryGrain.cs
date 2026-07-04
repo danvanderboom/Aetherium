@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Orleans;
 
+using Aetherium.Model.Telemetry;
 namespace Aetherium.Server.Agents.Telemetry
 {
     /// <summary>

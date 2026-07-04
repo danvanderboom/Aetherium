@@ -2,7 +2,7 @@ using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Aetherium.WorldGen.Training
+namespace Aetherium.Model.Training
 {
     internal sealed class JsonStringToIntConverter : JsonConverter<int>
     {

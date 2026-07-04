@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Aetherium.Server.Agents.Analysis;
+using Aetherium.Model.Analysis;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 
 namespace Aetherium.Server.WorldGen.Adaptation
 {

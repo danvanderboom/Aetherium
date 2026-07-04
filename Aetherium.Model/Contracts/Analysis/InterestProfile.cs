@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Orleans;
 
-namespace Aetherium.Server.Agents.Analysis
+namespace Aetherium.Model.Analysis
 {
     /// <summary>
     /// Tracks agent interests based on behavior patterns.

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 
 namespace Aetherium.Test.Agents.Telemetry
 {

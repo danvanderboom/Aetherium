@@ -5,10 +5,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using Aetherium.WorldGen.Training;
+using Aetherium.Model.Training;
 using Aetherium.Server.WorldGen;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 using Aetherium.WorldGen;
-using PerformanceAnalysis = Aetherium.Server.Agents.Telemetry.PerformanceAnalysis;
+using PerformanceAnalysis = Aetherium.Model.Telemetry.PerformanceAnalysis;
 
 namespace Aetherium.Test.WorldGen.Training
 {

@@ -11,7 +11,7 @@ using Aetherium.Components;
 using Aetherium.WorldGen;
 using Aetherium.WorldGen.Hybrid;
 using Aetherium.WorldGen.Passes;
-using WorldGenCLI.Models;
+using Aetherium.Model.Pcg;
 using WorldGenCLI.Rendering;
 using WorldGenCLI.Services;
 
@@ -321,7 +321,7 @@ namespace WorldGenCLI.Api
         private static IWorldGenerationPass[] BuildPasses(WorldGenerationTemplate template)
             => WorldGenerationPassCatalog.BuildPasses(template);
 
-        private static Aetherium.WorldGen.Hybrid.HybridLayout? ConvertHybridLayout(Models.HybridLayout? layout)
+        private static Aetherium.WorldGen.Hybrid.HybridLayout? ConvertHybridLayout(Aetherium.Model.Pcg.HybridLayout? layout)
         {
             if (layout == null || layout.Anchors.Count == 0)
                 return null;

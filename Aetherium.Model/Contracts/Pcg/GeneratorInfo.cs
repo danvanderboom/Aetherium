@@ -1,4 +1,4 @@
-namespace WorldGenCLI.Models
+namespace Aetherium.Model.Pcg
 {
     /// <summary>
     /// Generator metadata for listing available generators.

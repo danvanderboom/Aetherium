@@ -7,6 +7,7 @@ using Orleans;
 using Orleans.Hosting;
 using Orleans.TestingHost;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 
 namespace Aetherium.Test.Orleans
 {

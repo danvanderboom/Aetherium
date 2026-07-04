@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Orleans;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative.CrossWorld
 {
     /// <summary>

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 using Aetherium.Server.Hubs;
 using Aetherium.Server.Management;
 using Aetherium.Server.Agents.Tools;

@@ -6,7 +6,7 @@ using Aetherium.WorldGen;
 using Aetherium.WorldGen.Metadata;
 using NJsonSchema;
 using NJsonSchema.Generation;
-using WorldGenCLI.Models;
+using Aetherium.Model.Pcg;
 
 namespace WorldGenCLI.Services
 {

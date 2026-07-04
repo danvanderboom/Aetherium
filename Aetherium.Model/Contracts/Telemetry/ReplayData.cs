@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 
-namespace Aetherium.Server.Agents.Telemetry
+namespace Aetherium.Model.Telemetry
 {
     // NOTE: ReplayData/ReplayStep are shared contracts (a SignalR "ReplayStored" payload the
-    // dashboard receives), so they live in Aetherium.Model — namespace retained. The former
+    // dashboard receives), so they live in Aetherium.Model. The former
     // InitialWorldState (Aetherium.Core.World) field was removed: it was always null, never read,
     // and its engine coupling would have forced Model to reference the whole Core engine.
     // The ReplayStorage logic stays in Aetherium.Server. See openspec/changes/move-contracts-to-model.

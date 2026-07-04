@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Orleans;
 
 namespace Aetherium.Server.Agents.Tools.Narrative

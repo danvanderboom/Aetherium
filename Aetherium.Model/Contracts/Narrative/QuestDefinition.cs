@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using Orleans;
 
-namespace Aetherium.Server.Narrative
+namespace Aetherium.Model.Narrative
 {
     // NOTE: QuestDefinition and QuestObjective (shared contracts) live in Aetherium.Model
-    // (namespace retained) so clients such as Aetherium.Dashboard can deserialize adaptive-quest
+    // so clients such as Aetherium.Dashboard can deserialize adaptive-quest
     // payloads without referencing Aetherium.Server. The rest of the narrative-definition cluster
     // (NarrativeDefinition, LootTable, NPC goals, …) stays in Aetherium.Server.
     // See openspec/changes/move-contracts-to-model.

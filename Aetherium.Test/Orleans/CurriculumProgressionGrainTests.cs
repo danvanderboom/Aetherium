@@ -7,6 +7,7 @@ using Orleans;
 using Orleans.Hosting;
 using Orleans.TestingHost;
 using Aetherium.WorldGen.Training;
+using Aetherium.Model.Training;
 using System.Reflection;
 
 namespace Aetherium.Test.Orleans

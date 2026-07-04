@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using Orleans;
 
+using Aetherium.Model.Telemetry;
 namespace Aetherium.Server.Agents.Telemetry
 {
     // ReplayData and ReplayStep (the shared SignalR contracts) now live in Aetherium.Model so the

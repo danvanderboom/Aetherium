@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using Aetherium.WorldGen.Training;
+using Aetherium.Model.Training;
 using Orleans;
 
 namespace Aetherium.Dashboard

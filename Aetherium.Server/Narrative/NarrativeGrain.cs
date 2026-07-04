@@ -6,8 +6,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Aetherium.Server.Agents.Analysis;
+using Aetherium.Model.Analysis;
 using Aetherium.Server.WorldGen.Adaptation;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative
 {
     /// <summary>

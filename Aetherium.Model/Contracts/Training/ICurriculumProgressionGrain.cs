@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
 
-namespace Aetherium.WorldGen.Training
+namespace Aetherium.Model.Training
 {
     /// <summary>
     /// Orleans grain for tracking agent progression through curriculum stages.

@@ -5,7 +5,7 @@ using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Entities;
 using Aetherium.WorldGen.Hybrid;
-using WorldGenCLI.Models;
+using Aetherium.Model.Pcg;
 
 namespace WorldGenCLI.Rendering
 {
@@ -111,11 +111,11 @@ namespace WorldGenCLI.Rendering
             };
         }
 
-        private static Models.HybridAnchor ConvertAnchor(Aetherium.WorldGen.Hybrid.HybridAnchor anchor)
+        private static Aetherium.Model.Pcg.HybridAnchor ConvertAnchor(Aetherium.WorldGen.Hybrid.HybridAnchor anchor)
         {
-            var dto = new Models.HybridAnchor
+            var dto = new Aetherium.Model.Pcg.HybridAnchor
             {
-                Type = (Models.AnchorType)anchor.Type,
+                Type = (Aetherium.Model.Pcg.AnchorType)anchor.Type,
                 X = anchor.X,
                 Y = anchor.Y,
                 Width = anchor.Width,
@@ -130,7 +130,7 @@ namespace WorldGenCLI.Rendering
             if (anchor.Vertices != null)
             {
                 dto.Vertices = anchor.Vertices
-                    .Select(v => new Models.HybridAnchor.Point { X = v.X, Y = v.Y })
+                    .Select(v => new Aetherium.Model.Pcg.HybridAnchor.Point { X = v.X, Y = v.Y })
                     .ToList();
             }
 

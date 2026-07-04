@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace WorldGenCLI.Models
+namespace Aetherium.Model.Pcg
 {
     /// <summary>
     /// Collection of hybrid anchors for mixed authored/procedural content.

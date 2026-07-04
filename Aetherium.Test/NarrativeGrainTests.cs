@@ -8,6 +8,7 @@ using Orleans.TestingHost;
 using Orleans.Hosting;
 using Orleans;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 
 namespace Aetherium.Test
 {

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace WorldGenCLI.Models
+namespace Aetherium.Model.Pcg
 {
     /// <summary>
     /// Response from A/B testing endpoint.

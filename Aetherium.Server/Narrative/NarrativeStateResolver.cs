@@ -3,6 +3,7 @@ using Orleans;
 using Aetherium.Server.MultiWorld;
 using Aetherium.Server.Narrative.State;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative
 {
     /// <summary>

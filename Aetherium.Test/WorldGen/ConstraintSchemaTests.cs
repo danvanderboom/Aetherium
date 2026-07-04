@@ -3,7 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using Aetherium.WorldGen;
 using Aetherium.WorldGen.Metadata;
-using WorldGenCLI.Models;
+using Aetherium.Model.Pcg;
 using WorldGenCLI.Services;
 
 namespace Aetherium.Test.WorldGen

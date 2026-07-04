@@ -2,6 +2,7 @@ using Orleans;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative.State
 {
     /// <summary>
