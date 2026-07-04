@@ -3,6 +3,7 @@ using NUnit.Framework;
 using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Agents.Tools.Movement;
 using Aetherium.Server.Agents.Tools.Interaction;
+using Aetherium.Server.Agents.Tools.Narrative;
 
 namespace Aetherium.Test.Agents.Tools
 {
@@ -73,6 +74,28 @@ namespace Aetherium.Test.Agents.Tools
 
             // Assert
             Assert.That(profile.GrantedCapabilities, Does.Contain("narrative_edit"));
+        }
+
+        [Test]
+        public void Player_ShouldAllowQuestTools()
+        {
+            // The GameHub enforces the Player profile at its boundary, so the quest tools must be
+            // reachable by it for players (and player-profile agents) to accept/list/log quests.
+            var profile = AgentToolProfile.Player;
+
+            Assert.That(profile.IsToolAllowed(new ListQuestsTool()), Is.True);
+            Assert.That(profile.IsToolAllowed(new AcceptQuestTool()), Is.True);
+            Assert.That(profile.IsToolAllowed(new QuestLogTool()), Is.True);
+        }
+
+        [Test]
+        public void Explorer_ShouldNotAllowQuestTools()
+        {
+            // Quest tools live in the "quest" category, which Explorer (movement/vision only) lacks.
+            var profile = AgentToolProfile.Explorer;
+
+            Assert.That(profile.IsToolAllowed(new AcceptQuestTool()), Is.False);
+            Assert.That(profile.IsToolAllowed(new QuestLogTool()), Is.False);
         }
 
         [Test]

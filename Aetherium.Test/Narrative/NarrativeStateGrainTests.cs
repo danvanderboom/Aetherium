@@ -78,6 +78,65 @@ namespace Aetherium.Test.Narrative
                 }
             };
 
+        private static QuestDefinition CollectQuest(string id, string itemType, int requiredCount) =>
+            new QuestDefinition
+            {
+                QuestId = id,
+                Title = id,
+                Objectives = new List<QuestObjective>
+                {
+                    new QuestObjective
+                    {
+                        ObjectiveId = $"{id}-collect",
+                        Type = "collect",
+                        Parameters = new Dictionary<string, object>
+                        {
+                            ["itemType"] = itemType,
+                            ["requiredCount"] = requiredCount
+                        }
+                    }
+                }
+            };
+
+        private static QuestDefinition KillQuest(string id, string target, int requiredCount) =>
+            new QuestDefinition
+            {
+                QuestId = id,
+                Title = id,
+                Objectives = new List<QuestObjective>
+                {
+                    new QuestObjective
+                    {
+                        ObjectiveId = $"{id}-kill",
+                        Type = "kill",
+                        Parameters = new Dictionary<string, object>
+                        {
+                            ["enemyType"] = target,
+                            ["requiredCount"] = requiredCount
+                        }
+                    }
+                }
+            };
+
+        private static QuestDefinition ReachLocationQuest(string id, string locationHint) =>
+            new QuestDefinition
+            {
+                QuestId = id,
+                Title = id,
+                Objectives = new List<QuestObjective>
+                {
+                    new QuestObjective
+                    {
+                        ObjectiveId = $"{id}-reach",
+                        Type = "reach_location",
+                        Parameters = new Dictionary<string, object>
+                        {
+                            ["locationHint"] = locationHint
+                        }
+                    }
+                }
+            };
+
         [Test]
         public async Task StartQuest_ActivatesQuest_AndPopulatesActiveSet()
         {
@@ -164,6 +223,129 @@ namespace Aetherium.Test.Narrative
             var state = await grain.GetStateAsync();
             Assert.That(state!.CompletedQuestIds, Does.Not.Contain("journey"));
             Assert.That(state.ActiveQuestIds, Does.Contain("journey"), "Quest should still be active after a non-matching arrival.");
+        }
+
+        // ---- Slice 2: collect / kill / reach_location objectives ----
+
+        [Test]
+        public async Task CollectObjective_CompletesQuest_OnSingleMatchingItem()
+        {
+            var grain = NewStateGrain();
+            await grain.AddGeneratedQuestAsync(CollectQuest("gather", "GoldCoin", requiredCount: 1));
+            Assert.That(await grain.StartQuestAsync("gather"), Is.True);
+
+            await grain.RecordEventAsync("item_collected", new Dictionary<string, object>
+            {
+                ["itemId"] = "coin-1",
+                ["itemType"] = "GoldCoin"
+            });
+
+            var state = await grain.GetStateAsync();
+            Assert.That(state!.CompletedQuestIds, Does.Contain("gather"));
+            Assert.That(state.ActiveQuestIds, Does.Not.Contain("gather"));
+        }
+
+        [Test]
+        public async Task CollectObjective_AccumulatesCount_UntilRequiredReached()
+        {
+            var grain = NewStateGrain();
+            await grain.AddGeneratedQuestAsync(CollectQuest("set", "Relic", requiredCount: 3));
+            Assert.That(await grain.StartQuestAsync("set"), Is.True);
+
+            // Two matching collections — still short of 3.
+            for (int i = 0; i < 2; i++)
+            {
+                await grain.RecordEventAsync("item_collected", new Dictionary<string, object>
+                {
+                    ["itemType"] = "Relic"
+                });
+            }
+
+            var mid = await grain.GetStateAsync();
+            Assert.That(mid!.ActiveQuestIds, Does.Contain("set"), "Quest not yet complete after 2/3.");
+            Assert.That(mid.CompletedQuestIds, Does.Not.Contain("set"));
+            Assert.That(mid.ObjectiveProgress["set"]["set-collect"], Is.EqualTo(2), "Partial progress tracked.");
+
+            // Third completes it.
+            await grain.RecordEventAsync("item_collected", new Dictionary<string, object>
+            {
+                ["itemType"] = "Relic"
+            });
+
+            var done = await grain.GetStateAsync();
+            Assert.That(done!.CompletedQuestIds, Does.Contain("set"));
+            Assert.That(done.ActiveQuestIds, Does.Not.Contain("set"));
+        }
+
+        [Test]
+        public async Task CollectObjective_IgnoresNonMatchingItemType()
+        {
+            var grain = NewStateGrain();
+            await grain.AddGeneratedQuestAsync(CollectQuest("gather", "GoldCoin", requiredCount: 1));
+            Assert.That(await grain.StartQuestAsync("gather"), Is.True);
+
+            await grain.RecordEventAsync("item_collected", new Dictionary<string, object>
+            {
+                ["itemType"] = "Rock"
+            });
+
+            var state = await grain.GetStateAsync();
+            Assert.That(state!.ActiveQuestIds, Does.Contain("gather"), "Wrong item type must not progress the quest.");
+            Assert.That(state.CompletedQuestIds, Does.Not.Contain("gather"));
+        }
+
+        [Test]
+        public async Task KillObjective_CompletesQuest_AfterRequiredKills()
+        {
+            var grain = NewStateGrain();
+            await grain.AddGeneratedQuestAsync(KillQuest("cull", "Wraith", requiredCount: 2));
+            Assert.That(await grain.StartQuestAsync("cull"), Is.True);
+
+            await grain.RecordEventAsync("enemy_defeated", new Dictionary<string, object> { ["enemyType"] = "Wraith" });
+            var mid = await grain.GetStateAsync();
+            Assert.That(mid!.ActiveQuestIds, Does.Contain("cull"), "One kill of two — still active.");
+
+            await grain.RecordEventAsync("enemy_defeated", new Dictionary<string, object> { ["enemyType"] = "Wraith" });
+            var done = await grain.GetStateAsync();
+            Assert.That(done!.CompletedQuestIds, Does.Contain("cull"));
+            Assert.That(done.ActiveQuestIds, Does.Not.Contain("cull"));
+        }
+
+        [Test]
+        public async Task ReachLocationObjective_CompletesQuest_WhenHintMatchesArrival()
+        {
+            var grain = NewStateGrain();
+            await grain.AddGeneratedQuestAsync(ReachLocationQuest("explore", "dungeon"));
+            Assert.That(await grain.StartQuestAsync("explore"), Is.True);
+
+            // reach_location is driven by arrival; the hint fuzzy-matches the arrival's mapId.
+            await grain.RecordEventAsync("player_arrived", new Dictionary<string, object>
+            {
+                ["worldId"] = "world-A",
+                ["mapId"] = "sunless-dungeon-3"
+            });
+
+            var state = await grain.GetStateAsync();
+            Assert.That(state!.CompletedQuestIds, Does.Contain("explore"));
+            Assert.That(state.ActiveQuestIds, Does.Not.Contain("explore"));
+        }
+
+        [Test]
+        public async Task ReachLocationObjective_DoesNotComplete_OnUnrelatedArrival()
+        {
+            var grain = NewStateGrain();
+            await grain.AddGeneratedQuestAsync(ReachLocationQuest("explore", "dungeon"));
+            Assert.That(await grain.StartQuestAsync("explore"), Is.True);
+
+            await grain.RecordEventAsync("player_arrived", new Dictionary<string, object>
+            {
+                ["worldId"] = "world-A",
+                ["mapId"] = "sunny-meadow"
+            });
+
+            var state = await grain.GetStateAsync();
+            Assert.That(state!.ActiveQuestIds, Does.Contain("explore"), "Hint should not match an unrelated map.");
+            Assert.That(state.CompletedQuestIds, Does.Not.Contain("explore"));
         }
     }
 }
