@@ -57,8 +57,9 @@ builder.Host.UseOrleansClient(client =>
     });
 });
 
-// Add hosted service to handle Orleans client connection with retry/backoff
-builder.Services.AddHostedService<OrleansClientConnectionService>();
+// Orleans client connection is managed by UseOrleansClient (the co-hosted client
+// connects/disconnects with the host lifecycle in Orleans 9; there is no manual
+// IClusterClient.Connect/Close to call).
 
 // Add telemetry service - will get Orleans client from DI
 builder.Services.AddSingleton<AgentTelemetryService>(sp =>

@@ -1,6 +1,7 @@
 @page "/adaptation/{AgentId}"
 @using Aetherium.Server.Agents.Analysis
 @using Aetherium.Server.Narrative
+@using BehaviorAnalysisModel = Aetherium.Server.Agents.Analysis.BehaviorAnalysis
 @using System.Net.Http.Json
 @inject IHttpClientFactory HttpClientFactory
 @inject ILogger<AdaptationMonitor> Logger
@@ -138,7 +139,7 @@ else
 
     private bool loading = true;
     private string? error;
-    private BehaviorAnalysis? behaviorAnalysis;
+    private BehaviorAnalysisModel? behaviorAnalysis;
     private List<ContentNeed>? contentNeeds;
     private List<QuestDefinition>? adaptiveQuests;
     private Dictionary<string, ActionPreference>? actionPreferences;
@@ -162,7 +163,7 @@ else
             var behaviorResponse = await httpClient.GetAsync($"/api/adaptation/behavior/{AgentId}");
             if (behaviorResponse.IsSuccessStatusCode)
             {
-                behaviorAnalysis = await behaviorResponse.Content.ReadFromJsonAsync<BehaviorAnalysis>();
+                behaviorAnalysis = await behaviorResponse.Content.ReadFromJsonAsync<BehaviorAnalysisModel>();
             }
 
             // Get content needs
