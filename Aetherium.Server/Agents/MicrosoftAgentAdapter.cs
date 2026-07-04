@@ -29,7 +29,21 @@ namespace Aetherium.Server.Agents
         private int requestCount = 0;
         private int errorCount = 0;
 
-        public MicrosoftAgentAdapter(HttpClient? httpClient = null)
+        // Prompt-template wiring (P3-5). When a registry + template are supplied, the system prompt
+        // is rendered from an editable Prompts/*.md template (tunable at runtime via aetherctl) with
+        // {{goal}} substituted; otherwise the built-in default string is used. Behavior is identical
+        // to the previous hard-coded prompts when no registry is provided.
+        private readonly PromptRegistry? promptRegistry;
+        private readonly string systemTemplateName;
+        private readonly string goal;
+        private const string DefaultSystemTemplateName = "agent_decision";
+        private const string DefaultGoal = "Find a key and open a locked door. Prefer safe exploration.";
+
+        public MicrosoftAgentAdapter(
+            HttpClient? httpClient = null,
+            PromptRegistry? promptRegistry = null,
+            string? systemTemplateName = null,
+            string? goal = null)
         {
             this.httpClient = httpClient ?? new HttpClient();
             this.httpClient.Timeout = TimeSpan.FromSeconds(10); // 10 second timeout
@@ -37,7 +51,11 @@ namespace Aetherium.Server.Agents
             apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "lm-studio";
             model = Environment.GetEnvironmentVariable("AGENT_MODEL") ?? "phi-4";
             debug = string.Equals(Environment.GetEnvironmentVariable("AGENT_DEBUG"), "1", StringComparison.OrdinalIgnoreCase);
-            
+
+            this.promptRegistry = promptRegistry;
+            this.systemTemplateName = string.IsNullOrWhiteSpace(systemTemplateName) ? DefaultSystemTemplateName : systemTemplateName;
+            this.goal = string.IsNullOrWhiteSpace(goal) ? DefaultGoal : goal;
+
             var maxConcurrent = int.TryParse(Environment.GetEnvironmentVariable("AGENT_LLM_MAX_CONCURRENT") ?? "2", out var m) ? m : 2;
             rateLimiter = new SemaphoreSlim(maxConcurrent, maxConcurrent);
         }
@@ -86,8 +104,8 @@ namespace Aetherium.Server.Agents
                 await ThrottleAsync(ct);
                 Interlocked.Increment(ref requestCount);
 
-                var systemPrompt = "You are an NPC navigator in a grid-based dungeon. Use the provided tools to interact with the world.";
-                var userPrompt = $"Perception:\n{perceptionJson}\n\nGoal: Find a key and open a locked door. Prefer safe exploration.";
+                var systemPrompt = BuildSystemPrompt();
+                var userPrompt = $"Perception:\n{perceptionJson}\n\nGoal: {goal}";
 
                 // Build OpenAI function calling format
                 var toolDefs = tools.Select(tool => new
@@ -131,7 +149,7 @@ namespace Aetherium.Server.Agents
                 await ThrottleAsync(ct);
                 Interlocked.Increment(ref requestCount);
 
-                var systemPrompt = GetSystemPrompt();
+                var systemPrompt = BuildSystemPrompt();
                 var userPrompt = BuildUserPrompt(perceptionJson, tools);
 
                 var request = new
@@ -223,18 +241,40 @@ namespace Aetherium.Server.Agents
             return new LlmDecision { Action = "move", Args = new Dictionary<string, string> { ["direction"] = "F" } };
         }
 
-        private static string GetSystemPrompt()
+        /// <summary>
+        /// Builds the system prompt. When a <see cref="PromptRegistry"/> and template were supplied,
+        /// the template is rendered (with <c>{{goal}}</c> substituted) so operators can tune agent
+        /// behavior at runtime; otherwise the built-in default is used. Public so the composed prompt
+        /// can be inspected/tested without a live LLM.
+        /// </summary>
+        public string BuildSystemPrompt()
+        {
+            if (promptRegistry is not null)
+            {
+                var rendered = promptRegistry.Render(systemTemplateName,
+                    new Dictionary<string, string> { ["goal"] = goal });
+                if (!string.IsNullOrWhiteSpace(rendered))
+                    return rendered;
+            }
+            return DefaultSystemPrompt();
+        }
+
+        private static string DefaultSystemPrompt()
         {
             return "You are an NPC navigator in a grid-based dungeon. You can move (F/L/R/B or N/E/S/W), pickup items by id, open/close doors by entity id, and use keys on doors. Always output a single JSON object with fields action and args. Examples: {\"action\":\"move\",\"args\":{\"direction\":\"F\"}} or {\"action\":\"pickup\",\"args\":{\"targetEntityId\":\"item:123\"}}. No extra text.";
         }
 
-        private static string BuildUserPrompt(string perceptionJson, List<IAgentTool> tools)
+        /// <summary>
+        /// Builds the user prompt from live perception + available tools + the agent's goal. Public
+        /// so the composed prompt can be inspected/tested without a live LLM.
+        /// </summary>
+        public string BuildUserPrompt(string perceptionJson, List<IAgentTool> tools)
         {
             var sb = new StringBuilder();
             sb.AppendLine("Perception:");
             sb.AppendLine(perceptionJson);
             sb.AppendLine();
-            
+
             if (tools.Count > 0)
             {
                 sb.AppendLine("Available tools:");
@@ -256,8 +296,8 @@ namespace Aetherium.Server.Agents
                 sb.AppendLine("- close {targetEntityId}");
                 sb.AppendLine("- use {itemEntityId, onEntityId}");
             }
-            
-            sb.AppendLine("Goal: Find a key and open a locked door. Prefer safe exploration.");
+
+            sb.AppendLine($"Goal: {goal}");
             sb.AppendLine("Respond with strict JSON only.");
             return sb.ToString();
         }

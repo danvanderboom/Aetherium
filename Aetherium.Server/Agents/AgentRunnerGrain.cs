@@ -209,6 +209,21 @@ namespace Aetherium.Server.Agents
             ServiceProvider = ServiceProvider
         };
 
+        /// <summary>
+        /// Constructs the LLM adapter, wiring in the <see cref="PromptRegistry"/> (when registered)
+        /// so the system prompt is rendered from an editable Prompts/*.md template (P3-5). The
+        /// template name (default <c>agent_decision</c>) and the agent goal are overridable via the
+        /// <c>AGENT_PROMPT_TEMPLATE</c> and <c>AGENT_GOAL</c> environment variables. When no registry
+        /// is registered, the adapter falls back to its built-in default prompt.
+        /// </summary>
+        private MicrosoftAgentAdapter BuildLlmAdapter()
+        {
+            var registry = ServiceProvider?.GetService(typeof(PromptRegistry)) as PromptRegistry;
+            var templateName = Environment.GetEnvironmentVariable("AGENT_PROMPT_TEMPLATE");
+            var goal = Environment.GetEnvironmentVariable("AGENT_GOAL");
+            return new MicrosoftAgentAdapter(promptRegistry: registry, systemTemplateName: templateName, goal: goal);
+        }
+
         public async Task StepAsync()
         {
             if (_sessionId == null || (_mgmt == null && _mapId == null))
@@ -238,8 +253,10 @@ namespace Aetherium.Server.Agents
             
             if (llmEnabled && _toolRegistry != null && _toolProfile != null)
             {
-                // LLM-driven execution using tool system
-                _adapter ??= new MicrosoftAgentAdapter();
+                // LLM-driven execution using tool system. The adapter renders its system prompt
+                // from an editable Prompts/*.md template via PromptRegistry (P3-5) when available,
+                // so agent behavior is tunable at runtime; template and goal are overridable by env.
+                _adapter ??= BuildLlmAdapter();
                 
                 // Get available tools for this agent
                 var availableTools = _toolRegistry.GetToolsForProfile(_toolProfile).ToList();
