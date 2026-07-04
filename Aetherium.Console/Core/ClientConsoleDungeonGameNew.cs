@@ -78,22 +78,28 @@ namespace Aetherium.Core
 
         private IAudioSystem CreateAudioSystem()
         {
+            var config = new AudioConfig
+            {
+                Enabled = true,
+                MusicVolume = 0.5f,
+                EffectsVolume = 0.7f,
+                DefaultMusicTrack = "mellow-guitar-loop",
+                AssetPath = "Assets/Audio"
+            };
+
+            // Fall back to silent audio when no output device is present (audio-less CI boxes,
+            // non-Windows hosts). NAudio's players open the device lazily on first play, so the
+            // old ctor-only try/catch never caught the failure — every play call then threw and
+            // sprayed "[Audio] Error" lines into the TUI. Probe up front instead (P3-9).
+            if (!config.Enabled || !NAudioSystem.IsOutputAvailable())
+                return new NullAudioSystem();
+
             try
             {
-                var config = new AudioConfig
-                {
-                    Enabled = true,
-                    MusicVolume = 0.5f,
-                    EffectsVolume = 0.7f,
-                    DefaultMusicTrack = "mellow-guitar-loop",
-                    AssetPath = "Assets/Audio"
-                };
-
                 return new NAudioSystem(config);
             }
             catch
             {
-                // If NAudio fails to initialize, use null audio system
                 return new NullAudioSystem();
             }
         }

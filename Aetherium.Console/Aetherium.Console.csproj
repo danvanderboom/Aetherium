@@ -16,4 +16,12 @@
     <ProjectReference Include="..\Aetherium.Model\Aetherium.Model.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Ship the audio asset tree next to the binary so NAudioSystem (which now resolves
+         AssetPath under AppContext.BaseDirectory) can find files from bin/. Only README/.gitkeep
+         exist by default, so this is a no-op until real CC0 assets are dropped into
+         Assets/Audio/{music,effects} — see Assets/Audio/README.md. -->
+    <Content Include="Assets\Audio\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -2,6 +2,14 @@
 
 This directory contains curated background music and sound effects for the Console Game client.
 
+## Status: no assets bundled by default
+
+Only placeholders (`.gitkeep`) and this README ship in the repo — **no audio files are committed**, so the client runs **silently by default**. This is intentional (avoids bundling third-party binaries). The audio path degrades gracefully:
+
+- `NAudioSystem` resolves this folder under the app base directory (`bin/.../Assets/Audio`) and the `.csproj` copies the tree to output, so the moment you drop real files into `music/` and `effects/` (using the filenames below) they are found and played — no code change needed.
+- On audio-less or non-Windows hosts, the client selects `NullAudioSystem` up front (`NAudioSystem.IsOutputAvailable()`), and any later device error mutes audio silently rather than writing into the TUI.
+- Reverb DSP and stereo panning are **unsupported**; spatial cues come from distance attenuation and occlusion (volume) only.
+
 ## Licensing
 
 - Primary source: Kenney Game Assets — CC0 (Public Domain). No attribution required.
