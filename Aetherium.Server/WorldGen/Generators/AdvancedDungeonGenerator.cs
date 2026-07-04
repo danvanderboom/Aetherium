@@ -315,31 +315,86 @@ namespace Aetherium.WorldGen.Generators
                 return;
 
             var corridor = bridgeResult.Value.Corridor;
-            var bridgeFromRoom = globals.RoomLookup[bridgeResult.Value.FromId];
             var bridgeToRoom = globals.RoomLookup[bridgeResult.Value.ToId];
             var doorLocation = corridor.Path.Count > 0
                 ? corridor.Path[corridor.Path.Count / 2]
                 : bridgeToRoom.Center;
 
+            var startRoom = globals.RoomLookup[globals.StartRoomId.Value];
+
+            // Primary gate: locked door on the bridge corridor, keyed "emerald", with its key in the
+            // start room. The bridge is a true cut (or the objective-adjacent fallback), so this alone
+            // gates the objective and the key is reachable from start without traversing the door.
+            PlaceGate(world, globals, context, doorLocation, "emerald");
+            PlaceKey(world, context, startRoom.Center, "emerald");
+
+            // keyLockChainDepth > 1 adds further gates on other primary-path corridors. Every key sits
+            // in the start room, so each is reachable from start without crossing any locked door — the
+            // model the validator enforces ("collect all keys, then the gates cut the objective"); the
+            // bridge door already guarantees the collective cut. Clamped to available corridors and
+            // start-room tiles so we never place an unkeyed door or overflow the room.
+            int chainDepth = context.GetIntParam("keyLockChainDepth", 1, min: 1, max: 8);
+            if (chainDepth > 1)
+            {
+                var extraCorridors = CollectPrimaryPathCorridors(globals)
+                    .Where(c => c != corridor)
+                    .ToList();
+                var keyTiles = startRoom.Tiles.Where(t => t != startRoom.Center).ToList();
+                int extraGates = Math.Min(chainDepth - 1, Math.Min(extraCorridors.Count, keyTiles.Count));
+
+                for (int i = 0; i < extraGates; i++)
+                {
+                    var extraCorridor = extraCorridors[i];
+                    var extraDoorLoc = extraCorridor.Path.Count > 0
+                        ? extraCorridor.Path[extraCorridor.Path.Count / 2]
+                        : extraCorridor.To.Center;
+                    var shape = GateKeyShape(i + 1);
+                    PlaceGate(world, globals, context, extraDoorLoc, shape);
+                    PlaceKey(world, context, keyTiles[i], shape);
+                }
+            }
+        }
+
+        private static void PlaceGate(World world, GenerationGlobals globals, GeneratorContext context, WorldLocation location, string keyShape)
+        {
             var door = new Door();
-            door.Set(doorLocation);
+            door.Set(location);
             var openClose = door.Get<OpensAndCloses>();
             openClose.IsLocked = true;
-            openClose.KeyShape = "emerald";
+            openClose.KeyShape = keyShape;
             world.AddEntity(door);
 
-            globals.InteractiveArtifacts.LockedDoorLocation = doorLocation;
+            if (globals.InteractiveArtifacts.LockedDoorLocation.IsNone)
+                globals.InteractiveArtifacts.LockedDoorLocation = location;
+            globals.InteractiveArtifacts.LockedDoorCount++;
             context.Metrics.LockedDoors++;
+        }
 
-            // Place the key in the start room. For a true bridge edge this guarantees the key is
-            // reachable from start without traversing the door. For the fallback case (no true
-            // bridge — multiple paths exist), the start room is also trivially reachable.
-            var keyLocation = globals.RoomLookup[globals.StartRoomId.Value].Center;
-            var key = new KeyItem("emerald");
-            key.Set(keyLocation);
+        private static void PlaceKey(World world, GeneratorContext context, WorldLocation location, string keyShape)
+        {
+            var key = new KeyItem(keyShape);
+            key.Set(location);
             world.AddEntity(key);
             context.Metrics.KeysPlaced++;
         }
+
+        private static List<DungeonCorridor> CollectPrimaryPathCorridors(GenerationGlobals globals)
+        {
+            var result = new List<DungeonCorridor>();
+            for (int i = 0; i < globals.PrimaryRoomPath.Count - 1; i++)
+            {
+                var key = CorridorKey.Create(globals.PrimaryRoomPath[i], globals.PrimaryRoomPath[i + 1]);
+                if (globals.Corridors.TryGetValue(key, out var c))
+                    result.Add(c);
+            }
+            return result;
+        }
+
+        // Distinct key/lock shapes for chained gates. Index 0 is the primary "emerald" gate; extra
+        // gates use 1..N. Beyond the named set we fall back to a generated shape name.
+        private static readonly string[] GateShapes = { "emerald", "sapphire", "ruby", "amber", "topaz", "onyx", "opal", "jade" };
+        private static string GateKeyShape(int index) =>
+            index < GateShapes.Length ? GateShapes[index] : $"gem{index}";
 
         private static (DungeonRoom Start, DungeonRoom Objective) SelectStartAndObjective(
             List<DungeonRoom> nonSecretRooms,
@@ -416,14 +471,37 @@ namespace Aetherium.WorldGen.Generators
 
         private void PlaceSecrets(World world, GeneratorContext context, GenerationGlobals globals)
         {
-            var candidateCorridor = globals.Corridors.Values.FirstOrDefault(c => c.Primary && !c.IsVerticalConnector);
-            if (candidateCorridor == null)
+            // Eligible anchor corridors: primary, non-vertical, not already a secret link. Computed
+            // once (before any secret corridor is added) so the set is stable across the loop.
+            var candidateCorridors = globals.Corridors.Values
+                .Where(c => c.Primary && !c.IsVerticalConnector && !c.IsSecret)
+                .ToList();
+
+            if (candidateCorridors.Count == 0)
             {
-                candidateCorridor = CreateFallbackSecretCorridor(globals, world);
-                if (candidateCorridor == null)
-                    return;
+                // No eligible corridor — fall back to carving a secret off a room wall (unchanged
+                // single-secret behavior).
+                var fallback = CreateFallbackSecretCorridor(globals, world);
+                if (fallback != null)
+                    PlaceSecretRoom(world, context, globals, fallback);
+                return;
             }
 
+            // secretRoomDensity scales the number of secret rooms across the eligible corridors;
+            // absent => exactly one (historical behavior, off the first eligible corridor).
+            int secretCount = context.HasParam("secretRoomDensity")
+                ? Math.Max(1, (int)Math.Round(context.GetDoubleParam("secretRoomDensity", 0, 0, 1) * candidateCorridors.Count))
+                : 1;
+            secretCount = Math.Min(secretCount, candidateCorridors.Count);
+
+            for (int i = 0; i < secretCount; i++)
+            {
+                PlaceSecretRoom(world, context, globals, candidateCorridors[i]);
+            }
+        }
+
+        private void PlaceSecretRoom(World world, GeneratorContext context, GenerationGlobals globals, DungeonCorridor candidateCorridor)
+        {
             DungeonRoom secretRoom;
             WorldLocation entryLocation;
 
@@ -630,7 +708,7 @@ namespace Aetherium.WorldGen.Generators
             context.Metrics.Rooms = globals.Rooms.Count(r => !r.IsSecret);
             context.Metrics.Corridors = globals.Corridors.Count;
             context.Metrics.SecretsPlaced = globals.Rooms.Count(r => r.IsSecret);
-            context.Metrics.LockedDoors = globals.InteractiveArtifacts.LockedDoorLocation.IsNone ? 0 : 1;
+            context.Metrics.LockedDoors = globals.InteractiveArtifacts.LockedDoorCount;
 
             var graph = globals.Graph;
             var degrees = graph.GetDegrees();
@@ -710,6 +788,7 @@ namespace Aetherium.WorldGen.Generators
         private sealed class InteractiveArtifacts
         {
             public WorldLocation LockedDoorLocation { get; set; } = WorldLocation.None;
+            public int LockedDoorCount { get; set; }
             public int SecretRoomId { get; set; }
         }
 

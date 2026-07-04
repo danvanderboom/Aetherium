@@ -21,9 +21,9 @@
 - [x] 5.3 Determinism preserved: existing `DeterminismTests` green; same seed+params → same world
 - [x] 5.4 Server + Test build green; broader worldgen/training/benchmark suite green (141 tests, 0 regressions)
 
-## Slice 2 — deeper parameterization + dead-stub resolution (follow-up, not this pass)
-- [ ] 2.2 Key/lock chain depth from `keyLockChainDepth` (generalize the single gated pair to N pairs while preserving the access-proof invariant)
-- [ ] 2.4 Secret-room count from `secretRoomDensity`
-- [ ] 3.2 `OutdoorPopulationPass` honors `enemyCount`/`resourceAvailability`
-- [ ] 6.1 Implement `PrefabStamper.SpawnEntity` (prefab entity stamping via a shared entity factory)
-- [ ] 6.2 Wire in or delete `SpawnNPCsFeature` / `ItemDistributionFeature` / `AdaptationPass` per the honest-stub rule
+## Slice 2 — deeper parameterization + dead-stub resolution
+- [x] 2.2 Key/lock chain depth from `keyLockChainDepth` — N gated pairs: the bridge door is the guaranteed cut, extra doors go on other primary-path corridors, and every key sits in the start room (the model the validator enforces). `LockedDoors` metric fixed to count all doors. Test proves the validator's access proof passes for the chain.
+- [x] 2.4 Secret-room count from `secretRoomDensity` (extracted `PlaceSecretRoom`, loops over eligible corridors; default = one secret)
+- [x] 3.2 `OutdoorPopulationPass` honors `enemyCount` (monster count; snake retained; default = one trader + snake)
+- [x] 6.1 Implement `PrefabStamper.SpawnEntity` via new shared `SpawnableEntityFactory` (also now backs `SpawnEntityTool`, removing its duplicated reflection map)
+- [x] 6.2 Deleted the dead, unreferenced stubs `SpawnNPCsFeature` / `ItemDistributionFeature` / `AdaptationPass` (superseded by the live `DungeonPopulationPass`; not in any pass list)

@@ -22,19 +22,8 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
         public IEnumerable<string> Categories => new[] { "worldbuilding", "entity_management" };
         public IEnumerable<string> RequiredCapabilities => new[] { "world_edit" };
 
-        /// <summary>
-        /// Map of spawnable entity type name (lower-cased) to its concrete <see cref="Entity"/> type.
-        /// Discovered by reflection from the assembly that defines the entity hierarchy: every
-        /// non-abstract <see cref="Entity"/> subclass with a public parameterless constructor.
-        /// <see cref="Terrain"/> is excluded automatically (it has no parameterless constructor and
-        /// is created via <c>setterrain</c>).
-        /// </summary>
-        private static readonly Lazy<IReadOnlyDictionary<string, Type>> SpawnableTypes = new(() =>
-            typeof(Item).Assembly.GetTypes()
-                .Where(t => typeof(Entity).IsAssignableFrom(t)
-                            && !t.IsAbstract
-                            && t.GetConstructor(Type.EmptyTypes) != null)
-                .ToDictionary(t => t.Name.ToLowerInvariant(), t => t));
+        // Entity resolution lives in the shared Aetherium.Entities.EntityFactory (also used by the
+        // prefab stamper), so the spawnable-type set stays defined in exactly one place.
 
         public ToolParameterSchema GetParameterSchema()
         {
@@ -82,9 +71,9 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
             if (string.IsNullOrWhiteSpace(entityType))
                 return Task.FromResult(ToolExecutionResult.Error("Entity type cannot be empty"));
 
-            if (!SpawnableTypes.Value.TryGetValue(entityType.ToLowerInvariant(), out var clrType))
+            if (!SpawnableEntityFactory.IsKnownType(entityType))
             {
-                var supported = string.Join(", ", SpawnableTypes.Value.Values.Select(t => t.Name).OrderBy(n => n));
+                var supported = string.Join(", ", SpawnableEntityFactory.SupportedTypeNames);
                 return Task.FromResult(ToolExecutionResult.Error(
                     $"Unknown entity type '{entityType}'. Supported types: {supported}"));
             }
@@ -92,12 +81,12 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
             Entity entity;
             try
             {
-                entity = (Entity)Activator.CreateInstance(clrType)!;
+                SpawnableEntityFactory.TryCreate(entityType, out entity);
             }
             catch (Exception ex)
             {
                 return Task.FromResult(ToolExecutionResult.Error(
-                    $"Failed to construct entity '{clrType.Name}': {ex.Message}"));
+                    $"Failed to construct entity '{entityType}': {ex.Message}"));
             }
 
             var location = new WorldLocation(x, y, z);
@@ -113,12 +102,13 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
                     $"Failed to add entity to world: {ex.Message}"));
             }
 
+            var resolvedName = entity.GetType().Name;
             return Task.FromResult(ToolExecutionResult.Ok(
-                $"Spawned {clrType.Name} '{entity.EntityId}' at ({x}, {y}, {z})",
+                $"Spawned {resolvedName} '{entity.EntityId}' at ({x}, {y}, {z})",
                 new Dictionary<string, object>
                 {
                     ["entityId"] = entity.EntityId,
-                    ["entityType"] = clrType.Name,
+                    ["entityType"] = resolvedName,
                     ["x"] = x,
                     ["y"] = y,
                     ["z"] = z

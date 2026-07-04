@@ -35,11 +35,22 @@ namespace Aetherium.WorldGen.Passes
             if (plainsTiles.Count == 0)
                 return;
 
-            var traderLoc = plainsTiles[rng.Next(plainsTiles.Count)];
-            var npc = new Monster(world);
-            npc.Set(traderLoc);
-            npc.Set(new Goal { Created = DateTime.UtcNow, Location = traderLoc });
-            world.AddEntity(npc);
+            // enemyCount, when supplied, sets the number of wandering monsters; absent => one
+            // (the historical single trader). The snake is always placed for flavor. Default draws
+            // one monster location then the snake location — identical to the prior behavior.
+            var gc = context.GeneratorContext;
+            int monsterCount = gc.HasParam("enemyCount")
+                ? Math.Min(gc.GetIntParam("enemyCount", 1, min: 0, max: 100000), plainsTiles.Count)
+                : 1;
+
+            for (int i = 0; i < monsterCount; i++)
+            {
+                var monsterLoc = plainsTiles[rng.Next(plainsTiles.Count)];
+                var npc = new Monster(world);
+                npc.Set(monsterLoc);
+                npc.Set(new Goal { Created = DateTime.UtcNow, Location = monsterLoc });
+                world.AddEntity(npc);
+            }
 
             var snakeLoc = plainsTiles[rng.Next(plainsTiles.Count)];
             var snake = new Snake();
