@@ -161,6 +161,20 @@ namespace Aetherium.WorldGen
 
             generatorContext.Metrics.EffectiveSeed = generatorContext.EffectiveSeed;
 
+            // Compute the difficulty profile from the effective parameters and the measured layout so
+            // the difficulty implied by a curriculum stage or benchmark is observable on the result
+            // (rather than being purely advisory input the generator ignored). Best-effort: a bad
+            // profile calculation must never fail an otherwise-successful generation.
+            try
+            {
+                generatorContext.Metrics.CalculateDifficultyProfile(
+                    request.Width, request.Height, Math.Max(1, request.Levels), generatorParams);
+            }
+            catch
+            {
+                // Introspection only — swallow and continue.
+            }
+
             return new WorldGenerationResult(
                 pipelineContext.World,
                 generatorContext.Metrics,

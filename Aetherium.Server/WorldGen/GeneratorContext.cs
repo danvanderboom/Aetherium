@@ -145,6 +145,43 @@ namespace Aetherium.WorldGen
         // outputs from .NET's XOSHIRO256** algorithm; a brief warm-up decorrelates them.
         private const int RngWarmupDraws = 8;
 
+        /// <summary>
+        /// Returns true if a generator parameter with the given key is present.
+        /// </summary>
+        public bool HasParam(string key) =>
+            GeneratorParams != null && GeneratorParams.ContainsKey(key);
+
+        /// <summary>
+        /// Reads an integer generator parameter, returning <paramref name="defaultValue"/> when the
+        /// key is absent or unparseable, and clamping a parsed value into [<paramref name="min"/>,
+        /// <paramref name="max"/>]. The default is returned as-is (not clamped) so callers can use an
+        /// out-of-range sentinel to detect absence.
+        /// </summary>
+        public int GetIntParam(string key, int defaultValue, int min = int.MinValue, int max = int.MaxValue)
+        {
+            if (GeneratorParams != null && GeneratorParams.TryGetValue(key, out var raw)
+                && int.TryParse(raw, out var value))
+            {
+                return Math.Clamp(value, min, max);
+            }
+            return defaultValue;
+        }
+
+        /// <summary>
+        /// Reads a floating-point generator parameter, returning <paramref name="defaultValue"/> when
+        /// the key is absent or unparseable, and clamping a parsed value into [<paramref name="min"/>,
+        /// <paramref name="max"/>].
+        /// </summary>
+        public double GetDoubleParam(string key, double defaultValue, double min = double.MinValue, double max = double.MaxValue)
+        {
+            if (GeneratorParams != null && GeneratorParams.TryGetValue(key, out var raw)
+                && double.TryParse(raw, out var value))
+            {
+                return Math.Clamp(value, min, max);
+            }
+            return defaultValue;
+        }
+
         private static int DeriveSeed(int baseSeed, string version, string scope)
         {
             using var sha = SHA256.Create();

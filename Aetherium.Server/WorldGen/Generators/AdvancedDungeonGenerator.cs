@@ -82,7 +82,11 @@ namespace Aetherium.WorldGen.Generators
         private void BuildLevel(World world, GeneratorContext context, GenerationGlobals globals, int level)
         {
             var rng = context.GetRandom($"level:{level}:rooms");
-            int targetRooms = rng.Next(6, 10);
+            // Room count is drawn from [minRooms, maxRooms] inclusive. Defaults (6, 9) reproduce the
+            // historical rng.Next(6, 10) draw exactly, so a request with no room params is unchanged.
+            int minRooms = context.GetIntParam("minRooms", 6, min: 1, max: 500);
+            int maxRooms = context.GetIntParam("maxRooms", 9, min: minRooms, max: 500);
+            int targetRooms = rng.Next(minRooms, maxRooms + 1);
             var layoutHelper = new LayoutHelper(context, level, globals, rng);
 
             while (layoutHelper.RoomsOnLevel.Count < targetRooms && layoutHelper.Attempts < targetRooms * 12)
@@ -552,11 +556,36 @@ namespace Aetherium.WorldGen.Generators
 
         private void PlaceTrapsAndTools(World world, GeneratorContext context, GenerationGlobals globals)
         {
-            var rng = context.GetRandom("interactions:traps");
-            var trapRoom = globals.Rooms.FirstOrDefault(r => !r.IsSecret && r.Level == context.Levels - 1);
-            if (trapRoom == null)
+            // Eligible rooms, boss level (deepest) first — the historical single trap went there —
+            // then shallower levels. Room Ids ascend with insertion order, so the first entry equals
+            // the prior FirstOrDefault(!IsSecret && Level == Levels-1).
+            var eligibleRooms = globals.Rooms
+                .Where(r => !r.IsSecret && r.Level == context.Levels - 1)
+                .OrderBy(r => r.Id)
+                .Concat(globals.Rooms
+                    .Where(r => !r.IsSecret && r.Level != context.Levels - 1)
+                    .OrderByDescending(r => r.Level).ThenBy(r => r.Id))
+                .ToList();
+
+            if (eligibleRooms.Count == 0)
                 return;
 
+            // trapDensity (0..1) scales trap count by the number of eligible rooms; absent => exactly
+            // one trap in the boss room (historical behavior). Trap placement draws no RNG, so a
+            // higher count cannot perturb the determinism of any other pass.
+            int trapCount = context.HasParam("trapDensity")
+                ? Math.Max(1, (int)Math.Round(context.GetDoubleParam("trapDensity", 0, 0, 1) * eligibleRooms.Count))
+                : 1;
+            trapCount = Math.Min(trapCount, eligibleRooms.Count);
+
+            for (int i = 0; i < trapCount; i++)
+            {
+                PlaceOneTrap(world, context, eligibleRooms[i]);
+            }
+        }
+
+        private void PlaceOneTrap(World world, GeneratorContext context, DungeonRoom trapRoom)
+        {
             var trapX = (trapRoom.Center.X + 1).ForceInRange(1, context.Width - 2);
             var trapY = trapRoom.Center.Y.ForceInRange(1, context.Height - 2);
             var trapLocation = new WorldLocation(trapX, trapY, trapRoom.Level);
