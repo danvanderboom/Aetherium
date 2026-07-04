@@ -25,6 +25,9 @@ namespace Aetherium
             Set(new Memory());
             // Monsters are weaker than player characters (which default to 100 HP): a few hits kill.
             Set(new Health(30, 30));
+            // Monsters hit for less than a base character (10): retaliation on the tick
+            // (P3-7 slice 2) chips a player down rather than bursting them.
+            Set(new AttackPower(6));
             Set(new Tile { Type = world.TileTypes["Monster"] });
             
             // Monsters emit slightly lower heat than characters but still high

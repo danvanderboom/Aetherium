@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using Microsoft.Extensions.DependencyInjection;
@@ -135,6 +136,68 @@ namespace Aetherium.Test.Combat
             // The monster is gone from canonical state: attacking it again can't find it.
             var r4 = await map.AttackAsync(player, monsterId);
             Assert.That(r4.Success, Is.False, "A defeated target should no longer exist in the world.");
+        }
+
+        private static int HealthOf(WorldSnapshot snap, string entityId)
+        {
+            var placement = snap.Entities.FirstOrDefault(e => e.EntityId == entityId);
+            Assert.That(placement, Is.Not.Null, $"Entity {entityId} missing from snapshot.");
+            Assert.That(placement!.Properties.TryGetValue("HealthLevel", out var hp), Is.True, "HealthLevel not captured.");
+            return int.Parse(hp!, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        [Test]
+        public async Task Tick_MonsterAdjacentToPlayer_Retaliates_DamagingButNotRemovingPlayer()
+        {
+            var (map, player, monsterId) = await InitMapWithAdjacentMonsterAsync();
+
+            var before = await map.GetWorldSnapshotAsync();
+            Assert.That(HealthOf(before, player), Is.EqualTo(100), "Player starts at full health.");
+            var monsterBefore = before.Entities.First(e => e.EntityId == monsterId);
+            var (mx, my, mz) = (monsterBefore.X, monsterBefore.Y, monsterBefore.Z);
+
+            // One tick: the adjacent monster attacks instead of wandering.
+            await map.TickAsync(TimeSpan.FromSeconds(1));
+
+            var after = await map.GetWorldSnapshotAsync();
+
+            // Player survived the tick (downed players aren't removed) and took retaliation damage.
+            // Damage is a positive multiple of the monster's AttackPower (6) — robust to any other
+            // generated monster that also happened to be adjacent.
+            var damageTaken = 100 - HealthOf(after, player);
+            Assert.That(damageTaken, Is.GreaterThanOrEqualTo(6), "Adjacent monster should have hit the player.");
+            Assert.That(damageTaken % 6, Is.EqualTo(0), "Each monster hit deals exactly 6 (AttackPower).");
+
+            // The retaliating monster attacked rather than wandering, so it stayed put.
+            var monsterAfter = after.Entities.First(e => e.EntityId == monsterId);
+            Assert.That((monsterAfter.X, monsterAfter.Y, monsterAfter.Z), Is.EqualTo((mx, my, mz)),
+                "A monster that attacks does not also move that tick.");
+        }
+
+        [Test]
+        public async Task Attack_KillingMonster_DropsLoot_AndRecordsStats()
+        {
+            var (map, player, monsterId) = await InitMapWithAdjacentMonsterAsync();
+
+            await map.AttackAsync(player, monsterId);              // 30 → 20
+            await map.AttackAsync(player, monsterId);              // 20 → 10
+            var kill = await map.AttackAsync(player, monsterId);   // 10 → 0, defeated
+
+            Assert.That(kill.TargetDefeated, Is.True);
+            Assert.That(kill.DroppedLootEntityId, Is.Not.Null, "A slain monster drops loot.");
+            Assert.That(kill.DroppedLootType, Is.EqualTo("SwordItem"));
+
+            // Loot exists in canonical state, where the monster fell.
+            var snap = await map.GetWorldSnapshotAsync();
+            var loot = snap.Entities.FirstOrDefault(e => e.EntityId == kill.DroppedLootEntityId);
+            Assert.That(loot, Is.Not.Null, "Dropped loot should be present in the world.");
+            Assert.That(loot!.TypeName, Is.EqualTo("SwordItem"));
+
+            // Analytics accrued: at least this kill + its 30 damage (other generated monsters, if
+            // any were hit elsewhere, only add to these totals).
+            var stats = await map.GetCombatStatsAsync();
+            Assert.That(stats.MonstersDefeated, Is.GreaterThanOrEqualTo(1));
+            Assert.That(stats.TotalDamageDealt, Is.GreaterThanOrEqualTo(30));
         }
     }
 }

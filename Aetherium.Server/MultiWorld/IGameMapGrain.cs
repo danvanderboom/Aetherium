@@ -82,6 +82,9 @@ namespace Aetherium.Server.MultiWorld
         /// </summary>
         Task<Aetherium.Model.AttackResultDto> AttackAsync(string sessionId, string targetEntityId);
 
+        /// <summary>Rolling combat analytics for this map: monsters defeated + total damage dealt (P3-7 slice 2).</summary>
+        Task<Aetherium.Model.CombatStatsDto> GetCombatStatsAsync();
+
         /// <summary>
         /// Removes a player's Character from <c>_world</c> on disconnect or explicit
         /// LeaveWorld. Emits an EntityRemovedDelta so other sessions see them leave.

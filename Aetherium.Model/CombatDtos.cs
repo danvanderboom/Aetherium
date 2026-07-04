@@ -17,6 +17,24 @@ namespace Aetherium.Model
         [Id(5)] public string TargetType { get; set; } = string.Empty;
         [Id(6)] public string TargetEntityId { get; set; } = string.Empty;
 
+        /// <summary>Entity id of loot dropped where the target fell, or null if nothing dropped (P3-7 slice 2).</summary>
+        [Id(7)] public string? DroppedLootEntityId { get; set; }
+
+        /// <summary>Type name of the dropped loot (e.g. "SwordItem"), or null when nothing dropped.</summary>
+        [Id(8)] public string? DroppedLootType { get; set; }
+
         public static AttackResultDto Fail(string reason) => new() { Success = false, Reason = reason };
+    }
+
+    /// <summary>
+    /// Rolling combat analytics for a single map (P3-7 slice 2): how many monsters have fallen
+    /// on it and the total damage players have dealt. Persisted with the map so it survives grain
+    /// reactivation.
+    /// </summary>
+    [GenerateSerializer]
+    public class CombatStatsDto
+    {
+        [Id(0)] public int MonstersDefeated { get; set; }
+        [Id(1)] public long TotalDamageDealt { get; set; }
     }
 }
