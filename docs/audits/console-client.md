@@ -48,7 +48,7 @@ The console client has a clean presentation abstraction (`IGameRenderer`/`GameVi
 ## Spec alignment
 
 - **demo-game spec — stale/violated.** It mandates `ConsoleDungeonGame(new TorusWorldBuilder())` at startup and describes the legacy control scheme (Z/X rotate, CapsLock ×10, Space follow-maze, M grid overlay); the live loop connects via SignalR with a different control set and M as a no-op. Never updated for the client-server migration.
-- **console-view spec — partial.** It describes the dead legacy `ConsoleMapView` (heading rotation, character>object>terrain priority); the live `ClientConsoleMapView` delegates rotation to the server and renders no character/monster layer, so "characters render above objects" has no client counterpart. The spec doesn't cover the live view.
+- **console-view spec — partial (character layer now present, Phase 5).** It describes the dead legacy `ConsoleMapView` (heading rotation, character>object>terrain priority); the live `ClientConsoleMapView` delegates rotation to the server and — as of Phase 5 — *does* render a character/monster layer above items above terrain (`ResolveContentLayer`, fed by `PerceptionDto.VisibleCharacters`), so "characters render above objects" now has a live counterpart. The spec still doesn't formally cover the live view.
 - **audio spec — partial.** Listener updates, distance attenuation, occlusion-as-volume, ambient loops, adaptive music with hysteresis, and terrain footsteps are implemented; reverb is a stub (not even an approximation), frequency-filter occlusion and panning are unimplemented, and with zero shipped assets every scenario is inaudible in practice.
 
 ## Test coverage
