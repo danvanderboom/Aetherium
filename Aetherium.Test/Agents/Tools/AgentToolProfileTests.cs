@@ -4,6 +4,7 @@ using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Agents.Tools.Movement;
 using Aetherium.Server.Agents.Tools.Interaction;
 using Aetherium.Server.Agents.Tools.Narrative;
+using Aetherium.Server.Agents.Tools.Instances;
 
 namespace Aetherium.Test.Agents.Tools
 {
@@ -96,6 +97,27 @@ namespace Aetherium.Test.Agents.Tools
 
             Assert.That(profile.IsToolAllowed(new AcceptQuestTool()), Is.False);
             Assert.That(profile.IsToolAllowed(new QuestLogTool()), Is.False);
+        }
+
+        [Test]
+        public void Player_ShouldAllowInstanceTools()
+        {
+            // The GameHub enforces the Player profile at its boundary, so the instance/party tools
+            // must be reachable by it.
+            var profile = AgentToolProfile.Player;
+
+            Assert.That(profile.IsToolAllowed(new EnterDungeonTool()), Is.True);
+            Assert.That(profile.IsToolAllowed(new CreatePartyTool()), Is.True);
+        }
+
+        [Test]
+        public void Explorer_ShouldNotAllowInstanceTools()
+        {
+            // Instance tools live in the "instance" category, which Explorer lacks.
+            var profile = AgentToolProfile.Explorer;
+
+            Assert.That(profile.IsToolAllowed(new EnterDungeonTool()), Is.False);
+            Assert.That(profile.IsToolAllowed(new CreatePartyTool()), Is.False);
         }
 
         [Test]

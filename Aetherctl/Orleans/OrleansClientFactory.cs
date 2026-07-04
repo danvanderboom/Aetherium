@@ -8,6 +8,8 @@ using Aetherium.Server.Agents;
 using Aetherium.Server.Management;
 using Aetherium.Server.Narrative;
 using Aetherium.Server.MultiWorld;
+using Aetherium.Server.Instances;
+using Aetherium.Server.Groups;
 
 namespace Aetherctl.Orleans
 {
@@ -71,6 +73,24 @@ namespace Aetherctl.Orleans
         {
             EnsureConnected();
             return _client!.GetGrain<IAgentRunnerGrain>(runnerId);
+        }
+
+        public IInstanceAllocatorGrain GetInstanceAllocator(string worldId)
+        {
+            EnsureConnected();
+            return _client!.GetGrain<IInstanceAllocatorGrain>(worldId);
+        }
+
+        public IDungeonInstanceGrain GetDungeonInstance(string instanceId)
+        {
+            EnsureConnected();
+            return _client!.GetGrain<IDungeonInstanceGrain>(instanceId);
+        }
+
+        public IPartyGrain GetParty(string partyId)
+        {
+            EnsureConnected();
+            return _client!.GetGrain<IPartyGrain>(partyId);
         }
 
         private void EnsureConnected()

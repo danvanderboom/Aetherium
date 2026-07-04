@@ -28,3 +28,19 @@ Recording a lockout SHALL count a distinct instance entry once. Re-entering the 
 #### Scenario: Reuse still records a lockout
 - **WHEN** a party or player re-enters via the instance-reuse path
 - **THEN** a lockout is recorded (or confirmed) rather than the reuse path silently bypassing lockout recording
+
+### Requirement: Instance & Party Entry Surface
+Players SHALL be able to form a party and enter a dungeon instance for their world, and this surface SHALL be reachable over the game hub and via an agent tool and the CLI.
+
+#### Scenario: Entering a dungeon over the game hub
+- **WHEN** a joined player calls `GameHub.EnterDungeon(dungeonId)` (optionally with a party id) for their current world
+- **THEN** the world's instance allocator is resolved from the session and an instance is allocated or reused for the caller (or the whole party)
+- **AND** the result reports the instance id and its map id, or an error
+
+#### Scenario: Party operations over the game hub
+- **WHEN** a player calls `GameHub.CreateParty` / `JoinParty` / `LeaveParty` / `GetParty`
+- **THEN** the corresponding party grain is created or updated and its membership is returned
+
+#### Scenario: Entry surface is reachable by agents and the CLI
+- **WHEN** a player-profile agent uses the `enter_dungeon` / `create_party` tools, or an operator runs `aetherctl instance enter|sweep` / `party create|add|show`
+- **THEN** the same allocator/party grains are resolved and the corresponding entry/inspection is performed
