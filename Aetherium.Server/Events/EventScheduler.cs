@@ -16,6 +16,11 @@ namespace Aetherium.Server.Events
         private readonly Dictionary<string, ScheduledEvent> _events = new();
         private readonly Dictionary<string, IEventHandler> _handlers = new();
 
+        // Registered as a process-wide singleton and scheduled/processed concurrently by many
+        // region ticks, so all dictionary access is guarded by this lock. The lock is never held
+        // across the handler await in ProcessScheduledEventsAsync (snapshot → await → update).
+        private readonly object _lock = new();
+
         public EventScheduler(IOptions<SimulationOptions> options)
         {
             _options = options.Value;
@@ -30,7 +35,10 @@ namespace Aetherium.Server.Events
 
         public void RegisterHandler(string eventType, IEventHandler handler)
         {
-            _handlers[eventType] = handler;
+            lock (_lock)
+            {
+                _handlers[eventType] = handler;
+            }
         }
 
         public Task<string> ScheduleEventAsync(
@@ -52,7 +60,10 @@ namespace Aetherium.Server.Events
                 IsTriggered = false
             };
 
-            _events[scheduledEvent.EventId] = scheduledEvent;
+            lock (_lock)
+            {
+                _events[scheduledEvent.EventId] = scheduledEvent;
+            }
             return Task.FromResult(scheduledEvent.EventId);
         }
 
@@ -76,7 +87,10 @@ namespace Aetherium.Server.Events
                 IsTriggered = false
             };
 
-            _events[scheduledEvent.EventId] = scheduledEvent;
+            lock (_lock)
+            {
+                _events[scheduledEvent.EventId] = scheduledEvent;
+            }
             return Task.FromResult(scheduledEvent.EventId);
         }
 
@@ -99,7 +113,10 @@ namespace Aetherium.Server.Events
                 IsTriggered = false
             };
 
-            _events[scheduledEvent.EventId] = scheduledEvent;
+            lock (_lock)
+            {
+                _events[scheduledEvent.EventId] = scheduledEvent;
+            }
             return Task.FromResult(scheduledEvent.EventId);
         }
 
@@ -108,16 +125,27 @@ namespace Aetherium.Server.Events
             if (!_options.EnableProceduralEvents)
                 return;
 
-            var eventsToProcess = _events.Values
-                .Where(e => !e.IsTriggered && (e.ScheduledGameTime <= currentGameTime || e.ScheduledGameTime == 0.0))
-                .ToList();
-
-            foreach (var scheduledEvent in eventsToProcess)
+            // Snapshot the due events (and resolve their handlers) under the lock, then run the
+            // handlers without holding it — handlers may re-enter the scheduler and awaiting under
+            // a lock would deadlock or serialize the whole cluster's event processing.
+            var due = new List<(ScheduledEvent Event, IEventHandler Handler)>();
+            lock (_lock)
             {
-                if (_handlers.TryGetValue(scheduledEvent.EventType, out var handler))
+                foreach (var e in _events.Values)
                 {
-                    await handler.HandleEventAsync(scheduledEvent, currentGameTime, day);
-                    
+                    if (e.IsTriggered || (e.ScheduledGameTime > currentGameTime && e.ScheduledGameTime != 0.0))
+                        continue;
+                    if (_handlers.TryGetValue(e.EventType, out var handler))
+                        due.Add((e, handler));
+                }
+            }
+
+            foreach (var (scheduledEvent, handler) in due)
+            {
+                await handler.HandleEventAsync(scheduledEvent, currentGameTime, day);
+
+                lock (_lock)
+                {
                     if (scheduledEvent.IsRecurring && scheduledEvent.RecurIntervalHours.HasValue)
                     {
                         // Reschedule for next occurrence
@@ -134,17 +162,18 @@ namespace Aetherium.Server.Events
 
         public Task<bool> CancelEventAsync(string eventId)
         {
-            if (_events.TryGetValue(eventId, out var scheduledEvent))
+            lock (_lock)
             {
-                _events.Remove(eventId);
-                return Task.FromResult(true);
+                return Task.FromResult(_events.Remove(eventId));
             }
-            return Task.FromResult(false);
         }
 
         public Task<List<ScheduledEvent>> GetScheduledEventsAsync()
         {
-            return Task.FromResult(_events.Values.Where(e => !e.IsTriggered).ToList());
+            lock (_lock)
+            {
+                return Task.FromResult(_events.Values.Where(e => !e.IsTriggered).ToList());
+            }
         }
     }
 

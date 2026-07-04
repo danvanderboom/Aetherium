@@ -8,19 +8,27 @@ namespace Aetherium.Server.Simulation
     /// Manages game time with configurable tick rate and day length.
     /// Provides time-of-day calculations and conversion between real time and game time.
     /// </summary>
+    /// <remarks>
+    /// Registered as a process-wide singleton and driven concurrently by many region/world
+    /// tick activations, so all mutable-state access is guarded by <see cref="_lock"/>.
+    /// </remarks>
     public class WorldClock
     {
         private readonly SimulationOptions _options;
+        private readonly object _lock = new();
         private DateTime _worldStartTime;
-        private double _accumulatedGameTime; // Game time in hours
-        private DateTime _lastTick;
+        private double _accumulatedGameTime;      // Game time in hours (authoritative)
+        private double _accumulatedAtLastTick;    // Snapshot at the previous Tick(), for delta computation
+        private DateTime _lastRealTime;           // Wall-clock anchor for lazy accumulation
 
         public WorldClock(IOptions<SimulationOptions> options)
         {
             _options = options.Value;
-            _worldStartTime = DateTime.UtcNow;
-            _lastTick = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            _worldStartTime = now;
+            _lastRealTime = now;
             _accumulatedGameTime = 0.0;
+            _accumulatedAtLastTick = 0.0;
         }
 
         /// <summary>
@@ -28,8 +36,11 @@ namespace Aetherium.Server.Simulation
         /// </summary>
         public double GetTimeOfDay()
         {
-            UpdateAccumulatedTime();
-            return _accumulatedGameTime % 24.0;
+            lock (_lock)
+            {
+                AdvanceLocked();
+                return _accumulatedGameTime % 24.0;
+            }
         }
 
         /// <summary>
@@ -37,8 +48,11 @@ namespace Aetherium.Server.Simulation
         /// </summary>
         public int GetDay()
         {
-            UpdateAccumulatedTime();
-            return (int)(_accumulatedGameTime / 24.0);
+            lock (_lock)
+            {
+                AdvanceLocked();
+                return (int)(_accumulatedGameTime / 24.0);
+            }
         }
 
         /// <summary>
@@ -46,28 +60,27 @@ namespace Aetherium.Server.Simulation
         /// </summary>
         public double GetTotalGameTimeHours()
         {
-            UpdateAccumulatedTime();
-            return _accumulatedGameTime;
+            lock (_lock)
+            {
+                AdvanceLocked();
+                return _accumulatedGameTime;
+            }
         }
 
         /// <summary>
         /// Advances the clock by one tick (simulation step).
-        /// Returns the elapsed game time for this tick.
+        /// Returns the elapsed game time since the previous <see cref="Tick"/> call — independent
+        /// of any interleaved reads that also advance accumulated time.
         /// </summary>
         public TimeSpan Tick()
         {
-            var now = DateTime.UtcNow;
-            var realTimeElapsed = now - _lastTick;
-            _lastTick = now;
-
-            // Convert real time to game time
-            // Real time elapsed in seconds / (day length in minutes * 60) = fraction of day
-            // Multiply by 24 hours to get game hours elapsed
-            var gameTimeElapsedHours = (realTimeElapsed.TotalSeconds / (_options.DayLengthMinutes * 60.0)) * 24.0;
-            _accumulatedGameTime += gameTimeElapsedHours;
-
-            // Return elapsed game time for this tick
-            return TimeSpan.FromHours(gameTimeElapsedHours);
+            lock (_lock)
+            {
+                AdvanceLocked();
+                var gameTimeElapsedHours = _accumulatedGameTime - _accumulatedAtLastTick;
+                _accumulatedAtLastTick = _accumulatedGameTime;
+                return TimeSpan.FromHours(gameTimeElapsedHours);
+            }
         }
 
         /// <summary>
@@ -75,15 +88,21 @@ namespace Aetherium.Server.Simulation
         /// </summary>
         public TimeSpan GetTimeUntilNextHour()
         {
-            var timeOfDay = GetTimeOfDay();
+            double timeOfDay;
+            lock (_lock)
+            {
+                AdvanceLocked();
+                timeOfDay = _accumulatedGameTime % 24.0;
+            }
+
             var hoursUntilNext = 1.0 - (timeOfDay % 1.0);
             var gameTimeUntilNext = TimeSpan.FromHours(hoursUntilNext);
-            
+
             // Convert game time to real time
             var realTimeUntilNext = TimeSpan.FromSeconds(
                 gameTimeUntilNext.TotalHours * (_options.DayLengthMinutes * 60.0) / 24.0
             );
-            
+
             return realTimeUntilNext;
         }
 
@@ -92,25 +111,33 @@ namespace Aetherium.Server.Simulation
         /// </summary>
         public void SetWorldTime(double gameTimeHours)
         {
-            _accumulatedGameTime = gameTimeHours;
-            _worldStartTime = DateTime.UtcNow;
-            _lastTick = DateTime.UtcNow;
-        }
-
-        private void UpdateAccumulatedTime()
-        {
-            var now = DateTime.UtcNow;
-            if (now > _lastTick)
+            lock (_lock)
             {
-                var realTimeElapsed = now - _lastTick;
-                var gameTimeElapsedHours = (realTimeElapsed.TotalSeconds / (_options.DayLengthMinutes * 60.0)) * 24.0;
-                _accumulatedGameTime += gameTimeElapsedHours;
-                _lastTick = now;
+                _accumulatedGameTime = gameTimeHours;
+                _accumulatedAtLastTick = gameTimeHours;
+                _worldStartTime = DateTime.UtcNow;
+                _lastRealTime = DateTime.UtcNow;
             }
         }
 
         /// <summary>
-        /// Converts real time duration to game time duration.
+        /// Advances <see cref="_accumulatedGameTime"/> by the game time corresponding to the real
+        /// time elapsed since the last update. Must be called while holding <see cref="_lock"/>.
+        /// </summary>
+        private void AdvanceLocked()
+        {
+            var now = DateTime.UtcNow;
+            if (now > _lastRealTime)
+            {
+                var realTimeElapsed = now - _lastRealTime;
+                var gameTimeElapsedHours = (realTimeElapsed.TotalSeconds / (_options.DayLengthMinutes * 60.0)) * 24.0;
+                _accumulatedGameTime += gameTimeElapsedHours;
+                _lastRealTime = now;
+            }
+        }
+
+        /// <summary>
+        /// Converts real time duration to game time duration. (Stateless — no lock required.)
         /// </summary>
         public TimeSpan RealTimeToGameTime(TimeSpan realTime)
         {
@@ -119,7 +146,7 @@ namespace Aetherium.Server.Simulation
         }
 
         /// <summary>
-        /// Converts game time duration to real time duration.
+        /// Converts game time duration to real time duration. (Stateless — no lock required.)
         /// </summary>
         public TimeSpan GameTimeToRealTime(TimeSpan gameTime)
         {
@@ -128,4 +155,3 @@ namespace Aetherium.Server.Simulation
         }
     }
 }
-

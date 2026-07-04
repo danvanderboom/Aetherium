@@ -9,11 +9,16 @@ namespace Aetherium.Server.Simulation
     /// Manages weather patterns that change over time.
     /// Weather affects spawns, visibility, and other game mechanics.
     /// </summary>
+    /// <remarks>
+    /// Registered as a process-wide singleton and updated concurrently by many region ticks,
+    /// so <see cref="_regionWeather"/> access is guarded by <see cref="_lock"/> and randomness
+    /// comes from the thread-safe <see cref="Random.Shared"/>.
+    /// </remarks>
     public class WeatherSystem
     {
         private readonly SimulationOptions _options;
         private readonly Dictionary<string, WeatherState> _regionWeather = new();
-        private readonly Random _random = new();
+        private readonly object _lock = new();
 
         public WeatherSystem(IOptions<SimulationOptions> options)
         {
@@ -25,11 +30,14 @@ namespace Aetherium.Server.Simulation
         /// </summary>
         public WeatherType GetWeather(string regionId)
         {
-            if (_regionWeather.TryGetValue(regionId, out var state))
+            lock (_lock)
             {
-                return state.CurrentWeather;
+                if (_regionWeather.TryGetValue(regionId, out var state))
+                {
+                    return state.CurrentWeather;
+                }
             }
-            
+
             // Default weather
             return WeatherType.Clear;
         }
@@ -42,35 +50,39 @@ namespace Aetherium.Server.Simulation
             if (!_options.EnableWeather)
                 return;
 
-            if (!_regionWeather.TryGetValue(regionId, out var state))
+            lock (_lock)
             {
-                state = new WeatherState
+                if (!_regionWeather.TryGetValue(regionId, out var state))
                 {
-                    RegionId = regionId,
-                    CurrentWeather = WeatherType.Clear,
-                    LastChangeTime = timeOfDay,
-                    Season = season ?? "spring"
-                };
-                _regionWeather[regionId] = state;
-            }
+                    state = new WeatherState
+                    {
+                        RegionId = regionId,
+                        CurrentWeather = WeatherType.Clear,
+                        LastChangeTime = timeOfDay,
+                        Season = season ?? "spring"
+                    };
+                    _regionWeather[regionId] = state;
+                }
 
-            // Weather changes can occur hourly or based on season
-            var hoursSinceChange = timeOfDay - state.LastChangeTime;
-            if (hoursSinceChange < 0) hoursSinceChange += 24.0; // Handle day wrap
+                // Game hours elapsed since this region's last weather change.
+                var hoursSinceChange = timeOfDay - state.LastChangeTime;
+                if (hoursSinceChange < 0) hoursSinceChange += 24.0; // Handle day wrap
 
-            // Determine weather transition probability based on season and current weather
-            var transitionChance = GetWeatherTransitionChance(state, season, timeOfDay);
-            
-            if (_random.NextDouble() < transitionChance)
-            {
-                state.CurrentWeather = GetNextWeather(state.CurrentWeather, season, timeOfDay);
-                state.LastChangeTime = timeOfDay;
+                // Transition probability scales with elapsed game time, so cadence follows
+                // game time rather than the number of update calls.
+                var transitionChance = GetWeatherTransitionChance(state, season, timeOfDay, hoursSinceChange);
+
+                if (Random.Shared.NextDouble() < transitionChance)
+                {
+                    state.CurrentWeather = GetNextWeather(state.CurrentWeather, season, timeOfDay);
+                    state.LastChangeTime = timeOfDay;
+                }
             }
         }
 
-        private double GetWeatherTransitionChance(WeatherState state, string? season, double timeOfDay)
+        private double GetWeatherTransitionChance(WeatherState state, string? season, double timeOfDay, double hoursSinceChange)
         {
-            // Base transition chance: 10% per hour
+            // Base transition chance: 10% per game hour
             var baseChance = 0.1;
 
             // Season modifiers
@@ -88,7 +100,11 @@ namespace Aetherium.Server.Simulation
                 ? 1.5  // Higher chance at dawn/dusk
                 : 1.0;
 
-            return baseChance * seasonModifier * timeModifier;
+            // Scale by elapsed game hours so a region ticked many times within a short span of
+            // game time isn't more likely to change than one ticked once over the same span.
+            // Clamp to a valid probability (a long gap shouldn't force a guaranteed change).
+            var perHourChance = baseChance * seasonModifier * timeModifier;
+            return Math.Clamp(perHourChance * hoursSinceChange, 0.0, 1.0);
         }
 
         private WeatherType GetNextWeather(WeatherType current, string? season, double timeOfDay)
@@ -98,7 +114,7 @@ namespace Aetherium.Server.Simulation
             
             // Random selection based on weights
             var totalWeight = transitions.Sum(t => t.Weight);
-            var roll = _random.NextDouble() * totalWeight;
+            var roll = Random.Shared.NextDouble() * totalWeight;
             
             var cumulative = 0.0;
             foreach (var transition in transitions)
@@ -151,18 +167,21 @@ namespace Aetherium.Server.Simulation
         /// </summary>
         public void SetWeather(string regionId, WeatherType weather)
         {
-            if (_regionWeather.TryGetValue(regionId, out var state))
+            lock (_lock)
             {
-                state.CurrentWeather = weather;
-            }
-            else
-            {
-                _regionWeather[regionId] = new WeatherState
+                if (_regionWeather.TryGetValue(regionId, out var state))
                 {
-                    RegionId = regionId,
-                    CurrentWeather = weather,
-                    LastChangeTime = 0.0
-                };
+                    state.CurrentWeather = weather;
+                }
+                else
+                {
+                    _regionWeather[regionId] = new WeatherState
+                    {
+                        RegionId = regionId,
+                        CurrentWeather = weather,
+                        LastChangeTime = 0.0
+                    };
+                }
             }
         }
     }
