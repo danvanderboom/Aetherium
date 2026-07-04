@@ -46,6 +46,18 @@ namespace Aetherium.Server.Narrative.State
         Task<bool> CanStartQuestAsync(string questId);
 
         /// <summary>
+        /// Activates a quest: if its prerequisites are met and it is neither active nor completed,
+        /// adds it to the active set and registers its objectives for tracking. Returns true if the
+        /// quest was started, false otherwise (unknown quest, already active/completed, prereqs unmet).
+        /// </summary>
+        Task<bool> StartQuestAsync(string questId);
+
+        /// <summary>
+        /// Gets the set of currently-active quest IDs.
+        /// </summary>
+        Task<HashSet<string>> GetActiveQuestIdsAsync();
+
+        /// <summary>
         /// Updates relationship between two NPCs.
         /// </summary>
         Task UpdateRelationshipAsync(string npc1Id, string npc2Id, float relationshipValue);
