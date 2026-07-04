@@ -35,6 +35,36 @@ namespace Aetherium.Audio
         public float EffectsVolume => effectsVolume;
         public string? CurrentTrack { get; private set; }
 
+        /// <summary>
+        /// The last playback error that muted audio, or null. Recorded instead of writing to the
+        /// console (which this TUI client owns — see <see cref="HandlePlaybackError"/>). For diagnostics/tests.
+        /// </summary>
+        public Exception? LastError { get; private set; }
+
+        /// <summary>
+        /// The reverb preset last requested. Recorded for introspection only — reverb DSP is not
+        /// implemented (see <see cref="SetReverbPreset"/>).
+        /// </summary>
+        public string CurrentReverbPreset => currentReverbPreset;
+
+        /// <summary>
+        /// Absolute directory audio files load from: <see cref="AudioConfig.AssetPath"/> resolved
+        /// against the app base directory when it is relative, so lookups succeed from <c>bin/</c>
+        /// (the config default is cwd-relative, which failed once the client ran from an output dir).
+        /// </summary>
+        public string AssetRoot => Path.IsPathRooted(config.AssetPath)
+            ? config.AssetPath
+            : Path.Combine(AppContext.BaseDirectory, config.AssetPath);
+
+        /// <summary>
+        /// Whether NAudio playback can work on this host. The <see cref="WaveOutEvent"/> backend is
+        /// winmm-based (Windows-only); on any other OS the P/Invoke throws on first play. So callers
+        /// treat non-Windows as unavailable and select <c>NullAudioSystem</c> up front, rather than
+        /// letting every play call throw lazily into the TUI. The rarer Windows-with-no-device case is
+        /// caught later by the silent self-mute in <see cref="HandlePlaybackError"/>. Never throws.
+        /// </summary>
+        public static bool IsOutputAvailable() => OperatingSystem.IsWindows();
+
         public NAudioSystem(AudioConfig config)
         {
             this.config = config ?? new AudioConfig();
@@ -70,7 +100,7 @@ namespace Aetherium.Audio
                 var musicPath = FindAudioFile(trackName, "music", config.MusicExtensions);
                 if (musicPath == null)
                 {
-                    Console.WriteLine($"[Audio] Music track not found: {trackName}");
+                    // Silent: a missing track must not spam the TUI (this client owns the console).
                     return;
                 }
 
@@ -98,8 +128,19 @@ namespace Aetherium.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Audio] Error playing music: {ex.Message}");
+                HandlePlaybackError(ex);
             }
+        }
+
+        /// <summary>
+        /// Mutes audio for the rest of the session after a device/playback failure and records the
+        /// cause in <see cref="LastError"/>. Deliberately does NOT write to the console: this client
+        /// owns the TUI, so error text corrupts the frame (the old behavior on audio-less hosts). See P3-9.
+        /// </summary>
+        private void HandlePlaybackError(Exception ex)
+        {
+            LastError = ex;
+            IsEnabled = false;
         }
 
         public void StopBackgroundMusic()
@@ -163,7 +204,7 @@ namespace Aetherium.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Audio] Error playing sound effect: {ex.Message}");
+                HandlePlaybackError(ex);
             }
         }
 
@@ -218,10 +259,10 @@ namespace Aetherium.Audio
                     var attenuation = CalculateAttenuation(distance, options?.MinDistance ?? 1.0f, options?.MaxDistance ?? 50.0f);
                     volume *= attenuation;
 
-                    // Apply panning (simple left/right based on X offset)
-                    var pan = CalculatePan(listenerState.Position, position);
-                    // NAudio doesn't have built-in panning in WaveOutEvent, so we approximate with volume balance
-                    // For a simple approximation, we can skip this for now
+                    // Stereo panning is intentionally UNSUPPORTED: effects share a single mixed
+                    // WaveOutEvent output, so there is no per-source stereo balance to set. Spatial
+                    // cues are conveyed by distance attenuation (above) and occlusion (below) only.
+                    // (Previously a pan value was computed here and silently discarded.)
                 }
 
                 // Apply occlusion
@@ -270,7 +311,7 @@ namespace Aetherium.Audio
                     ?? FindAudioFile(trackName, "effects", config.EffectExtensions);
                 if (trackPath == null)
                 {
-                    Console.WriteLine($"[Audio] Ambient loop track not found: {trackName}");
+                    // Silent: a missing ambient track must not spam the TUI.
                     return;
                 }
 
@@ -317,7 +358,7 @@ namespace Aetherium.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Audio] Error playing ambient loop: {ex.Message}");
+                HandlePlaybackError(ex);
             }
         }
 
@@ -340,11 +381,15 @@ namespace Aetherium.Audio
             }
         }
 
+        /// <summary>
+        /// Records the requested reverb preset. Reverb DSP is UNSUPPORTED — NAudio's playback path
+        /// here applies no convolution/algorithmic reverb — so this only stores the preset (readable
+        /// via <see cref="CurrentReverbPreset"/>) for introspection and any future implementation.
+        /// Environmental audio is conveyed through occlusion (volume) and distance attenuation instead.
+        /// </summary>
         public void SetReverbPreset(string preset)
         {
             currentReverbPreset = preset ?? "outdoor";
-            // TODO: Implement actual reverb DSP using NAudio effects
-            // For now, this is a stub - volume/low-pass approximation can be added later
         }
 
         public void SetOcclusion(float amount)
@@ -386,19 +431,12 @@ namespace Aetherium.Audio
             return attenuation * (1.0f - t);
         }
 
-        private float CalculatePan(AudioVector3 listenerPos, AudioVector3 sourcePos)
-        {
-            // Simple panning: left/right based on X offset
-            var offsetX = sourcePos.X - listenerPos.X;
-            // Normalize to -1 (left) to 1 (right)
-            return Math.Clamp(offsetX / 10.0f, -1.0f, 1.0f);
-        }
-
         private string? FindAudioFile(string name, string subfolder, string[] extensions)
         {
+            var root = AssetRoot;
             foreach (var ext in extensions)
             {
-                var path = Path.Combine(config.AssetPath, subfolder, name + ext);
+                var path = Path.Combine(root, subfolder, name + ext);
                 if (File.Exists(path))
                     return path;
             }
