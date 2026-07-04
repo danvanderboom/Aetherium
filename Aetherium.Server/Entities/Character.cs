@@ -13,6 +13,10 @@ namespace Aetherium
             // Characters spawn at full health. Previously this was Health(0,0), which left every
             // character "dead" the moment combat could read it; combat (P3-7) now depends on this.
             Set(new Health(100, 100));
+            // Base melee strength. Equals CombatSystem.DefaultAttackDamage so a bare
+            // character hits exactly as hard as the pre-slice-2 fixed damage; a carried
+            // Weapon adds on top of this (P3-7 slice 2).
+            Set(new AttackPower(10));
             Set(new HasHeading());
             Set(new Perception());
             Set(new Memory());

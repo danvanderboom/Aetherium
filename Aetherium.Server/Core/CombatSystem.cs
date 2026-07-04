@@ -17,9 +17,15 @@ namespace Aetherium.Server
         /// <summary>
         /// Resolves an attack by <paramref name="attacker"/> against the entity identified by
         /// <paramref name="targetEntityId"/> in <paramref name="world"/>. On success the target's
-        /// <see cref="Health"/> is reduced; if it reaches zero the target is removed from the world.
+        /// <see cref="Health"/> is reduced; if it reaches zero the target is <em>defeated</em>.
+        /// When <paramref name="removeOnDeath"/> is true (the default) a defeated target is removed
+        /// from the world — the semantics for a player killing a monster. Monster retaliation on the
+        /// tick passes <c>false</c> so a downed player's entity survives at 0 HP rather than vanishing
+        /// mid-tick (which would strand its session and desync map bookkeeping); death/respawn is a
+        /// separate lifecycle concern. <see cref="CombatResult.TargetDefeated"/> reports the 0-HP
+        /// state regardless of removal.
         /// </summary>
-        public CombatResult TryAttack(World world, Entity attacker, string targetEntityId)
+        public CombatResult TryAttack(World world, Entity attacker, string targetEntityId, bool removeOnDeath = true)
         {
             if (world == null || attacker == null)
                 return CombatResult.Fail("No attacker");
@@ -51,16 +57,50 @@ namespace Aetherium.Server
 
             var health = target.Get<Health>();
 
-            int damage = DefaultAttackDamage;
+            int damage = ComputeAttackDamage(attacker);
             health.Level = Math.Max(0, health.Level - damage);
             bool defeated = health.Level <= 0;
 
             var targetType = target.GetType().Name;
 
-            if (defeated)
+            if (defeated && removeOnDeath)
                 world.TryRemoveEntity(targetEntityId);
 
             return CombatResult.Hit(damage, health.Level, defeated, targetType, targetEntityId);
+        }
+
+        /// <summary>
+        /// The damage <paramref name="attacker"/> deals per hit: its base
+        /// <see cref="AttackPower"/> (or <see cref="DefaultAttackDamage"/> when the
+        /// component is absent) plus the single best weapon bonus among carried items.
+        /// Weapon bonuses do not stack — only the strongest <see cref="Weapon"/> in the
+        /// attacker's <see cref="Inventory"/> applies. Guards every component read with
+        /// <c>Has&lt;T&gt;()</c> because <c>Get&lt;T&gt;()</c> throws when a component is missing.
+        /// </summary>
+        public static int ComputeAttackDamage(Entity attacker)
+        {
+            if (attacker is null)
+                return 0;
+
+            int baseDamage = attacker.Has<AttackPower>()
+                ? attacker.Get<AttackPower>().Amount
+                : DefaultAttackDamage;
+
+            int weaponBonus = 0;
+            if (attacker.Has<Inventory>())
+            {
+                foreach (var item in attacker.Get<Inventory>().Items.Values)
+                {
+                    if (item is not null && item.Has<Weapon>())
+                    {
+                        var bonus = item.Get<Weapon>().AttackBonus;
+                        if (bonus > weaponBonus)
+                            weaponBonus = bonus;
+                    }
+                }
+            }
+
+            return Math.Max(0, baseDamage + weaponBonus);
         }
     }
 

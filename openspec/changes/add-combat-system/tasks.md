@@ -22,7 +22,21 @@
 - [x] 5.3 Tool reachability (Player allows `attack`, Explorer denies)
 - [x] 5.4 Full solution build + suite green
 
-## Slice 2 — depth (follow-up, not this pass)
-- [ ] 6.1 Monster retaliation/aggro on the tick
-- [ ] 6.2 Weapon / attack-power components (variable damage)
-- [ ] 6.3 Death loot + combat analytics
+## Slice 2 — depth (this pass)
+
+### 6. Variable damage
+- [x] 6.1 New `AttackPower` component (base per-entity damage) + `Weapon` component (carried-item bonus); `SwordItem` loot weapon
+- [x] 6.2 `CombatSystem.ComputeAttackDamage(attacker)` = base AttackPower (or `DefaultAttackDamage`) + best single carried weapon bonus (no stacking); `Character` AttackPower(10), `Monster` AttackPower(6)
+
+### 7. Monster retaliation/aggro
+- [x] 7.1 `CombatSystem.TryAttack` gains `removeOnDeath` (default true); retaliation passes false so a downed player survives at 0 HP
+- [x] 7.2 `GameMapGrain.StepNpcsAsync`: a monster within reach of a joined player attacks (and stays put) instead of wandering; health delta fanned out
+
+### 8. Death loot + analytics
+- [x] 8.1 `AttackAsync` drops a `SwordItem` at a slain monster's cell (`EntityPlacedDelta`); loot id/type returned in `AttackResultDto`
+- [x] 8.2 `MapState.MonstersDefeated` / `TotalDamageDealt` counters; `IGameMapGrain.GetCombatStatsAsync` + `CombatStatsDto`; `aetherctl combat stats <mapId>`
+
+### 9. Tests
+- [x] 9.1 `CombatSystem` variable-damage (default/AttackPower/best-weapon/no-stack) + `removeOnDeath:false` downs-but-keeps
+- [x] 9.2 `GameMapGrain` retaliation (adjacent monster damages player on tick, stays put, player not removed) + kill drops loot + stats accrue
+- [x] 9.3 Full solution build + suite green

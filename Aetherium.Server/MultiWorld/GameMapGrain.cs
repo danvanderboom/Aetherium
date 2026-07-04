@@ -823,14 +823,43 @@ namespace Aetherium.Server.MultiWorld
             if (monsters.Count == 0)
                 return;
 
-            // Phase 1 (synchronous): mutate the world, collecting the moves that
-            // actually landed. No awaits here, so the sweep is atomic w.r.t. any
+            // Snapshot the player characters too — retaliation targets them. Players are
+            // exactly the entities whose EntityId is a joined playerId (monsters are never
+            // in PlayerIds), so this is unambiguous even though Monster : Character.
+            var players = new List<Character>();
+            if (_mapState.State is not null)
+            {
+                foreach (var playerId in _mapState.State.PlayerIds)
+                {
+                    if (_world.Entities.TryGetValue(playerId, out var pe)
+                        && pe is Character pc
+                        && pc.Has<Aetherium.Components.WorldLocation>())
+                        players.Add(pc);
+                }
+            }
+
+            // Phase 1 (synchronous): mutate the world, collecting the moves and combat
+            // hits that landed. No awaits here, so the sweep is atomic w.r.t. any
             // reentrant player turn.
             var moves = new List<EntityMovedDelta>();
+            var combatDeltas = new List<MapDelta>();
             foreach (var monster in monsters)
             {
                 var loc = monster.Get<Aetherium.Components.WorldLocation>();
                 if (loc is null) continue;
+
+                // Aggro/retaliation: if a player stands within reach, the monster attacks
+                // instead of wandering. Damage is applied but the player is NOT removed on
+                // a lethal hit (removeOnDeath: false) — a downed player's entity survives at
+                // 0 HP so its session and the map's spawn bookkeeping stay consistent.
+                var victim = FindAdjacentPlayer(loc, players);
+                if (victim is not null)
+                {
+                    var atk = _combatSystem.TryAttack(_world, monster, victim.EntityId, removeOnDeath: false);
+                    if (atk.Success)
+                        combatDeltas.Add(IntFieldDelta(victim.EntityId, "Health", "Level", atk.RemainingHealth));
+                    continue; // a monster that attacks does not also move this tick
+                }
 
                 var direction = monster.NextWanderDirection();
                 if (direction is null) continue; // boxed in on all sides
@@ -854,6 +883,25 @@ namespace Aetherium.Server.MultiWorld
             // session's mirror and pushes a fresh FOV-filtered perception.
             foreach (var move in moves)
                 await FanOutAsync(move);
+            foreach (var delta in combatDeltas)
+                await FanOutAsync(delta);
+        }
+
+        /// <summary>
+        /// The first joined player within melee reach (Manhattan distance ≤ 1, matching
+        /// <see cref="CombatSystem"/>) of <paramref name="from"/>, or null if none is adjacent.
+        /// </summary>
+        private static Character? FindAdjacentPlayer(Aetherium.Components.WorldLocation from, List<Character> players)
+        {
+            foreach (var player in players)
+            {
+                var ploc = player.Get<Aetherium.Components.WorldLocation>();
+                if (ploc is null) continue;
+                var distance = Math.Abs(ploc.X - from.X) + Math.Abs(ploc.Y - from.Y) + Math.Abs(ploc.Z - from.Z);
+                if (distance <= 1)
+                    return player;
+            }
+            return null;
         }
 
         /// <summary>
@@ -1378,10 +1426,13 @@ namespace Aetherium.Server.MultiWorld
             if (ctx is null)
                 return Aetherium.Model.AttackResultDto.Fail("Map not initialized or player not on map");
 
-            // Capture the target's location BEFORE resolving — a lethal hit removes it from _world.
+            // Capture the target's location and kind BEFORE resolving — a lethal hit removes it
+            // from _world, and only slain monsters drop loot.
             int lx = 0, ly = 0, lz = 0;
+            bool targetWasMonster = false;
             if (_world!.Entities.TryGetValue(targetEntityId, out var preTarget))
             {
+                targetWasMonster = preTarget is Aetherium.Monster;
                 var tl = preTarget.Get<Aetherium.Components.WorldLocation>();
                 if (tl is not null) { lx = tl.X; ly = tl.Y; lz = tl.Z; }
             }
@@ -1389,6 +1440,25 @@ namespace Aetherium.Server.MultiWorld
             var result = _combatSystem.TryAttack(_world!, ctx.Player, targetEntityId);
             if (!result.Success)
                 return new Aetherium.Model.AttackResultDto { Success = false, Reason = result.Reason };
+
+            // Combat analytics (persisted with the map): total damage, and kills on defeat.
+            _mapState.State.TotalDamageDealt += result.Damage;
+            if (result.TargetDefeated && targetWasMonster)
+                _mapState.State.MonstersDefeated++;
+
+            // Death loot: a slain monster drops a weapon where it fell, so the kill loop
+            // pays off (kill → pick up sword → hit harder). Deterministic (always drops)
+            // so it stays testable. Spawn into canonical _world before persisting.
+            string? lootId = null;
+            string? lootType = null;
+            if (result.TargetDefeated && targetWasMonster)
+            {
+                var loot = new Aetherium.Entities.SwordItem();
+                loot.Set(new Aetherium.Components.WorldLocation(lx, ly, lz));
+                _world!.AddEntity(loot);
+                lootId = loot.EntityId;
+                lootType = nameof(Aetherium.Entities.SwordItem);
+            }
 
             await _mapState.WriteStateAsync();
 
@@ -1400,6 +1470,13 @@ namespace Aetherium.Server.MultiWorld
                     EntityId = targetEntityId,
                     LastX = lx, LastY = ly, LastZ = lz,
                 });
+
+                if (lootId is not null)
+                {
+                    var placement = EntityPlacement.FromLocation(lootId, lootType!,
+                        new Aetherium.Components.WorldLocation(lx, ly, lz));
+                    await FanOutAsync(new EntityPlacedDelta { Placement = placement });
+                }
             }
             else
             {
@@ -1414,7 +1491,19 @@ namespace Aetherium.Server.MultiWorld
                 TargetDefeated = result.TargetDefeated,
                 TargetType = result.TargetType,
                 TargetEntityId = targetEntityId,
+                DroppedLootEntityId = lootId,
+                DroppedLootType = lootType,
             };
+        }
+
+        public Task<Aetherium.Model.CombatStatsDto> GetCombatStatsAsync()
+        {
+            var state = _mapState.State;
+            return Task.FromResult(new Aetherium.Model.CombatStatsDto
+            {
+                MonstersDefeated = state?.MonstersDefeated ?? 0,
+                TotalDamageDealt = state?.TotalDamageDealt ?? 0,
+            });
         }
 
         public async Task<Aetherium.Model.InteractionResultDto> OpenAsync(string sessionId, string targetEntityId)
@@ -1750,6 +1839,12 @@ namespace Aetherium.Server.MultiWorld
         /// deterministic snapshots and rehydrate <c>_world</c> on reactivation.
         /// </summary>
         [Id(8)] public WorldRecipe? Recipe { get; set; }
+
+        /// <summary>Rolling combat analytics (P3-7 slice 2): monsters defeated on this map.</summary>
+        [Id(9)] public int MonstersDefeated { get; set; }
+
+        /// <summary>Rolling combat analytics: total damage players have dealt on this map.</summary>
+        [Id(10)] public long TotalDamageDealt { get; set; }
     }
 }
 

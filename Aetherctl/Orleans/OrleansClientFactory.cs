@@ -93,6 +93,12 @@ namespace Aetherctl.Orleans
             return _client!.GetGrain<IPartyGrain>(partyId);
         }
 
+        public IGameMapGrain GetGameMap(string mapId)
+        {
+            EnsureConnected();
+            return _client!.GetGrain<IGameMapGrain>(mapId);
+        }
+
         private void EnsureConnected()
         {
             if (_client == null)
