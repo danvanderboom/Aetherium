@@ -13,6 +13,11 @@ using Aetherium.Server.MultiWorld;
 using Aetherium.Server.Narrative;
 using Aetherium.Server.Narrative.Consequence;
 using Aetherium.Server.Narrative.State;
+using Aetherium.Server.Instances;
+using Aetherium.Server.Groups;
+using Aetherium.Model.Instances;
+using Aetherium.Model.Groups;
+using Aetherium.Model.Worlds;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
@@ -852,6 +857,181 @@ namespace Aetherium.Server
             }
             return 1;
         }
+
+        // ============================================================
+        // Instance / Party Surface (P3-4)
+        // ============================================================
+
+        /// <summary>
+        /// Enters a dungeon instance for the caller's current world. If a party id is supplied, the
+        /// whole party enters together (its members become the instance's players); otherwise the
+        /// caller enters solo. Returns the allocated/reused instance and its map, or an error.
+        /// </summary>
+        public async Task<EnterDungeonResultDto> EnterDungeon(string dungeonId, string? partyId = null)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(dungeonId))
+                    return new EnterDungeonResultDto { Success = false, Error = "dungeonId required" };
+
+                var session = sessionManager.GetSession(Context.ConnectionId);
+                if (session == null || clusterClient == null || string.IsNullOrEmpty(session.WorldId))
+                    return new EnterDungeonResultDto { Success = false, Error = "No world context" };
+
+                // Resolve the players entering: the whole party when one is given, else the caller.
+                List<PlayerId> playerIds;
+                PartyId? partyIdValue = null;
+                if (!string.IsNullOrWhiteSpace(partyId))
+                {
+                    partyIdValue = new PartyId(partyId!);
+                    var party = clusterClient.GetGrain<IPartyGrain>(partyId!);
+                    playerIds = await party.GetMemberIdsAsync();
+                    if (playerIds.Count == 0)
+                        return new EnterDungeonResultDto { Success = false, Error = "Party has no members" };
+                }
+                else
+                {
+                    playerIds = new List<PlayerId> { new PlayerId(session.SessionId) };
+                }
+
+                var allocator = clusterClient.GetGrain<IInstanceAllocatorGrain>(session.WorldId);
+                var result = await allocator.EnterAsync(new EnterInstanceRequest
+                {
+                    WorldId = new WorldId(session.WorldId),
+                    DungeonId = new DungeonId(dungeonId),
+                    PartyId = partyIdValue,
+                    PlayerIds = playerIds
+                });
+
+                if (!result.Success || !result.InstanceId.HasValue)
+                    return new EnterDungeonResultDto { Success = false, Error = result.ErrorMessage ?? "Enter failed" };
+
+                var instanceGrain = clusterClient.GetGrain<IDungeonInstanceGrain>(result.InstanceId.Value.Value);
+                var mapId = await instanceGrain.GetMapIdAsync();
+
+                return new EnterDungeonResultDto
+                {
+                    Success = true,
+                    InstanceId = result.InstanceId.Value.Value,
+                    MapId = mapId
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] EnterDungeon('{dungeonId}') threw: {ex.Message}");
+                return new EnterDungeonResultDto { Success = false, Error = "Enter failed" };
+            }
+        }
+
+        /// <summary>
+        /// Creates a new party led by the caller and returns its id.
+        /// </summary>
+        public async Task<string?> CreateParty()
+        {
+            try
+            {
+                if (clusterClient == null)
+                    return null;
+
+                var session = sessionManager.GetSession(Context.ConnectionId);
+                if (session == null)
+                    return null;
+
+                var partyId = $"party-{Guid.NewGuid():N}";
+                var party = clusterClient.GetGrain<IPartyGrain>(partyId);
+                await party.CreateAsync(new PlayerId(session.SessionId), session.SessionId);
+                return partyId;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] CreateParty threw: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Adds the caller to an existing party.
+        /// </summary>
+        public async Task<bool> JoinParty(string partyId)
+        {
+            try
+            {
+                if (clusterClient == null || string.IsNullOrWhiteSpace(partyId))
+                    return false;
+
+                var session = sessionManager.GetSession(Context.ConnectionId);
+                if (session == null)
+                    return false;
+
+                var party = clusterClient.GetGrain<IPartyGrain>(partyId);
+                return await party.AddMemberAsync(new PlayerId(session.SessionId), session.SessionId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] JoinParty('{partyId}') threw: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Removes the caller from a party.
+        /// </summary>
+        public async Task<bool> LeaveParty(string partyId)
+        {
+            try
+            {
+                if (clusterClient == null || string.IsNullOrWhiteSpace(partyId))
+                    return false;
+
+                var session = sessionManager.GetSession(Context.ConnectionId);
+                if (session == null)
+                    return false;
+
+                var party = clusterClient.GetGrain<IPartyGrain>(partyId);
+                await party.RemoveMemberAsync(new PlayerId(session.SessionId));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] LeaveParty('{partyId}') threw: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Gets a party's current membership, or null if it doesn't exist.
+        /// </summary>
+        public async Task<PartyInfoDto?> GetParty(string partyId)
+        {
+            try
+            {
+                if (clusterClient == null || string.IsNullOrWhiteSpace(partyId))
+                    return null;
+
+                var party = clusterClient.GetGrain<IPartyGrain>(partyId);
+                var info = await party.GetInfoAsync();
+                return info == null ? null : ToPartyDto(info);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameHub] GetParty('{partyId}') threw: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static PartyInfoDto ToPartyDto(PartyInfo info) => new()
+        {
+            PartyId = info.PartyId.Value,
+            Name = info.Name,
+            MaxMembers = info.MaxMembers,
+            Members = info.Members.Select(m => new PartyMemberDto
+            {
+                PlayerId = m.PlayerId.Value,
+                Name = m.Name,
+                Role = m.Role.ToString(),
+                IsOnline = m.IsOnline
+            }).ToList()
+        };
     }
 }
 

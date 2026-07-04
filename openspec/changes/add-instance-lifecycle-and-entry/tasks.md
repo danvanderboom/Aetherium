@@ -21,7 +21,12 @@
 - [x] 4.4 Lockout records once per distinct instance; reuse does not double-extend
 - [x] 4.5 Full solution build + suite green
 
-## Slice 2 — entry surface (follow-up, not this pass)
-- [ ] 5.1 `GameHub.EnterDungeon` + party ops (create/join/leave/get) resolving grains from the session
-- [ ] 5.2 Agent tool + `aetherctl instance|party` command
-- [ ] 5.3 End-to-end test: form party → enter dungeon → leave → sweep
+## Slice 2 — entry surface (this pass)
+- [x] 5.1 `GameHub.EnterDungeon(dungeonId, partyId?)` + party ops (`CreateParty`/`JoinParty`/`LeaveParty`/`GetParty`) resolving the allocator/party grains from the session; new `EnterDungeonResultDto`/`PartyInfoDto`/`PartyMemberDto`.
+- [x] 5.2 Player-profile agent tools `enter_dungeon` + `create_party` (category `instance`; add `instance` to the Player profile); `aetherctl instance enter|sweep` and `party create|add|show` commands + factory grain accessors.
+- [x] 5.3 End-to-end test: form party → enter dungeon (allocate) → re-enter (reuse same instance); solo enter → leave → sweep frees the map; leader-leaving reassigns leadership. Plus tool-reachability (Player allows, Explorer denies).
+- [x] 5.4 Full solution build + suite green.
+
+## Deferred (future)
+- `EnterDungeon` returns the instance + map id but does not yet rebind the caller's session to the instance map (full teleport like `JoinWorld` does). The client can `JoinWorld` the returned map; a one-call teleport is a follow-up.
+- Raid stack (`RaidGrain`) has no entry surface yet; parties are the covered group type.
