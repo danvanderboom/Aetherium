@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 using Orleans;
 
 namespace Aetherium.Server.Agents

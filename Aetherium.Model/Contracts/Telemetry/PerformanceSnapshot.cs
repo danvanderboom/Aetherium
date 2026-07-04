@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Orleans;
 
-namespace Aetherium.Server.Agents.Telemetry
+namespace Aetherium.Model.Telemetry
 {
     /// <summary>
     /// Timestamped performance metrics captured at each agent step.

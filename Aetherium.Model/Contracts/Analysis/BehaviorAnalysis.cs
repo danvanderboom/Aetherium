@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using Orleans;
 
-namespace Aetherium.Server.Agents.Analysis
+namespace Aetherium.Model.Analysis
 {
-    // NOTE: These shared behavior-analysis DTOs live in Aetherium.Model (namespace retained) so
+    // NOTE: These shared behavior-analysis DTOs live in Aetherium.Model so
     // clients such as Aetherium.Dashboard can deserialize them without referencing Aetherium.Server.
     // The producing logic (BehaviorAnalyzer) stays in Aetherium.Server. See
     // openspec/changes/move-contracts-to-model.

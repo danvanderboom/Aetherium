@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Aetherium.Server.Agents.Analysis;
+using Aetherium.Model.Analysis;
 
 namespace Aetherium.Server.WorldGen.Adaptation
 {

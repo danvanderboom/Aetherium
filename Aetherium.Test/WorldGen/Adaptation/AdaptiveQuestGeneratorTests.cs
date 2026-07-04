@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using Aetherium.Server.Agents.Analysis;
+using Aetherium.Model.Analysis;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Aetherium.Server.WorldGen.Adaptation;
 
 namespace Aetherium.Test.WorldGen.Adaptation

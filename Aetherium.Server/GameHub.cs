@@ -11,6 +11,7 @@ using Aetherium.Server.Agents.Tools;
 using Aetherium.Server.Management;
 using Aetherium.Server.MultiWorld;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Aetherium.Server.Narrative.Consequence;
 using Aetherium.Server.Narrative.State;
 using Aetherium.Server.Instances;
@@ -808,7 +809,7 @@ namespace Aetherium.Server
         /// per-objective completion and progress from narrative state when provided.
         /// </summary>
         private static QuestSummaryDto ToSummaryDto(
-            Aetherium.Server.Narrative.QuestDefinition quest, bool isActive, bool isCompleted, NarrativeState? state)
+            Aetherium.Model.Narrative.QuestDefinition quest, bool isActive, bool isCompleted, NarrativeState? state)
         {
             var dto = new QuestSummaryDto
             {
@@ -824,7 +825,7 @@ namespace Aetherium.Server
             state?.CompletedObjectives.TryGetValue(quest.QuestId, out completedObjectives);
             state?.ObjectiveProgress.TryGetValue(quest.QuestId, out progress);
 
-            foreach (var objective in quest.Objectives ?? new List<Aetherium.Server.Narrative.QuestObjective>())
+            foreach (var objective in quest.Objectives ?? new List<Aetherium.Model.Narrative.QuestObjective>())
             {
                 int required = QuestObjectiveRequiredCount(objective);
                 bool done = completedObjectives != null && completedObjectives.Contains(objective.ObjectiveId);
@@ -849,7 +850,7 @@ namespace Aetherium.Server
         /// Mirrors NarrativeStateGrain's required-count parsing for count-based objectives so the
         /// log surfaces the same target the grain enforces. Defaults to 1.
         /// </summary>
-        private static int QuestObjectiveRequiredCount(Aetherium.Server.Narrative.QuestObjective objective)
+        private static int QuestObjectiveRequiredCount(Aetherium.Model.Narrative.QuestObjective objective)
         {
             foreach (var key in new[] { "requiredCount", "count", "requiredQuantity", "quantity" })
             {

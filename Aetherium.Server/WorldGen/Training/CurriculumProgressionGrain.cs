@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 using Orleans;
 
+using Aetherium.Model.Training;
 namespace Aetherium.WorldGen.Training
 {
     /// <summary>

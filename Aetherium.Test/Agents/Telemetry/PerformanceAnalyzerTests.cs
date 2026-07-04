@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 
 namespace Aetherium.Test.Agents.Telemetry
 {

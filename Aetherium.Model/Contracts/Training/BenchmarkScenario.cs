@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace Aetherium.WorldGen.Training
+namespace Aetherium.Model.Training
 {
     /// <summary>
     /// Defines a benchmark scenario for evaluating agent performance.

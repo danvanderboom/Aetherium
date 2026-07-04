@@ -11,12 +11,13 @@ using Aetherium.Core;
 using Aetherium.WorldGen;
 using Aetherium.WorldGen.Passes;
 using Aetherium.WorldGen.Training;
+using Aetherium.Model.Training;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using WorldGenCLI.Api;
 using WorldGenCLI.Services;
 using WorldGenCLI.Rendering;
-using WorldGenCLI.Models;
+using Aetherium.Model.Pcg;
 using SkiaSharp;
 
 namespace Aetherctl.Commands

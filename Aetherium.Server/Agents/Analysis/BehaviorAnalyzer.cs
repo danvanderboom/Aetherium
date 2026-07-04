@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Orleans;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 
+using Aetherium.Model.Analysis;
 namespace Aetherium.Server.Agents.Analysis
 {
     /// <summary>

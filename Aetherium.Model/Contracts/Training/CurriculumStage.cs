@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Orleans;
 using System.Text.Json.Serialization;
 
-namespace Aetherium.WorldGen.Training
+namespace Aetherium.Model.Training
 {
     /// <summary>
     /// Represents a single stage in a training curriculum with specific difficulty parameters.

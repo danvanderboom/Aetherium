@@ -1,7 +1,6 @@
 using System.Collections.Generic;
-using WorldGenCLI.Models;
 
-namespace WorldGenCLI.Models
+namespace Aetherium.Model.Pcg
 {
     /// <summary>
     /// Request for A/B testing multiple candidates.

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Aetherctl.Orleans;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 
 namespace Aetherctl.Commands
 {

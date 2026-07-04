@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.SignalR;
 using Moq;
 using Aetherium.Server.Agents;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 using Aetherium.Server.Hubs;
 
 namespace Aetherium.Test.Agents

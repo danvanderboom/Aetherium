@@ -1,8 +1,6 @@
 using System.Collections.Generic;
-using Aetherium.WorldGen;
-using WorldGenCLI.Models;
 
-namespace WorldGenCLI.Models
+namespace Aetherium.Model.Pcg
 {
     /// <summary>
     /// Simplified request for API generation endpoint.

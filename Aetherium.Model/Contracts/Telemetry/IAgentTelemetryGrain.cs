@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
 
-namespace Aetherium.Server.Agents.Telemetry
+namespace Aetherium.Model.Telemetry
 {
     /// <summary>
     /// Orleans grain for storing and retrieving agent performance telemetry.

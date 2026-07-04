@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using Microsoft.AspNetCore.Mvc;
 using Aetherium.WorldGen.Training;
+using Aetherium.Model.Training;
 using System.Text.Json;
 
 namespace Aetherium.Server.Controllers

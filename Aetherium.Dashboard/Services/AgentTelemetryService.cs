@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 using Orleans;
 
 namespace Aetherium.Dashboard

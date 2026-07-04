@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using NUnit.Framework;
 using Aetherium.WorldGen.Training;
+using Aetherium.Model.Training;
 using Aetherium.Server.WorldGen;
 using Aetherium.WorldGen;
 

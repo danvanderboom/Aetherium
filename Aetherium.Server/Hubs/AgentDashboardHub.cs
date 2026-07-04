@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.SignalR;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 
 namespace Aetherium.Server.Hubs
 {

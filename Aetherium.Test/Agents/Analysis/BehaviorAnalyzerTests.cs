@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using Aetherium.Server.Agents.Analysis;
+using Aetherium.Model.Analysis;
 using Aetherium.Server.Agents.Telemetry;
+using Aetherium.Model.Telemetry;
 
 namespace Aetherium.Test.Agents.Analysis
 {

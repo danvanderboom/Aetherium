@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace WorldGenCLI.Models
+namespace Aetherium.Model.Pcg
 {
     /// <summary>
     /// Represents a hand-placed anchor that PCG must respect.

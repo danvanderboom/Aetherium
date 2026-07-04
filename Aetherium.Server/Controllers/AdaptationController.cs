@@ -4,7 +4,9 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Aetherium.Server.Agents.Analysis;
+using Aetherium.Model.Analysis;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Aetherium.Server.WorldGen.Adaptation;
 using Orleans;
 
@@ -64,7 +66,7 @@ namespace Aetherium.Server.Controllers
         /// Gets adaptive quests for an agent.
         /// </summary>
         [HttpGet("quests/{agentId}")]
-        public async Task<ActionResult<List<Narrative.QuestDefinition>>> GetAdaptiveQuests(
+        public async Task<ActionResult<List<QuestDefinition>>> GetAdaptiveQuests(
             string agentId,
             [FromQuery] string? narrativeId = null,
             [FromQuery] int maxQuests = 5)

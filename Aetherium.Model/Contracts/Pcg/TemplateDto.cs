@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
-using WorldGenCLI.Models;
 
-namespace WorldGenCLI.Models
+namespace Aetherium.Model.Pcg
 {
     /// <summary>
     /// Saved PCG template configuration.

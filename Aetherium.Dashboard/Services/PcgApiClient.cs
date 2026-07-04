@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
-using WorldGenCLI.Models;
+using Aetherium.Model.Pcg;
 
 namespace Aetherium.Dashboard.Services
 {

@@ -6,6 +6,7 @@ using NUnit.Framework;
 using Orleans.TestingHost;
 using Orleans.Hosting;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Aetherium.Server.Narrative.State;
 
 namespace Aetherium.Test.Narrative

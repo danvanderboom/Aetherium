@@ -7,6 +7,7 @@ using Orleans.Hosting;
 using Aetherium.Server.Agents;
 using Aetherium.Server.Management;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Aetherium.Server.MultiWorld;
 using Aetherium.Server.Instances;
 using Aetherium.Server.Groups;

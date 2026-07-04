@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Aetherium.WorldGen.Training;
+using Aetherium.Model.Training;
 
 namespace Aetherium.WorldGen
 {

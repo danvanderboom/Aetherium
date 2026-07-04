@@ -6,10 +6,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Aetherium.Server.Narrative.CrossWorld;
 using Aetherium.Server.MultiWorld;
 using Aetherium.Server.MetaProgression;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative.State
 {
     /// <summary>

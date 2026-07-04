@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Orleans;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative
 {
     /// <summary>
@@ -18,7 +19,7 @@ namespace Aetherium.Server.Narrative
         [Id(6)] public List<NPCGoalDefinition> NPCGoals { get; set; } = new List<NPCGoalDefinition>();
     }
 
-    // QuestDefinition and QuestObjective moved to Aetherium.Model (namespace retained) so the
+    // QuestDefinition and QuestObjective moved to Aetherium.Model so the
     // dashboard can consume them without referencing Aetherium.Server. See
     // openspec/changes/move-contracts-to-model.
 

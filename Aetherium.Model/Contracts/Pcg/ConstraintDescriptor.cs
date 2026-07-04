@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace WorldGenCLI.Models
+namespace Aetherium.Model.Pcg
 {
     /// <summary>
     /// Describes generator parameters with metadata for UI generation.

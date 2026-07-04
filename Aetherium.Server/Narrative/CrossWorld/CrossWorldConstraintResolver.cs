@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Aetherium.Server.MultiWorld;
 using Orleans;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative.CrossWorld
 {
     /// <summary>

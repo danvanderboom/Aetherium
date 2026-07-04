@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Aetherium.Server.Agents.Analysis;
+using Aetherium.Model.Analysis;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Orleans;
 
 namespace Aetherium.Server.WorldGen.Adaptation

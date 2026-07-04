@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Aetherium.Server.Narrative;
+using Aetherium.Model.Narrative;
 using Aetherium.Server.Narrative.CrossWorld;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative.Procedural
 {
     /// <summary>

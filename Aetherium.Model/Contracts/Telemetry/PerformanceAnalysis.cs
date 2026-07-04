@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using Orleans;
 
-namespace Aetherium.Server.Agents.Telemetry
+namespace Aetherium.Model.Telemetry
 {
-    // NOTE: This shared contract lives in Aetherium.Model (namespace retained) so clients such as
+    // NOTE: This shared contract lives in Aetherium.Model so clients such as
     // Aetherium.Dashboard can consume it without referencing Aetherium.Server. The producing logic
     // (PerformanceAnalyzer) stays in Aetherium.Server. See openspec/changes/move-contracts-to-model.
 

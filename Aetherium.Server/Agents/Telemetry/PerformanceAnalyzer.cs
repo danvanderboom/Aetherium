@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Orleans;
 
+using Aetherium.Model.Telemetry;
 namespace Aetherium.Server.Agents.Telemetry
 {
     // PerformanceAnalysis and ActionTypeStats (the shared DTOs) now live in Aetherium.Model so

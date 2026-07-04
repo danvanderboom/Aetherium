@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Aetherium.Entities;
 
+using Aetherium.Model.Narrative;
 namespace Aetherium.Server.Narrative.Procedural
 {
     /// <summary>
