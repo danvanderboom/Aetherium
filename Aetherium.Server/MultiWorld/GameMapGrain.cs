@@ -1,5 +1,6 @@
 using Orleans;
 using Orleans.Runtime;
+using Microsoft.Extensions.Logging;
 using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Entities;
@@ -90,6 +91,33 @@ namespace Aetherium.Server.MultiWorld
         private long _deltasSinceLastSnapshot;
         private int _compactionInFlight; // CAS guard so concurrent triggers don't double-fire
 
+        // Persistence-health tracking (P3-8). Delta-append failures are recorded rather than
+        // silently swallowed: on failure we mark persistence "dirty"; on the next successful
+        // append we force a healing snapshot (a full snapshot supersedes deltas that never made
+        // it to the log) and clear the flag. Exposed via GetPersistenceHealthAsync.
+        private long _persistDeltaFailureCount;
+        private string? _lastPersistError;
+        private DateTime? _lastPersistFailureAtUtc;
+        private int _persistenceDirty; // 1 => at least one append failed and hasn't been healed yet
+
+        // Lazily-resolved structured logger. The grain historically wrote persistence errors to
+        // Console (which also corrupts the Spectre TUI); resolve ILogger the same lazy way as the
+        // other services so failures land in real logs.
+        private Microsoft.Extensions.Logging.ILogger? _logger;
+        private bool _loggerResolved;
+
+        private Microsoft.Extensions.Logging.ILogger? GetLogger()
+        {
+            if (!_loggerResolved)
+            {
+                _logger = this.ServiceProvider.GetService(
+                    typeof(Microsoft.Extensions.Logging.ILogger<GameMapGrain>))
+                    as Microsoft.Extensions.Logging.ILogger;
+                _loggerResolved = true;
+            }
+            return _logger;
+        }
+
         private Aetherium.Server.Persistence.IWorldSnapshotStore? GetSnapshotStore()
         {
             if (!_snapshotStoreResolved)
@@ -116,12 +144,38 @@ namespace Aetherium.Server.MultiWorld
             {
                 await store.AppendMapDeltaAsync(_mapState.State.WorldId, _mapState.State.MapId, delta);
                 System.Threading.Interlocked.Increment(ref _deltasSinceLastSnapshot);
+
+                // If a prior append failed, the durable log is missing those deltas. Now that
+                // persistence has recovered, force a full snapshot — it supersedes the lost
+                // deltas — and clear the dirty flag.
+                if (System.Threading.Interlocked.Exchange(ref _persistenceDirty, 0) == 1)
+                    TriggerHealSnapshot();
+
                 MaybeTriggerThresholdCompaction();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[GameMapGrain] AppendMapDelta failed seq={delta.Sequence} type={delta.GetType().Name}: {ex.Message}");
+                System.Threading.Interlocked.Increment(ref _persistDeltaFailureCount);
+                _lastPersistError = ex.Message;
+                _lastPersistFailureAtUtc = DateTime.UtcNow;
+                System.Threading.Interlocked.Exchange(ref _persistenceDirty, 1);
+                var logger = GetLogger();
+                if (logger is not null)
+                    logger.LogError(ex, "AppendMapDelta failed seq={Sequence} type={DeltaType} for {WorldId}/{MapId}",
+                        delta.Sequence, delta.GetType().Name, _mapState.State.WorldId, _mapState.State.MapId);
+                else
+                    Console.WriteLine($"[GameMapGrain] AppendMapDelta failed seq={delta.Sequence} type={delta.GetType().Name}: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Forces a healing snapshot (used after persistence recovers from a failure). Guarded by
+        /// the same in-flight CAS as compaction so it can't double-fire with a timer/threshold trigger.
+        /// </summary>
+        private void TriggerHealSnapshot()
+        {
+            if (System.Threading.Interlocked.CompareExchange(ref _compactionInFlight, 1, 0) != 0) return;
+            _ = RunCompactionAsync();
         }
 
         /// <summary>
@@ -148,7 +202,9 @@ namespace Aetherium.Server.MultiWorld
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[GameMapGrain] Compaction failed: {ex.Message}");
+                var logger = GetLogger();
+                if (logger is not null) logger.LogError(ex, "Compaction failed");
+                else Console.WriteLine($"[GameMapGrain] Compaction failed: {ex.Message}");
             }
             finally
             {
@@ -226,7 +282,9 @@ namespace Aetherium.Server.MultiWorld
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[GameMapGrain] Timer compaction failed: {ex.Message}");
+                        var logger = GetLogger();
+                        if (logger is not null) logger.LogError(ex, "Timer compaction failed");
+                        else Console.WriteLine($"[GameMapGrain] Timer compaction failed: {ex.Message}");
                     }
                     finally
                     {
@@ -289,15 +347,31 @@ namespace Aetherium.Server.MultiWorld
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[GameMapGrain] Delta replay failed seq={delta.Sequence} type={delta.GetType().Name}: {ex.Message}");
+                    var logger = GetLogger();
+                    if (logger is not null)
+                        logger.LogError(ex, "Delta replay failed seq={Sequence} type={DeltaType}", delta.Sequence, delta.GetType().Name);
+                    else
+                        Console.WriteLine($"[GameMapGrain] Delta replay failed seq={delta.Sequence} type={delta.GetType().Name}: {ex.Message}");
                 }
+            }
+
+            // Restore grain-authoritative heat trails captured in the snapshot (P3-8). Null on
+            // snapshots written before heat persistence existed — the map simply starts with no
+            // trails, as before.
+            if (regionSnapshot.HeatTrails is { Count: > 0 })
+            {
+                _heatTracker.ImportTrails(regionSnapshot.HeatTrails.Select(t =>
+                    new Aetherium.Server.Perception.HeatTrailTracker.HeatTrailEntry(
+                        new Aetherium.Components.WorldLocation(t.X, t.Y, t.Z),
+                        t.EntityId, t.Timestamp, t.BaseIntensity, t.Duration)));
             }
 
             // _nextSequence starts at 1 (default). After hydration, advance it past
             // whatever the snapshot+log covered so future appends don't collide.
             System.Threading.Interlocked.Exchange(ref _nextSequence, highestReplayed);
 
-            Console.WriteLine($"[GameMapGrain] Hydrated {_mapState.State.MapId} from snapshot at seq={regionSnapshot.LastSequence}, replayed {postDeltas.Length} delta(s), next seq={highestReplayed + 1}");
+            GetLogger()?.LogInformation("Hydrated {MapId} from snapshot at seq={LastSequence}, replayed {DeltaCount} delta(s), {HeatCount} heat trail(s), next seq={NextSeq}",
+                _mapState.State.MapId, regionSnapshot.LastSequence, postDeltas.Length, regionSnapshot.HeatTrails?.Count ?? 0, highestReplayed + 1);
             return world;
         }
 
@@ -319,6 +393,21 @@ namespace Aetherium.Server.MultiWorld
             _world.WorldEvents += _worldEventsSubscriber;
         }
 
+        /// <summary>
+        /// The time base heat trails are stamped and aged against: Unix-epoch + accumulated game
+        /// hours (so fade tracks game time). Falls back to wall-clock when no clock is available
+        /// (e.g. minimal test fixtures). Used by both trail recording and snapshot export so the
+        /// two stay consistent.
+        /// </summary>
+        private DateTime CurrentHeatTime()
+        {
+            var clock = ServiceProvider.GetService(typeof(Aetherium.Server.Simulation.WorldClock))
+                as Aetherium.Server.Simulation.WorldClock;
+            return clock is not null
+                ? DateTime.UnixEpoch.AddHours(clock.GetTotalGameTimeHours())
+                : DateTime.UtcNow;
+        }
+
         private void OnWorldEvent(WorldEvent evt)
         {
             try
@@ -333,9 +422,7 @@ namespace Aetherium.Server.MultiWorld
                 var location = evt.Location;
                 var clock = ServiceProvider.GetService(typeof(Aetherium.Server.Simulation.WorldClock))
                     as Aetherium.Server.Simulation.WorldClock;
-                var gameTime = clock is not null
-                    ? DateTime.UtcNow.AddHours(clock.GetTotalGameTimeHours() - (DateTime.UtcNow - DateTime.UnixEpoch).TotalHours)
-                    : DateTime.UtcNow;
+                var gameTime = CurrentHeatTime();
 
                 _heatTracker.RecordEntityPosition(evt.Entity, location, gameTime);
 
@@ -1041,6 +1128,20 @@ namespace Aetherium.Server.MultiWorld
             if (serializer is not null)
                 entityBytes = serializer.SerializeToArray(worldSnapshot);
 
+            // Capture grain-authoritative heat trails so they survive a cold start (P3-8).
+            var heatTrails = _heatTracker.ExportTrails(CurrentHeatTime())
+                .Select(t => new Aetherium.Server.Persistence.PersistedHeatTrail
+                {
+                    X = t.Location.X,
+                    Y = t.Location.Y,
+                    Z = t.Location.Z,
+                    EntityId = t.EntityId,
+                    Timestamp = t.Timestamp,
+                    BaseIntensity = t.BaseIntensity,
+                    Duration = t.Duration,
+                })
+                .ToList();
+
             var regionSnapshot = new Aetherium.Server.Persistence.RegionStateSnapshot
             {
                 RegionId = _mapState.State.MapId,
@@ -1049,11 +1150,28 @@ namespace Aetherium.Server.MultiWorld
                 SavedAt = DateTime.UtcNow,
                 SerializedEntities = entityBytes,
                 LastSequence = capturedSequence,
+                HeatTrails = heatTrails,
             };
 
             await store.SaveSnapshotAsync(_mapState.State.WorldId, regionSnapshot);
             await store.CompactMapDeltasAsync(_mapState.State.WorldId, _mapState.State.MapId, capturedSequence);
             return capturedSequence;
+        }
+
+        /// <summary>
+        /// Reports persistence health for this map (P3-8): whether the append-only delta log is
+        /// keeping up, the cumulative append-failure count, and the last error. Lets operators and
+        /// tests observe delta-persistence failures instead of them being silently swallowed.
+        /// </summary>
+        public Task<Aetherium.Model.PersistenceHealthDto> GetPersistenceHealthAsync()
+        {
+            return Task.FromResult(new Aetherium.Model.PersistenceHealthDto
+            {
+                Healthy = System.Threading.Interlocked.CompareExchange(ref _persistenceDirty, 0, 0) == 0,
+                DeltaAppendFailureCount = System.Threading.Interlocked.Read(ref _persistDeltaFailureCount),
+                LastError = _lastPersistError,
+                LastFailureAtUtc = _lastPersistFailureAtUtc,
+            });
         }
 
         public async Task SaveMapAsync()

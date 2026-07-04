@@ -5,6 +5,25 @@ using Orleans;
 namespace Aetherium.Server.Persistence
 {
     /// <summary>
+    /// A persisted heat trail — the durable projection of one entry in the grain's
+    /// <see cref="Aetherium.Server.Perception.HeatTrailTracker"/>. Serialized as part of the
+    /// region snapshot so grain-authoritative heat survives a cold start (P3-8). Coordinates are
+    /// stored as primitives (like the wire <c>MapDelta</c>s) because <c>WorldLocation</c> has no
+    /// Orleans codec.
+    /// </summary>
+    [GenerateSerializer]
+    public class PersistedHeatTrail
+    {
+        [Id(0)] public int X { get; set; }
+        [Id(1)] public int Y { get; set; }
+        [Id(2)] public int Z { get; set; }
+        [Id(3)] public string EntityId { get; set; } = string.Empty;
+        [Id(4)] public DateTime Timestamp { get; set; }
+        [Id(5)] public double BaseIntensity { get; set; }
+        [Id(6)] public TimeSpan Duration { get; set; }
+    }
+
+    /// <summary>
     /// Full snapshot of a region's state for serialization/deserialization.
     /// </summary>
     [GenerateSerializer]
@@ -55,6 +74,14 @@ namespace Aetherium.Server.Persistence
         /// <c>Sequence &gt; LastSequence</c>. Zero on first snapshot or pre-versioned data.
         /// </summary>
         [Id(14)] public long LastSequence { get; set; }
+
+        /// <summary>
+        /// Grain-authoritative heat trails captured at save time, so the per-cell heat map
+        /// (infrared/heat-vision) survives a cold start instead of resetting to empty (P3-8).
+        /// Null on snapshots written before this field existed. Stored inside the Orleans
+        /// snapshot blob, so no store schema change is required.
+        /// </summary>
+        [Id(15)] public List<PersistedHeatTrail>? HeatTrails { get; set; }
     }
 
     /// <summary>

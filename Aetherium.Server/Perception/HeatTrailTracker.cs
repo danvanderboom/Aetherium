@@ -172,6 +172,45 @@ namespace Aetherium.Server.Perception
         {
             return heatTrails.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count);
         }
+
+        /// <summary>
+        /// A single persisted heat trail — the flat, serialization-friendly projection of the
+        /// tracker's internal per-cell trail state. Persistence-layer types map to/from this.
+        /// </summary>
+        public readonly record struct HeatTrailEntry(
+            WorldLocation Location, string EntityId, DateTime Timestamp, double BaseIntensity, TimeSpan Duration);
+
+        /// <summary>
+        /// Exports all currently-tracked heat trails as flat records so the grain can persist
+        /// them in a snapshot. Trails that have fully faded by <paramref name="asOf"/> are
+        /// dropped (they carry no live heat and need not survive a restart). Original timestamps
+        /// are preserved so fade math continues correctly after rehydration.
+        /// </summary>
+        public IReadOnlyList<HeatTrailEntry> ExportTrails(DateTime asOf)
+        {
+            var list = new List<HeatTrailEntry>();
+            foreach (var kvp in heatTrails)
+            {
+                foreach (var t in kvp.Value)
+                {
+                    var elapsed = asOf - t.Timestamp;
+                    if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
+                    if (elapsed >= t.Duration) continue; // fully faded — skip
+                    list.Add(new HeatTrailEntry(kvp.Key, t.EntityId, t.Timestamp, t.BaseIntensity, t.Duration));
+                }
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Restores heat trails from persisted records (e.g. on cold-start hydration). Each entry
+        /// keeps its original timestamp so fade resumes from where it left off.
+        /// </summary>
+        public void ImportTrails(IEnumerable<HeatTrailEntry> entries)
+        {
+            foreach (var e in entries)
+                RecordRaw(e.EntityId, e.Location, e.Timestamp, e.BaseIntensity, e.Duration);
+        }
     }
 }
 
