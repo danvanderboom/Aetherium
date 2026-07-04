@@ -119,10 +119,10 @@ public class CustomFeatureBuilder : WorldFeatureBuilder
 ### Available World Building Tools
 
 - **`setterrain`** - Set terrain type at coordinates (fully implemented)
+- **`spawnentity`** - Create a typed entity at coordinates (fully implemented; resolves concrete `Entity` subclasses by name)
 - **`moveentity`** - Move entities to new locations (fully implemented)
+- **`modifyentity`** - Add/remove components on an entity by type name (fully implemented; `WorldLocation`/`Tile` protected)
 - **`destroyentity`** - Remove entities from world (fully implemented)
-- **`spawnentity`** - Create entities at coordinates (requires entity factory/prefab system)
-- **`modifyentity`** - Modify entity properties (requires component system knowledge)
 
 ### Example: TorusFeatureBuilder
 

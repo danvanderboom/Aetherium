@@ -58,9 +58,9 @@ The Agent Tool System provides a comprehensive, extensible framework for AI agen
 
 ### World-Building Tools (Category: `worldbuilding`, `entity_management`, `terrain_management`)
 - **`setterrain`** - Set terrain type at specified coordinates (fully implemented)
-- **`spawnentity`** - Create entities at coordinates (requires entity factory/prefab system)
+- **`spawnentity`** - Create a typed entity at coordinates (fully implemented; resolves any concrete `Entity` subclass with a parameterless constructor by name, e.g. `Item`, `Door`, `LightEntity`)
 - **`destroyentity`** - Remove entities from world (fully implemented)
-- **`modifyentity`** - Change entity properties (requires component system knowledge)
+- **`modifyentity`** - Add or remove components on an entity by type name (fully implemented; core `WorldLocation`/`Tile` components are protected from removal)
 - **`moveentity`** - Relocate entities to new coordinates (fully implemented)
 
 **Note**: World-building tools require the `world_edit` capability. When used during world building (via `WorldFeatureBuilder`), tools execute with `WorldBuildingToolContext` that provides direct `World` access without requiring game sessions.
@@ -279,10 +279,10 @@ Console.WriteLine($"Result: {result.Message}");
 
 ### Advanced World-Building
 - ✅ **Terrain modification tools** - `SetTerrainTool` fully implemented
-- ✅ **Entity management tools** - `MoveEntityTool` and `DestroyEntityTool` fully implemented
+- ✅ **Entity management tools** - `SpawnEntityTool`, `MoveEntityTool`, `ModifyEntityTool`, and `DestroyEntityTool` fully implemented
 - ✅ **World building integration** - Feature builders can execute tools during world generation
-- 🔄 **Prefab placement** - `SpawnEntityTool` pending (requires entity factory/prefab system)
-- 🔄 **Component modification** - `ModifyEntityTool` pending (requires component system knowledge)
+- 🔄 **Prefab placement** - `SpawnEntityTool` spawns concrete entity types by name; richer prefab/property application is a future enhancement
+- 🔄 **Component property editing** - `ModifyEntityTool` adds/removes components; per-field property editing is a future enhancement
 - 🔄 **Map section generation** - Planned for future enhancements
 - 🔄 **Narrative token management** - Planned for future enhancements
 

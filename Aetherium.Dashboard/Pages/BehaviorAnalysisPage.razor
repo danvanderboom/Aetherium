@@ -1,5 +1,6 @@
 @page "/behavior/{AgentId}"
 @using Aetherium.Server.Agents.Analysis
+@using BehaviorAnalysisModel = Aetherium.Server.Agents.Analysis.BehaviorAnalysis
 @using System.Net.Http.Json
 @inject IHttpClientFactory HttpClientFactory
 @inject ILogger<BehaviorAnalysisPage> Logger
@@ -202,7 +203,7 @@ else if (behaviorAnalysis != null)
 
     private bool loading = true;
     private string? error;
-    private BehaviorAnalysis? behaviorAnalysis;
+    private BehaviorAnalysisModel? behaviorAnalysis;
     private InterestProfile? interestProfile;
     private List<ContentNeed>? contentNeeds;
 
@@ -217,7 +218,7 @@ else if (behaviorAnalysis != null)
             var response = await httpClient.GetAsync($"/api/adaptation/behavior/{AgentId}");
             if (response.IsSuccessStatusCode)
             {
-                behaviorAnalysis = await response.Content.ReadFromJsonAsync<BehaviorAnalysis>();
+                behaviorAnalysis = await response.Content.ReadFromJsonAsync<BehaviorAnalysisModel>();
             }
 
             // Get interest profile
