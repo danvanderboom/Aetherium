@@ -39,6 +39,20 @@ namespace Aetherium.Server.Simulation
         /// Enable procedural events (default: true).
         /// </summary>
         public bool EnableProceduralEvents { get; set; } = true;
+
+        /// <summary>
+        /// Enable NPC/monster behavior — monsters wander on the tick pipeline
+        /// (default: true). Turn off for deterministic tests or a frozen world.
+        /// </summary>
+        public bool EnableNpcBehavior { get; set; } = true;
+
+        /// <summary>
+        /// How many map ticks pass between NPC/monster steps (default: 1 — one
+        /// step per tick). At the default 1 Hz tick rate that is roughly one
+        /// monster move per second; raise it to slow monsters without changing
+        /// <see cref="TickHz"/>. Values below 1 are treated as 1.
+        /// </summary>
+        public int NpcMoveIntervalTicks { get; set; } = 1;
     }
 }
 

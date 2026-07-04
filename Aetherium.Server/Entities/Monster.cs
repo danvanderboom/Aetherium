@@ -29,69 +29,81 @@ namespace Aetherium
             Set(new HeatSignature(0.8, TimeSpan.FromSeconds(8)));
         }
 
+        /// <summary>
+        /// Legacy self-driven step. The live tick pipeline no longer calls this —
+        /// <see cref="GameMapGrain"/> drives monster movement so it can broadcast
+        /// the resulting delta — but it is kept working (and no longer crashes when
+        /// boxed in) for tests and any direct caller.
+        /// </summary>
         public virtual void Heartbeat()
         {
-            //if (goal == null)
-            //    SetGoal();
-
-            var validDirections = GetValidDirections();
-            if (validDirections.Count == 0)
+            var direction = NextWanderDirection();
+            if (direction is null)
                 return; // boxed in — wait it out rather than crash
 
-            var r = rand.NextDouble();
-            if (PreviousDirection.HasValue && validDirections.Contains(PreviousDirection.Value) && r < 0.5)
-            {
-                world.TryMove(this, PreviousDirection.Value);
-                return;
-            }
-
-            var direction = validDirections[rand.Next(0, validDirections.Count)];
-
-            if (world.TryMove(this, direction))
-            {
-                //PerceiveEnvironment();
-                PreviousDirection = direction;
-            }
+            world.TryMove(this, direction.Value);
         }
 
-        private IList<WorldDirection> GetValidDirections()
+        /// <summary>
+        /// Chooses the next cardinal step for a wandering monster, or <c>null</c>
+        /// if it is boxed in on all four sides. A 50% chance keeps the previous
+        /// heading (momentum) when that direction is still passable, otherwise a
+        /// random passable cardinal is picked. This is advisory only — it does not
+        /// move the monster; the caller performs the validated move (which also
+        /// enforces occupancy) and broadcasts the result. The chosen direction is
+        /// recorded as the momentum hint for next time.
+        /// </summary>
+        public WorldDirection? NextWanderDirection()
+        {
+            var validDirections = GetValidCardinalDirections();
+            if (validDirections.Count == 0)
+                return null;
+
+            WorldDirection chosen;
+            if (PreviousDirection.HasValue
+                && validDirections.Contains(PreviousDirection.Value)
+                && rand.NextDouble() < 0.5)
+            {
+                chosen = PreviousDirection.Value;
+            }
+            else
+            {
+                chosen = validDirections[rand.Next(0, validDirections.Count)];
+            }
+
+            PreviousDirection = chosen;
+            return chosen;
+        }
+
+        /// <summary>
+        /// The passable cardinal (N/S/E/W) directions from the monster's current
+        /// cell. Monsters wander on the horizontal plane only; vertical travel is
+        /// reserved for stair-aware movement. Returns an empty list if the monster
+        /// has no location or is fully enclosed.
+        /// </summary>
+        private IList<WorldDirection> GetValidCardinalDirections()
         {
             var location = Get<WorldLocation>();
             if (location == null)
-                throw new InvalidOperationException("WorldLocation is missing from Monster");
+                return new List<WorldDirection>();
 
-            var directions = Enum.GetValues(typeof(WorldDirection)).Cast<WorldDirection>().ToList();
-
-            if (!location.Has<CanAscend>())
-                directions.Remove(WorldDirection.Up);
-
-            if (!location.Has<CanDescend>())
-                directions.Remove(WorldDirection.Down);
-
-            var invalidDirections = new List<WorldDirection>();
-
-            foreach (var direction in directions)
+            var candidates = new (WorldDirection Direction, WorldLocation Target)[]
             {
-                var target = direction switch
-                {
-                    // Canonical engine convention: North = -Y, South = +Y.
-                    WorldDirection.North => location.FromDelta(0, -1, 0),
-                    WorldDirection.South => location.FromDelta(0, +1, 0),
-                    WorldDirection.East => location.FromDelta(+1, 0, 0),
-                    WorldDirection.West => location.FromDelta(-1, 0, 0),
-                    WorldDirection.Up => location.FromDelta(0, 0, +1),
-                    WorldDirection.Down => location.FromDelta(0, 0, -1),
-                    _ => throw new NotImplementedException()
-                };
+                // Canonical engine convention: North = -Y, South = +Y.
+                (WorldDirection.North, location.FromDelta(0, -1, 0)),
+                (WorldDirection.South, location.FromDelta(0, +1, 0)),
+                (WorldDirection.East,  location.FromDelta(+1, 0, 0)),
+                (WorldDirection.West,  location.FromDelta(-1, 0, 0)),
+            };
 
-                if (!world.PassableTerrain(target))
-                    invalidDirections.Add(direction);
+            var valid = new List<WorldDirection>(4);
+            foreach (var (direction, target) in candidates)
+            {
+                if (world.PassableTerrain(target))
+                    valid.Add(direction);
             }
 
-            foreach (var item in invalidDirections)
-                directions.Remove(item);
-
-            return directions;
+            return valid;
         }
 
         //public void SetGoal()
@@ -149,11 +161,6 @@ namespace Aetherium
 
         //    Get<Memory>().Remember(location, "Terrain", world.GetTerrain(location).ToString());
         //}
-
-        public WorldDirection SelectRandomDirection()
-        {
-            return (WorldDirection)rand.Next(0, Enum.GetNames(typeof(WorldDirection)).Length);
-        }
     }
 }
 

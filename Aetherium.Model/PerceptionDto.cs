@@ -33,6 +33,15 @@ namespace Aetherium.Model
         // Inventory and interactions (AI-friendly)
         public InventoryDto? Inventory { get; set; }
         public List<ItemDto> VisibleItems { get; set; } = new List<ItemDto>();
+
+        /// <summary>
+        /// Other characters (monsters/NPCs and co-located players) visible in the
+        /// player's field of view, with relative coordinates. The perceiving player
+        /// is excluded — they are always the center marker. Parallels
+        /// <see cref="VisibleItems"/>; the client renders these above terrain.
+        /// </summary>
+        public List<CharacterDto> VisibleCharacters { get; set; } = new List<CharacterDto>();
+
         public List<AffordanceDto> Affordances { get; set; } = new List<AffordanceDto>();
 
         // Navigation data (compass, maps, etc.)

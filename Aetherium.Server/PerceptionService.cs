@@ -324,6 +324,34 @@ Light sources found:
 
             perception.VisibleItems = visibleItems;
 
+            // Derive visible characters (monsters/NPCs and co-located players).
+            // Mirrors the item loop above. The perceiving player's own cell is
+            // skipped — they are always the center marker, never a "seen" character.
+            var visibleCharacters = new List<CharacterDto>();
+            foreach (var loc in visionFrame.Visuals.Keys)
+            {
+                if (loc == playerLocation)
+                    continue;
+
+                if (world.EntitiesByLocation.TryGetValue(loc, out var charLoc))
+                {
+                    foreach (var entity in charLoc.Values)
+                    {
+                        if (entity is Aetherium.Character ch)
+                        {
+                            var charDto = ch.ToCharacterDto();
+                            charDto.Location = new WorldLocationDto(
+                                loc.X - playerLocation.X,
+                                loc.Y - playerLocation.Y,
+                                loc.Z - playerLocation.Z);
+                            visibleCharacters.Add(charDto);
+                        }
+                    }
+                }
+            }
+
+            perception.VisibleCharacters = visibleCharacters;
+
             // If we can find the player entity at playerLocation, include inventory and affordances
             Inventory? inv = null;
             if (world.EntitiesByLocation.TryGetValue(playerLocation, out var here))
@@ -331,7 +359,12 @@ Light sources found:
                 var player = here.Values.OfType<Aetherium.Character>().FirstOrDefault();
                 if (player != null)
                 {
-                    inv = player.Get<Inventory>();
+                    // Null-safe lookup: Component.Get<T>() throws when the component is
+                    // absent, so a character standing here without an Inventory would
+                    // crash the whole perception (the Get<T>-throws hazard the audit
+                    // flagged). Mirror the OfType().FirstOrDefault() pattern used just
+                    // below for Carriable.
+                    inv = player.AllComponents.OfType<Inventory>().FirstOrDefault();
                     if (inv != null)
                         perception.Inventory = inv.ToDto();
 
@@ -596,7 +629,9 @@ Light sources found:
                 var player = here.Values.OfType<Aetherium.Character>().FirstOrDefault();
                 if (player != null)
                 {
-                    var inv = player.Get<Inventory>();
+                    // Null-safe: Component.Get<T>() throws when absent, so a character
+                    // here without an Inventory would crash navigation computation.
+                    var inv = player.AllComponents.OfType<Inventory>().FirstOrDefault();
                     if (inv != null)
                     {
                         // Check inventory for items with ProvidesNavigation component

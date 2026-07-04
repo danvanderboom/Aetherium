@@ -37,6 +37,10 @@ namespace Aetherium.Server.MultiWorld
         // resync mechanism yet; the sequence number is the wire-format hook).
         private long _nextSequence = 1;
 
+        // Counts map ticks so NPC movement can run at a sub-multiple of the tick
+        // rate (SimulationOptions.NpcMoveIntervalTicks) without a wall-clock timer.
+        private long _tickCounter;
+
         // Highest WorldSnapshot.SnapshotVersion this binary knows how to hydrate.
         // Bumping requires a deliberate schema migration; cold-start refuses to
         // load snapshots written at a higher version. Phase F wire-stability hook.
@@ -726,6 +730,13 @@ namespace Aetherium.Server.MultiWorld
 
             await Task.WhenAll(tickTasks);
 
+            // Drive NPC/monster behavior. Runs on the grain's activation turn, so it
+            // is serialized with player mutations on the same _world — no cross-thread
+            // races. Movement + its delta fan-out happen here rather than in the
+            // Monster entity so co-located players actually see monsters move.
+            _tickCounter++;
+            await StepNpcsAsync();
+
             // Heat trail cleanup. Capture which cells had trails before cleanup, run
             // cleanup, then diff to find cells that just lost their last trail. Emit
             // HeatExpiredDelta only for those — don't spam expiries every tick for
@@ -755,6 +766,67 @@ namespace Aetherium.Server.MultiWorld
             {
                 Console.WriteLine($"[GameMapGrain] Heat cleanup failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Advances every monster on this map by one wandering step, when NPC
+        /// behavior is enabled and this tick falls on the configured interval. The
+        /// world mutations are applied synchronously (no awaits between them) so a
+        /// reentrant player move cannot interleave mid-sweep; the resulting
+        /// <see cref="EntityMovedDelta"/>s are broadcast afterward. A monster that
+        /// is boxed in or blocked by a wall/another character simply stays put this
+        /// tick. Each landed move also lays a heat trail via the world-event
+        /// subscriber, exactly as a player move does.
+        /// </summary>
+        private async Task StepNpcsAsync()
+        {
+            if (_world is null) return;
+
+            var options = _simulationOptions?.Value;
+            if (options is not null && !options.EnableNpcBehavior)
+                return;
+
+            var interval = Math.Max(1, options?.NpcMoveIntervalTicks ?? 1);
+            if (_tickCounter % interval != 0)
+                return;
+
+            // Snapshot the monster set first — TryMoveSteps mutates the location
+            // index we would otherwise be enumerating.
+            var monsters = _world.Entities.Values.OfType<Aetherium.Monster>().ToList();
+            if (monsters.Count == 0)
+                return;
+
+            // Phase 1 (synchronous): mutate the world, collecting the moves that
+            // actually landed. No awaits here, so the sweep is atomic w.r.t. any
+            // reentrant player turn.
+            var moves = new List<EntityMovedDelta>();
+            foreach (var monster in monsters)
+            {
+                var loc = monster.Get<Aetherium.Components.WorldLocation>();
+                if (loc is null) continue;
+
+                var direction = monster.NextWanderDirection();
+                if (direction is null) continue; // boxed in on all sides
+
+                var oldX = loc.X; var oldY = loc.Y; var oldZ = loc.Z;
+                var outcome = _world.TryMoveSteps(monster, direction.Value, 1);
+                if (!outcome.Success || outcome.FinalLocation is null)
+                    continue; // wall or occupied cell — no move this tick
+
+                var final = outcome.FinalLocation;
+                moves.Add(new EntityMovedDelta
+                {
+                    EntityId = monster.EntityId,
+                    OldX = oldX, OldY = oldY, OldZ = oldZ,
+                    NewX = final.X, NewY = final.Y, NewZ = final.Z,
+                });
+            }
+
+            // Phase 2 (async): broadcast. FanOutAsync persists each delta and routes
+            // it through the session manager, which reconciles every co-located
+            // session's mirror and pushes a fresh FOV-filtered perception.
+            foreach (var move in moves)
+                await FanOutAsync(move);
         }
 
         /// <summary>

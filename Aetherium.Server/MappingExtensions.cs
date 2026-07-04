@@ -109,6 +109,26 @@ namespace Aetherium.Server
             return itemDto;
         }
 
+        /// <summary>
+        /// Projects a character entity (monster/NPC or another player) into the DTO
+        /// the client renders. The glyph/color come from the entity's Tile component
+        /// (e.g. the "Monster" tile — 'M', dark-red), mirroring how terrain carries
+        /// its TileType to the wire.
+        /// </summary>
+        public static CharacterDto ToCharacterDto(this Aetherium.Character character)
+        {
+            var tileType = character.Get<Aetherium.Components.Tile>()?.Type;
+            return new CharacterDto
+            {
+                Id = character.EntityId,
+                Name = tileType?.Name ?? character.GetType().Name,
+                Tile = tileType?.ToDto(),
+                // Monsters (incl. Zombie via inheritance) and snakes are the hostile
+                // NPCs today; player characters are plain Character instances.
+                IsHostile = character is Aetherium.Monster || character is Aetherium.Entities.Snake,
+            };
+        }
+
         public static InventoryDto ToDto(this Inventory inventory)
         {
             var dto = new InventoryDto { Capacity = inventory.Capacity };

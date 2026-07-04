@@ -11,6 +11,8 @@ using InventoryRenderData = Console::Aetherium.Rendering.InventoryRenderData;
 using InventoryWidget = Console::Aetherium.Rendering.Widgets.InventoryWidget;
 using SpectreConsoleRenderer = Console::Aetherium.Rendering.SpectreConsoleRenderer;
 using ThemeConfig = Console::Aetherium.Rendering.Themes.ThemeConfig;
+using ClientConsoleMapView = Console::Aetherium.Views.ClientConsoleMapView;
+using MapCellLayer = Console::Aetherium.Views.ClientConsoleMapView.MapCellLayer;
 
 namespace Aetherium.Test.Client
 {
@@ -118,6 +120,36 @@ namespace Aetherium.Test.Client
 
             Assert.That(markup, Does.Contain("[[gold-key]]"));
             Assert.DoesNotThrow(() => _ = new Spectre.Console.Markup(markup));
+        }
+
+        // ---------- Map cell layer priority (Phase 5 monster rendering) ----------
+
+        [Test]
+        public void Character_Draws_Over_Item_And_Terrain()
+        {
+            // A monster standing on treasure over terrain — the monster wins.
+            Assert.That(
+                ClientConsoleMapView.ResolveContentLayer(hasCharacter: true, hasItem: true, hasTerrain: true),
+                Is.EqualTo(MapCellLayer.Character));
+        }
+
+        [Test]
+        public void Item_Draws_Over_Terrain_When_No_Character()
+        {
+            Assert.That(
+                ClientConsoleMapView.ResolveContentLayer(hasCharacter: false, hasItem: true, hasTerrain: true),
+                Is.EqualTo(MapCellLayer.Item));
+        }
+
+        [Test]
+        public void Terrain_Draws_When_Alone_And_Empty_When_Nothing()
+        {
+            Assert.That(
+                ClientConsoleMapView.ResolveContentLayer(hasCharacter: false, hasItem: false, hasTerrain: true),
+                Is.EqualTo(MapCellLayer.Terrain));
+            Assert.That(
+                ClientConsoleMapView.ResolveContentLayer(hasCharacter: false, hasItem: false, hasTerrain: false),
+                Is.EqualTo(MapCellLayer.Empty));
         }
 
         // ---------- CompassWidget ----------

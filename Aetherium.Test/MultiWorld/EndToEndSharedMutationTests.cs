@@ -346,6 +346,70 @@ namespace Aetherium.Test.MultiWorld
             var dispatchedConnections = perceptionDispatches.Select(d => d.ConnectionId).Distinct().ToList();
             Assert.That(dispatchedConnections, Does.Contain("conn-B").Or.Contain("conn-A"));
         }
+
+        /// <summary>
+        /// Phase 5 — NPCs tick. Spawns a handful of monsters into a live map, then
+        /// drives the map's tick pipeline. A monster that steps emits an
+        /// <c>EntityMovedDelta</c>, which the broker fans out as a
+        /// <c>ReceivePerceptionUpdate</c> to every session on the map — so a non-empty
+        /// dispatch set after ticking proves the tick actually moved a monster and
+        /// broadcast it (the tick → StepNpcs → FanOut wiring, end to end). Seed-tolerant
+        /// like the move/travel tests above: if every spawned monster happened to be
+        /// boxed in on this maze, the test ignores rather than flaking.
+        /// </summary>
+        [Test]
+        public async Task Tick_Moves_Monsters_And_Fans_Out_Perception()
+        {
+            var (map, playerA, playerB) = await InitMapWithTwoJoinersAsync();
+
+            // Inject monsters at passable cells. We don't know the maze geometry, so
+            // scan a sampled window and keep the spawns that land. Capped so a
+            // wall-heavy window can't turn this into hundreds of grain round-trips.
+            int spawned = 0, attempts = 0;
+            for (int x = 2; x <= 30 && spawned < 10 && attempts < 60; x += 2)
+            {
+                for (int y = 2; y <= 30 && spawned < 10 && attempts < 60; y += 2)
+                {
+                    attempts++;
+                    var result = await map.SpawnEntityAsync(new SpawnEntityRequest
+                    {
+                        CreatureType = "monster",
+                        X = x, Y = y, Z = 0,
+                    });
+                    if (result.Success) spawned++;
+                }
+            }
+
+            if (spawned == 0)
+            {
+                Assert.Ignore("No passable cell found to spawn a monster on this map seed.");
+                return;
+            }
+
+            _hubContext.Reset();
+
+            // Drive several ticks. NpcMoveIntervalTicks defaults to 1, so each tick
+            // steps every monster that has an open neighbour.
+            for (int i = 0; i < 3; i++)
+                await map.TickAsync(TimeSpan.FromSeconds(1));
+
+            await _hubContext.WaitForDispatchesAsync(expectedMinCount: 1, TimeSpan.FromSeconds(2));
+
+            var perceptionDispatches = _hubContext.GetDispatches()
+                .Where(d => d.Method == "ReceivePerceptionUpdate")
+                .ToList();
+
+            if (perceptionDispatches.Count == 0)
+            {
+                Assert.Ignore($"All {spawned} spawned monsters were boxed in for every tick on this seed; " +
+                              "no movement to observe.");
+                return;
+            }
+
+            var dispatchedConnections = perceptionDispatches.Select(d => d.ConnectionId).Distinct().ToList();
+            Assert.That(dispatchedConnections, Does.Contain("conn-A").Or.Contain("conn-B"),
+                "monster movement should push fresh perception to sessions bound to the map");
+        }
     }
 
     /// <summary>

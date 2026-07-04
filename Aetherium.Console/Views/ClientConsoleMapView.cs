@@ -157,27 +157,38 @@ namespace Aetherium.Views
                     }
                     else
                     {
-                        // Check for items at this location first
+                        // Characters (monsters/NPCs, other players) take priority
+                        // over items and terrain — a monster standing on treasure is
+                        // the thing you need to see.
+                        var characterAtLocation = Perception.VisibleCharacters?.FirstOrDefault(
+                            c => c.Location != null &&
+                            c.Location.X == relativeX &&
+                            c.Location.Y == relativeY &&
+                            c.Location.Z == relativeZ);
+
+                        // Check for items at this location next
                         var itemAtLocation = Perception.VisibleItems?.FirstOrDefault(
                             item => item.Location != null &&
                             item.Location.X == relativeX &&
                             item.Location.Y == relativeY &&
                             item.Location.Z == relativeZ);
 
-                        if (itemAtLocation != null)
+                        switch (ResolveContentLayer(
+                            characterAtLocation != null, itemAtLocation != null, visual.Terrain != null))
                         {
-                            // Draw item
-                            DrawItem(itemAtLocation, color, visual.LightLevel);
-                        }
-                        else if (visual.Terrain != null)
-                        {
-                            // Draw terrain
-                            DrawTileType(visual.Terrain, color, visual.LightLevel);
-                        }
-                        else
-                        {
-                            Console.BackgroundColor = BackgroundColor;
-                            Console.Write(new string(' ', symbolWidth));
+                            case MapCellLayer.Character:
+                                DrawCharacter(characterAtLocation!, color, visual.LightLevel);
+                                break;
+                            case MapCellLayer.Item:
+                                DrawItem(itemAtLocation!, color, visual.LightLevel);
+                                break;
+                            case MapCellLayer.Terrain:
+                                DrawTileType(visual.Terrain!, color, visual.LightLevel);
+                                break;
+                            default:
+                                Console.BackgroundColor = BackgroundColor;
+                                Console.Write(new string(' ', symbolWidth));
+                                break;
                         }
                     }
                 }
@@ -289,6 +300,46 @@ namespace Aetherium.Views
             Console.ForegroundColor = fgColor;
 
             Console.Write(icon.PadRight(symbolWidth));
+        }
+
+        /// <summary>
+        /// The content layer drawn at a non-player cell, in priority order.
+        /// </summary>
+        public enum MapCellLayer { Empty, Character, Item, Terrain }
+
+        /// <summary>
+        /// Decides which content layer wins at a (non-player) cell, given what is
+        /// present. Characters (monsters/NPCs, other players) draw over items —
+        /// a monster standing on treasure is the thing you need to see — which in
+        /// turn draw over terrain. Pure so the priority can be unit-tested without a
+        /// live console; <see cref="DrawContents"/> renders the chosen layer.
+        /// </summary>
+        public static MapCellLayer ResolveContentLayer(bool hasCharacter, bool hasItem, bool hasTerrain)
+        {
+            if (hasCharacter) return MapCellLayer.Character;
+            if (hasItem) return MapCellLayer.Item;
+            if (hasTerrain) return MapCellLayer.Terrain;
+            return MapCellLayer.Empty;
+        }
+
+        private void DrawCharacter(CharacterDto character, ConsoleColor? gridColor = null, double lightLevel = 1.0)
+        {
+            // Characters carry a TileType (glyph + colors) exactly like terrain, so
+            // reuse the shared tile renderer — lighting, infrared, and ambient tint
+            // then apply uniformly. Fall back to a neutral 'M' marker if the entity
+            // reached us without a tile (a bare character).
+            var tile = character.Tile ?? new TileTypeDto
+            {
+                Name = string.IsNullOrEmpty(character.Name) ? "Character" : character.Name,
+                Settings = new Dictionary<string, string>
+                {
+                    ["MapCharacter"] = "M",
+                    ["ForegroundColor"] = "DarkRed",
+                    ["BackgroundColor"] = "Black"
+                }
+            };
+
+            DrawTileType(tile, gridColor, lightLevel);
         }
 
         public void DrawTileType(TileTypeDto tileType, ConsoleColor? gridColor = null, double lightLevel = 1.0)
