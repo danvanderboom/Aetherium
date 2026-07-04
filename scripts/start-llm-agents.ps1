@@ -1,4 +1,4 @@
-# Quickstart script for LLM-driven agents
+﻿# Quickstart script for LLM-driven agents
 # This script helps set up and run LLM agents with LM Studio (phi-4)
 
 param(
@@ -126,41 +126,48 @@ Write-Host "  2. Start the game client (in a new terminal):" -ForegroundColor Wh
 Write-Host "     cd Aetherium.Console" -ForegroundColor Gray
 Write-Host "     dotnet run" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  3. In another terminal, use AgentCLI to attach and run agents:" -ForegroundColor White
+Write-Host "  3. In another terminal, use aetherctl to attach and run agents:" -ForegroundColor White
 Write-Host "     # List active sessions" -ForegroundColor Gray
-Write-Host "     agentcli mgmt sessions" -ForegroundColor Gray
+Write-Host "     aetherctl session list" -ForegroundColor Gray
 Write-Host ""
 Write-Host "     # Attach agent to session (replace <sessionId> with actual ID)" -ForegroundColor Gray
-Write-Host "     agentcli agent attach <sessionId> --agent agent-1 --runner runner-1" -ForegroundColor Gray
+Write-Host "     aetherctl agent attach <sessionId> --agent agent-1 --runner runner-1" -ForegroundColor Gray
 Write-Host ""
-Write-Host "     # Run the agent" -ForegroundColor Gray
-Write-Host "     agentcli agent run runner-1 --max-steps 50 --delay 200" -ForegroundColor Gray
+Write-Host "     # ...or attach directly to a grain-hosted map (no human session needed)" -ForegroundColor Gray
+Write-Host "     aetherctl agent attach-world <worldId> <mapId> --agent agent-1 --runner runner-1" -ForegroundColor Gray
+Write-Host ""
+Write-Host "     # Run the agent loop" -ForegroundColor Gray
+Write-Host "     aetherctl agent run runner-1 --max-steps 50 --delay 200" -ForegroundColor Gray
 Write-Host ""
 Write-Host "     # Check agent status" -ForegroundColor Gray
-Write-Host "     agentcli agent status runner-1" -ForegroundColor Gray
+Write-Host "     aetherctl agent status runner-1" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  4. To switch between LLM and heuristic policy:" -ForegroundColor White
-Write-Host "     agentcli agent policy set llm     # Use LLM" -ForegroundColor Gray
-Write-Host "     agentcli agent policy set heuristic  # Use heuristic" -ForegroundColor Gray
-Write-Host "     agentcli agent policy get         # Check current policy" -ForegroundColor Gray
-Write-Host ""
-Write-Host "  5. Enable/disable debug output:" -ForegroundColor White
-Write-Host "     agentcli agent debug on" -ForegroundColor Gray
-Write-Host "     agentcli agent debug off" -ForegroundColor Gray
+Write-Host "  4. LLM vs heuristic policy and debug output are controlled by environment" -ForegroundColor White
+Write-Host "     variables read at server startup (this script sets them for the server):" -ForegroundColor White
+Write-Host "     AGENT_LLM_ENABLED=1  -> LLM policy;  AGENT_LLM_ENABLED=0 -> heuristic" -ForegroundColor Gray
+Write-Host "     AGENT_DEBUG=1        -> verbose agent decision logging" -ForegroundColor Gray
+Write-Host "     Change them and restart the server window to switch modes." -ForegroundColor Gray
 Write-Host ""
 Write-Host "Press any key to stop the server and clean up..." -ForegroundColor Cyan
 
-# Cleanup handler
+# Cleanup handler.
+# $serverProcess is the powershell wrapper spawned by Start-Process, not the server itself;
+# `taskkill /T` kills its whole child tree (the dotnet/server process) so nothing is orphaned.
+# Store the PID/paths in script scope — a [ConsoleCancelEventHandler] delegate runs in this
+# runspace, so it reads script-scoped variables directly ($using: is only valid for remote/job
+# script blocks and would not resolve here).
 $script:cleanupDone = $false
+$script:serverPid = $serverProcess.Id
+$script:pidFilePath = $pidFile
 $script:cancelHandler = [ConsoleCancelEventHandler]{
     param($sender, $eventArgs)
     $eventArgs.Cancel = $true
     Write-Host "`nCtrl+C detected, cleaning up..." -ForegroundColor Yellow
     try {
-        Stop-Process -Id $using:serverProcess.Id -Force -ErrorAction SilentlyContinue
+        taskkill /PID $script:serverPid /T /F 2>$null | Out-Null
         Get-Process -Name "Aetherium.Server" -ErrorAction SilentlyContinue | Stop-Process -Force
     } finally {
-        Remove-Item -Path $using:pidFile -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $script:pidFilePath -Force -ErrorAction SilentlyContinue
         $script:cleanupDone = $true
     }
     exit
@@ -174,7 +181,7 @@ try {
 } finally {
     Write-Host ""
     Write-Host "Stopping server..." -ForegroundColor Yellow
-    Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+    taskkill /PID $script:serverPid /T /F 2>$null | Out-Null
     Get-Process -Name "Aetherium.Server" -ErrorAction SilentlyContinue | Stop-Process -Force
     Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue
     [Console]::remove_CancelKeyPress($script:cancelHandler)

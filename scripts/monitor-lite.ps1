@@ -18,9 +18,24 @@ try {
     $buffer = New-Object Byte[] 65536
     $frames = 0
     while ($ws.State -eq [System.Net.WebSockets.WebSocketState]::Open -and $frames -lt $MaxFrames) {
-        $segment = New-Object System.ArraySegment[Byte] -ArgumentList @(,$buffer)
-        $ws.ReceiveAsync($segment, $ct).Wait()
-        $json = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $segment.Count)
+        # A single message may span multiple WebSocket frames; accumulate until EndOfMessage.
+        $ms = New-Object System.IO.MemoryStream
+        $result = $null
+        do {
+            $segment = New-Object System.ArraySegment[Byte] -ArgumentList @(,$buffer)
+            $recv = $ws.ReceiveAsync($segment, $ct)
+            $recv.Wait()
+            $result = $recv.Result
+            if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) { break }
+            # Only the bytes actually received this call are valid - decoding the whole 64 KB
+            # buffer would append trailing NULs and the JSON parse would always fail.
+            $ms.Write($buffer, 0, $result.Count)
+        } while (-not $result.EndOfMessage)
+
+        if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) { $ms.Dispose(); break }
+
+        $json = [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
+        $ms.Dispose()
         try { $obj = $json | ConvertFrom-Json } catch { continue }
         if ($obj.type -eq 'frame') {
             $frames++
