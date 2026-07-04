@@ -77,6 +77,12 @@ namespace Aetherium.Server.MultiWorld
         Task<Aetherium.Model.InteractionResultDto> CloseAsync(string sessionId, string targetEntityId);
 
         /// <summary>
+        /// Resolves a melee attack by the session's Character against an adjacent target, applying
+        /// damage to canonical state and fanning out a health-change or entity-removed delta.
+        /// </summary>
+        Task<Aetherium.Model.AttackResultDto> AttackAsync(string sessionId, string targetEntityId);
+
+        /// <summary>
         /// Removes a player's Character from <c>_world</c> on disconnect or explicit
         /// LeaveWorld. Emits an EntityRemovedDelta so other sessions see them leave.
         /// </summary>

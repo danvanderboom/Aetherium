@@ -55,5 +55,8 @@ namespace Aetherium.Server.MultiWorld
 
         public Task<InteractionResultDto> CloseAsync(string targetEntityId)
             => MapGrain.CloseAsync(_sessionId, targetEntityId);
+
+        public Task<AttackResultDto> AttackAsync(string targetEntityId)
+            => MapGrain.AttackAsync(_sessionId, targetEntityId);
     }
 }

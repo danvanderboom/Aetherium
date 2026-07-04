@@ -649,6 +649,19 @@ namespace Aetherium.Server
                                 : string.Empty
                         });
                     }
+                    else if (toolId == "attack" && result.Data != null
+                             && result.Data.TryGetValue("defeated", out var defeatedObj)
+                             && defeatedObj is bool wasDefeated && wasDefeated)
+                    {
+                        // A lethal attack emits enemy_defeated, which the narrative state grain uses
+                        // to progress/complete `kill` objectives (P3-2). The objective matches on
+                        // enemyType, so pass the defeated entity's type.
+                        await ProcessNarrativeEventAsync(session, "enemy_defeated", new Dictionary<string, object>
+                        {
+                            ["enemyType"] = result.Data.TryGetValue("targetType", out var tt) ? tt?.ToString() ?? string.Empty : string.Empty,
+                            ["targetId"] = result.Data.TryGetValue("targetId", out var ti) ? ti?.ToString() ?? string.Empty : string.Empty
+                        });
+                    }
                 }
                 
                 // Send updated perception to client

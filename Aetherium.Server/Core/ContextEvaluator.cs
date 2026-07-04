@@ -121,11 +121,29 @@ namespace Aetherium.Server
                 }
             }
 
-            // Stub: combat detection (currently always false, can be extended later)
-            // TODO: Add actual combat state detection when combat system is available
-            if (false) // Placeholder for future combat detection
+            // Combat detection: in-combat when a living hostile (a Monster with health) is adjacent.
+            // Replaces the former `if (false)` placeholder now that combat (P3-7) exists.
+            foreach (var entity in world.Entities.Values)
             {
-                contextTags.Add("in-combat");
+                if (entity is not Monster)
+                    continue;
+
+                // Entity.Get<T>() throws when absent, so gate on Has<T>() first.
+                if (!entity.Has<Health>() || !entity.Has<WorldLocation>())
+                    continue;
+                if (entity.Get<Health>().Level <= 0)
+                    continue;
+
+                var loc = entity.Get<WorldLocation>();
+
+                var dist = Math.Abs(loc.X - playerLocation.X)
+                         + Math.Abs(loc.Y - playerLocation.Y)
+                         + Math.Abs(loc.Z - playerLocation.Z);
+                if (dist <= 1)
+                {
+                    contextTags.Add("in-combat");
+                    break;
+                }
             }
 
             return contextTags;

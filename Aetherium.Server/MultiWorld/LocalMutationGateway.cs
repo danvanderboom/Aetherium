@@ -24,6 +24,7 @@ namespace Aetherium.Server.MultiWorld
     {
         private readonly GameSession _session;
         private readonly InteractionSystem _interactionSystem;
+        private readonly CombatSystem _combatSystem = new CombatSystem();
 
         public LocalMutationGateway(GameSession session, InteractionSystem? interactionSystem = null)
         {
@@ -79,6 +80,25 @@ namespace Aetherium.Server.MultiWorld
 
         public Task<InteractionResultDto> CloseAsync(string targetEntityId)
             => Task.FromResult(_session.WithStateLock(() => ToDto(_interactionSystem.TryClose(_session, targetEntityId))));
+
+        public Task<AttackResultDto> AttackAsync(string targetEntityId)
+            => Task.FromResult(_session.WithStateLock(() =>
+            {
+                if (_session.Player is null)
+                    return AttackResultDto.Fail("No player");
+
+                var result = _combatSystem.TryAttack(_session.World, _session.Player, targetEntityId);
+                return new AttackResultDto
+                {
+                    Success = result.Success,
+                    Reason = result.Reason,
+                    Damage = result.Damage,
+                    RemainingHealth = result.RemainingHealth,
+                    TargetDefeated = result.TargetDefeated,
+                    TargetType = result.TargetType,
+                    TargetEntityId = result.TargetEntityId,
+                };
+            }));
 
         private static InteractionResultDto ToDto(InteractionResult result)
         {

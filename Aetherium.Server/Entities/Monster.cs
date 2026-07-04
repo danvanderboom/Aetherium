@@ -23,6 +23,8 @@ namespace Aetherium
             rand = new Random();
 
             Set(new Memory());
+            // Monsters are weaker than player characters (which default to 100 HP): a few hits kill.
+            Set(new Health(30, 30));
             Set(new Tile { Type = world.TileTypes["Monster"] });
             
             // Monsters emit slightly lower heat than characters but still high

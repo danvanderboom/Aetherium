@@ -39,6 +39,8 @@ namespace Aetherium.Server.MultiWorld
         Task<InteractionResultDto> OpenAsync(string targetEntityId);
 
         Task<InteractionResultDto> CloseAsync(string targetEntityId);
+
+        Task<AttackResultDto> AttackAsync(string targetEntityId);
     }
 
     /// <summary>
