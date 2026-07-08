@@ -1,5 +1,6 @@
 using System.Linq;
 using Aetherium.Core;
+using Aetherium.Model.Combat;
 
 namespace Aetherium.Server.Combat
 {

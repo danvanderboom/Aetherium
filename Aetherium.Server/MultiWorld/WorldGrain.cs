@@ -82,6 +82,7 @@ namespace Aetherium.Server.MultiWorld
                 MapIds = new List<string>(),
                 ClusterId = config.ClusterId
             };
+            _worldState.State.DeathPolicy = config.DeathPolicy;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -163,7 +164,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -339,6 +340,11 @@ namespace Aetherium.Server.MultiWorld
     {
         public WorldInfo Info { get; set; } = new WorldInfo();
         public Dictionary<string, string> PlayerLocations { get; set; } = new Dictionary<string, string>(); // PlayerId -> MapId
+
+        /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11), set once at
+        /// InitializeAsync and applied to every map this world creates (initial and later). Null
+        /// means every map falls back to <see cref="Aetherium.Model.Combat.DeathPolicy.Default"/>.</summary>
+        public Aetherium.Model.Combat.DeathPolicy? DeathPolicy { get; set; }
     }
 }
 

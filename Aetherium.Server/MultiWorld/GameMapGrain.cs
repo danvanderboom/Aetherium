@@ -6,6 +6,7 @@ using Aetherium.Components;
 using Aetherium.Entities;
 using Aetherium.Server.Ai;
 using Aetherium.Server.Combat;
+using Aetherium.Model.Combat;
 using Aetherium.WorldGen;
 using Passes = Aetherium.WorldGen.Passes;
 using System;
@@ -249,6 +250,12 @@ namespace Aetherium.Server.MultiWorld
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
+            // Rehydrate the death policy from persisted state on reactivation — InitializeAsync
+            // (which sets it initially) is not called again after a silo restart. A brand-new grain
+            // has no MapState.DeathPolicy yet, so this leaves the field-initializer Default in place.
+            if (_mapState.State?.DeathPolicy is not null)
+                _deathPolicy = _mapState.State.DeathPolicy;
+
             if (_mapState.State != null && _mapState.State.Recipe != null && _world == null)
             {
                 // Reactivation after silo restart. Prefer a persisted snapshot when
@@ -480,10 +487,12 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null)
         {
             var mapId = this.GetPrimaryKeyString();
-            
+
+            _deathPolicy = deathPolicy ?? DeathPolicy.Default;
+
             parameters ??= new Dictionary<string, object>();
 
             var seed = parameters.TryGetValue("seed", out var seedObj) && seedObj is int seedInt
@@ -581,6 +590,7 @@ namespace Aetherium.Server.MultiWorld
                 PlayerIds = new HashSet<string>(),
                 CreatedAt = DateTime.UtcNow,
                 Recipe = recipe,
+                DeathPolicy = deathPolicy,
             };
 
             await _mapState.WriteStateAsync();
@@ -1519,14 +1529,17 @@ namespace Aetherium.Server.MultiWorld
 
         // Deep combat model (engine gap-analysis §4.2/§4.11), wired for the player-attacks-monster
         // path only (AttackAsync) — see wire-combat-pipeline-live. AlwaysHitResolver reproduces the
-        // pre-pipeline always-hits MVP exactly; DeathPolicy.Default reproduces the pre-policy
-        // defaults (down state, 3-tick revive window, corpses retained forever). Monster-attacks-
-        // player retaliation in StepNpcsAsync deliberately stays on the old CombatSystem — a downed
-        // player entering the Dying/Corpse creature-death lifecycle needs its own design pass tied
-        // to the (still Phase-1-only) add-death-respawn-policy schema.
+        // pre-pipeline always-hits MVP exactly. Monster-attacks-player retaliation in StepNpcsAsync
+        // deliberately stays on the old CombatSystem — a downed player entering the Dying/Corpse
+        // creature-death lifecycle needs its own design pass, see wire-death-respawn-live.
         private readonly DamagePipeline _damagePipeline = new DamagePipeline();
         private readonly IHitResolver _hitResolver = new AlwaysHitResolver();
-        private readonly DeathPolicy _deathPolicy = DeathPolicy.Default;
+
+        // Per-world death/respawn rules (engine gap-analysis §4.11 — see wire-death-respawn-live),
+        // sourced from InitializeAsync's deathPolicy argument (persisted on MapState so it survives
+        // reactivation) rather than hardcoded, so different worlds can pick different death models
+        // as data. Defaults to DeathPolicy.Default until InitializeAsync/OnActivateAsync sets it.
+        private DeathPolicy _deathPolicy = DeathPolicy.Default;
         private readonly DeathSystem _deathSystem = new DeathSystem();
         private readonly CorpseExpirySystem _corpseExpirySystem = new CorpseExpirySystem();
 
@@ -1693,6 +1706,8 @@ namespace Aetherium.Server.MultiWorld
                 TotalDamageDealt = state?.TotalDamageDealt ?? 0,
             });
         }
+
+        public Task<DeathPolicy> GetDeathPolicyAsync() => Task.FromResult(_deathPolicy);
 
         public async Task<Aetherium.Model.InteractionResultDto> OpenAsync(string sessionId, string targetEntityId)
             => await ToggleDoorAsync(sessionId, targetEntityId, wantOpen: true);
@@ -2033,6 +2048,12 @@ namespace Aetherium.Server.MultiWorld
 
         /// <summary>Rolling combat analytics: total damage players have dealt on this map.</summary>
         [Id(10)] public long TotalDamageDealt { get; set; }
+
+        /// <summary>Per-world death/respawn rules captured at <c>InitializeAsync</c> time (engine
+        /// gap-analysis §4.11 — see wire-death-respawn-live), so the grain can rehydrate
+        /// <c>_deathPolicy</c> on reactivation without re-running InitializeAsync. Null means the
+        /// world specified none — the grain falls back to <c>DeathPolicy.Default</c>.</summary>
+        [Id(11)] public Aetherium.Model.Combat.DeathPolicy? DeathPolicy { get; set; }
     }
 }
 

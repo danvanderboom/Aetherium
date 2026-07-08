@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Orleans;
+using Aetherium.Model.Combat;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -23,6 +24,10 @@ namespace Aetherium.Server.MultiWorld
         [Id(10)] public string NarrativeStateScope { get; set; } = "shared"; // "shared" or "per-world"
         [Id(11)] public int? NarrativeSeed { get; set; } // Optional seed for deterministic narrative generation
         [Id(12)] public string? ClusterId { get; set; } // Optional cluster ID for multi-world ecosystems
+
+        /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11). Null means every map
+        /// on this world falls back to <see cref="DeathPolicy.Default"/> — see wire-death-respawn-live.</summary>
+        [Id(13)] public DeathPolicy? DeathPolicy { get; set; }
     }
 
     /// <summary>
@@ -83,6 +88,10 @@ namespace Aetherium.Server.MultiWorld
         [Id(5)] public int MaxPlayers { get; set; } = 100;
         [Id(6)] public WorldSize? Size { get; set; }
         [Id(7)] public string? ClusterId { get; set; } // Optional cluster ID for multi-world ecosystems
+
+        /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11). Null means every map
+        /// on this world falls back to <see cref="DeathPolicy.Default"/> — see wire-death-respawn-live.</summary>
+        [Id(8)] public DeathPolicy? DeathPolicy { get; set; }
     }
 
     /// <summary>

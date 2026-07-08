@@ -2,6 +2,7 @@ using Orleans;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Aetherium.Model.Combat;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -12,9 +13,11 @@ namespace Aetherium.Server.MultiWorld
     public interface IGameMapGrain : IGrainWithStringKey
     {
         /// <summary>
-        /// Initializes the map with a generated world.
+        /// Initializes the map with a generated world. <paramref name="deathPolicy"/> is the
+        /// owning world's death/respawn rules (engine gap-analysis §4.11); null falls back to
+        /// <see cref="DeathPolicy.Default"/> — see openspec/changes/wire-death-respawn-live.
         /// </summary>
-        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters);
+        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null);
 
         /// <summary>
         /// Gets the current world state for this map.
@@ -84,6 +87,11 @@ namespace Aetherium.Server.MultiWorld
 
         /// <summary>Rolling combat analytics for this map: monsters defeated + total damage dealt (P3-7 slice 2).</summary>
         Task<Aetherium.Model.CombatStatsDto> GetCombatStatsAsync();
+
+        /// <summary>The death/respawn rules currently active on this map (engine gap-analysis §4.11 —
+        /// see openspec/changes/wire-death-respawn-live): the world's configured policy, or
+        /// <see cref="DeathPolicy.Default"/> if none was specified.</summary>
+        Task<DeathPolicy> GetDeathPolicyAsync();
 
         /// <summary>
         /// Removes a player's Character from <c>_world</c> on disconnect or explicit

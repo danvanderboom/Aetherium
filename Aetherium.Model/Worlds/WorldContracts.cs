@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Orleans;
+using Aetherium.Model.Combat;
 
 namespace Aetherium.Model.Worlds
 {
@@ -78,6 +79,10 @@ namespace Aetherium.Model.Worlds
         [Id(4)] public int MaxPlayers { get; set; } = 100;
         [Id(5)] public string? NarrativeId { get; set; }
         [Id(6)] public string? ClusterId { get; set; }
+
+        /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11). Null means every map
+        /// on this world falls back to <see cref="DeathPolicy.Default"/> — see wire-death-respawn-live.</summary>
+        [Id(7)] public DeathPolicy? DeathPolicy { get; set; }
     }
 
     /// <summary>

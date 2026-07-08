@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Aetherium.Server.Combat;
+using Aetherium.Model.Combat;
 
 namespace Aetherium.Test.Combat
 {
@@ -17,6 +17,20 @@ namespace Aetherium.Test.Combat
             Assert.That(policy.CorpseRetentionTicks, Is.EqualTo(int.MaxValue), "Default must retain corpses forever, matching pre-policy behavior.");
             Assert.That(policy.DownStateEnabled, Is.True);
             Assert.That(policy.ReviveWindowTicks, Is.EqualTo(3), "Default must match DamagePipeline's pre-policy hardcoded dyingTicks of 3.");
+            Assert.That(policy.RespawnLocation.Mode, Is.EqualTo(RespawnLocationMode.WorldSpawn));
+            Assert.That(policy.RespawnInvulnerabilityTicks, Is.EqualTo(3));
+            Assert.That(policy.PermadeathBehavior, Is.EqualTo(PermadeathSessionPolicy.Spectate));
+        }
+
+        [Test]
+        public void RespawnLocationPolicy_WorldSpawnDefault_HasNoStrayCoordinates()
+        {
+            var location = RespawnLocationPolicy.WorldSpawnDefault;
+
+            Assert.That(location.Mode, Is.EqualTo(RespawnLocationMode.WorldSpawn));
+            Assert.That(location.LocationTag, Is.Null);
+            Assert.That((location.X, location.Y, location.Z), Is.EqualTo((0, 0, 0)));
+            Assert.That((location.OffsetX, location.OffsetY, location.OffsetZ), Is.EqualTo((0, 0, 0)));
         }
 
         [Test]

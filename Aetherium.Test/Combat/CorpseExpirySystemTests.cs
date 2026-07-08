@@ -3,6 +3,7 @@ using Aetherium;
 using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Server.Combat;
+using Aetherium.Model.Combat;
 using Aetherium.WorldBuilders;
 
 namespace Aetherium.Test.Combat

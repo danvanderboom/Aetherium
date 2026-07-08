@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +9,7 @@ using Orleans.Configuration;
 using Orleans;
 using Aetherium.Server.MultiWorld;
 using Aetherium.Components;
+using Aetherium.Model.Combat;
 
 namespace Aetherium.Test
 {
@@ -239,6 +241,83 @@ namespace Aetherium.Test
             // Assert
             Assert.That(mapId, Is.Not.Null.And.Not.Empty);
             Assert.That(mapIds, Contains.Item(mapId));
+        }
+
+        /// <summary>Verifies "Per-World Death Policy" in
+        /// specs/death-respawn-policy/spec.md (openspec/changes/wire-death-respawn-live).</summary>
+        [Test]
+        public async Task WorldGrain_DeathPolicy_PropagatesToEveryMapItCreates()
+        {
+            var worldId = $"test-world-{Guid.NewGuid()}";
+            var grain = _cluster.GrainFactory.GetGrain<IWorldGrain>(worldId);
+            var customPolicy = new DeathPolicy
+            {
+                Permadeath = true,
+                DownStateEnabled = false,
+                ReviveWindowTicks = 99,
+                RespawnInvulnerabilityTicks = 7,
+                PermadeathBehavior = PermadeathSessionPolicy.Disconnect,
+                RespawnLocation = new RespawnLocationPolicy
+                {
+                    Mode = RespawnLocationMode.FixedCoordinates,
+                    X = 10, Y = 20, Z = 0,
+                },
+            };
+            var config = new WorldConfig
+            {
+                WorldId = worldId,
+                Name = "Custom Death Policy World",
+                Size = new WorldSize { Width = 50, Height = 50, Depth = 1 },
+                DeathPolicy = customPolicy,
+            };
+
+            await grain.InitializeAsync(config);
+            var secondMapId = await grain.AddMapAsync("floor-2", "maze", new System.Collections.Generic.Dictionary<string, object>());
+            var mapIds = await grain.GetMapIdsAsync();
+            var initialMapId = mapIds.First(id => id != secondMapId);
+
+            // The world's policy must reach BOTH the map created inline by InitializeAsync
+            // ("Main") and one added later via AddMapAsync — not just whichever map happens to
+            // be created first.
+            var initialMapPolicy = await _cluster.GrainFactory.GetGrain<IGameMapGrain>(initialMapId).GetDeathPolicyAsync();
+            var secondMapPolicy = await _cluster.GrainFactory.GetGrain<IGameMapGrain>(secondMapId).GetDeathPolicyAsync();
+
+            foreach (var policy in new[] { initialMapPolicy, secondMapPolicy })
+            {
+                Assert.That(policy.Permadeath, Is.True);
+                Assert.That(policy.DownStateEnabled, Is.False);
+                Assert.That(policy.ReviveWindowTicks, Is.EqualTo(99));
+                Assert.That(policy.RespawnInvulnerabilityTicks, Is.EqualTo(7));
+                Assert.That(policy.PermadeathBehavior, Is.EqualTo(PermadeathSessionPolicy.Disconnect));
+                Assert.That(policy.RespawnLocation.Mode, Is.EqualTo(RespawnLocationMode.FixedCoordinates));
+                Assert.That((policy.RespawnLocation.X, policy.RespawnLocation.Y), Is.EqualTo((10, 20)));
+            }
+        }
+
+        [Test]
+        public async Task WorldGrain_NoDeathPolicySpecified_MapFallsBackToDefault()
+        {
+            var worldId = $"test-world-{Guid.NewGuid()}";
+            var grain = _cluster.GrainFactory.GetGrain<IWorldGrain>(worldId);
+            var config = new WorldConfig
+            {
+                WorldId = worldId,
+                Name = "Unconfigured Death Policy World",
+                Size = new WorldSize { Width = 50, Height = 50, Depth = 1 },
+                // DeathPolicy deliberately left null.
+            };
+
+            await grain.InitializeAsync(config);
+            var mapIds = await grain.GetMapIdsAsync();
+            var policy = await _cluster.GrainFactory.GetGrain<IGameMapGrain>(mapIds.First()).GetDeathPolicyAsync();
+
+            var expected = DeathPolicy.Default;
+            Assert.That(policy.Permadeath, Is.EqualTo(expected.Permadeath));
+            Assert.That(policy.DownStateEnabled, Is.EqualTo(expected.DownStateEnabled));
+            Assert.That(policy.ReviveWindowTicks, Is.EqualTo(expected.ReviveWindowTicks));
+            Assert.That(policy.RespawnInvulnerabilityTicks, Is.EqualTo(expected.RespawnInvulnerabilityTicks));
+            Assert.That(policy.PermadeathBehavior, Is.EqualTo(expected.PermadeathBehavior));
+            Assert.That(policy.RespawnLocation.Mode, Is.EqualTo(expected.RespawnLocation.Mode));
         }
 
         [Test]
