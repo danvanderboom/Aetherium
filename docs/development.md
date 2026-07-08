@@ -67,7 +67,7 @@ dotnet test Aetherium.Test --filter "FullyQualifiedName~GameMapGrain_LoadMap_Res
 
 ### Test Status
 
-Current test status: **865 passed, 0 failed, 0 skipped** (Aetherium.Test on `develop`, 2026-07-03). All projects target net10.0; no `DOTNET_ROLL_FORWARD` workaround is needed on machines with the .NET 10 SDK.
+The suite is green on `develop` (0 failed, 0 skipped). Run `dotnet test Aetherium.sln` for the current pass count rather than relying on a number pinned here — for the authoritative build/test ground truth see the [audit index](audits/README.md). All projects target net10.0; no `DOTNET_ROLL_FORWARD` workaround is needed on machines with the .NET 10 SDK.
 
 ### Testing Best Practices
 
@@ -140,35 +140,11 @@ await mapGrain.InitializeAsync(worldId, "Test Map", size, "outdoor", parameters)
 - Concurrency:
   - `WorldGrain` is marked `[Reentrant]` to avoid deadlocks during initialization that cascades into map/cluster operations in tests.
 
-## Recent Changes
-
-### Fixed Test Flakiness
-
-Tests in `GameMapGrainRegionTests.cs` were failing intermittently due to random seed generation. Fixed by:
-
-1. Added seed parameter support to `GameMapGrain.InitializeAsync()`
-2. Updated all tests to use fixed seeds instead of random ones
-3. Each test now uses a different seed value for isolation
-
-**Files changed:**
-- `Aetherium.Server/MultiWorld/GameMapGrain.cs` - Added seed parameter support
-- `Aetherium.Test/MultiWorld/GameMapGrainRegionTests.cs` - Updated tests to use fixed seeds
-- `Aetherium.Server/Middleware/ApiKeyMiddleware.cs` - Fixed missing using directives
-
-### API Key Middleware
-
-Added API key authentication middleware for control-plane endpoints. Requires `Dashboard:ApiKey` in configuration for production environments.
-
-**Files:**
-- `Aetherium.Server/Middleware/ApiKeyMiddleware.cs` - Middleware implementation
-- `Aetherium.Server/Controllers/ManagementController.cs` - Management API endpoints
-- `Aetherium.Dashboard/` - Web dashboard for game management
-
-### Unified CLI (`aetherctl`)
+## Unified CLI (`aetherctl`)
 
 The unified CLI tool (`aetherctl`) provides world management and server administration. It supports both SignalR (with Azure AD B2C authentication) and Orleans direct connections.
 
-**Status:** Implemented and functional
+> For the authoritative, current history of what changed and when, see the git log and the [audit register](audits/README.md). This guide documents how the system works today, not a changelog.
 
 #### World Management Commands
 
@@ -339,14 +315,9 @@ See [Instance System Documentation](instances.md) for details on the instance sy
 
 ### World Generation
 
-World generation uses a pass-based pipeline:
+World generation uses a pass-based pipeline. Conceptually: **layout → theming → population → environmental story → audio → interactions → portals → validation**. The exact, ordered pass list per generator type is defined in one place — `Aetherium.Server/WorldGen/WorldGenerationPassCatalog.cs` — which is shared by the grain, snapshot builder, WorldGenCLI, and `aetherctl` so all paths generate identical worlds.
 
-1. **Layout Pass**: Generate basic map structure
-2. **Theming Pass**: Apply visual themes
-3. **Population Pass**: Add entities and interactives
-4. **Validation Pass**: Ensure generated world meets requirements
-
-For details, see `Aetherium.Server/WorldGen/` directory.
+For details, see the `Aetherium.Server/WorldGen/` directory and [pcg-tools.md](pcg-tools.md).
 
 ## Common Issues and Solutions
 
@@ -414,6 +385,5 @@ When contributing code:
 
 ---
 
-**Last Updated**: Phase 1 foundation fixes landed 2026-07-03 (boot-hang fix, Dashboard build restored, net10.0 migration)  
-**Test Status**: 865 passed, 0 failed, 0 skipped
+For current build/test ground truth and per-subsystem status, see the [audit index](audits/README.md).
 

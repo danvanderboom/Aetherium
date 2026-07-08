@@ -91,7 +91,7 @@ var allies = relationshipMatrix.GetNPCsByRelationship("npc-guard", RelationshipC
 The `NarrativeConsequenceEngine` generates follow-up quests from player actions:
 
 ```csharp
-var engine = new NarrativeConsequenceEngine(clusterClient);
+var engine = new NarrativeConsequenceEngine(grainFactory);
 await engine.ProcessEventAsync(
     worldId: "my-world",
     narrativeId: "my-narrative",

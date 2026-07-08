@@ -180,7 +180,7 @@ Toggle between omnidirectional and realistic cone-based vision. Challenge yourse
 Cycle through different visual themes (press **H**) to find your preferred color scheme.
 
 ### 🔊 Audio Feedback
-Immersive sound effects for footsteps, interactions, and environmental cues.
+Immersive sound effects for footsteps, interactions, and environmental cues. Toggle audio with **N**; cycle the music track with **Shift+M**.
 
 ## Version Information
 

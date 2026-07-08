@@ -1,225 +1,55 @@
 # Aetherium Documentation
 
-Documentation for Aetherium - a multiplayer ASCII dungeon crawler with dynamic lighting, heat vision, and immersive gameplay.
+Aetherium is a server-authoritative multiplayer simulation engine (.NET 10, Orleans, SignalR). The server simulates the world and streams each player only semantic perception data; clients are thin renderers. See the root [README](../README.md) for the project overview, **vision & goals**, and quick-start.
 
-## User Documentation
+This is the documentation index. Start with the section for your role.
 
-Documentation for players using the game clients.
+## For players
 
-### Console Client
-📁 **[console/user/](console/user/)** - Console/Terminal client user guide
+The console/terminal client is the reference renderer — ASCII, with dynamic lighting, heat vision, and a day/night cycle.
 
-The console client is an ASCII-based terminal interface with rich features:
-- Dynamic lighting (Torch, Sunlight, Infrared modes)
-- Heat tracking and trail visualization  
-- Day/night cycle with atmospheric effects
-- Directional and omnidirectional vision
-- Full keyboard controls
+- **[Console user guide](console/user/README.md)** — overview and feature tour
+- **[Quick reference](console/user/quick-reference.md)** — controls and symbols at a glance
+- **[Controls](console/user/controls.md)** · **[Gameplay](console/user/gameplay.md)** · **[Dynamic world](console/user/dynamic-world.md)** · **[Temporal modifiers](console/user/temporal-modifiers.md)**
 
-**Start here:** [Console Client Quick Reference](console/user/quick-reference.md)
+## For developers
 
-### Future Clients
-As new clients are developed, their documentation will be added here:
-- 📁 `web/user/` - Web browser client (future)
-- 📁 `mobile/user/` - Mobile app client (future)
-- 📁 `gui/user/` - GUI desktop client (future)
+### Start here
+- **[Development guide](development.md)** — setup, building, testing, workflow, debugging
+- **[Architecture overview](architecture/overview.md)** — runtime topology, protocol, data flow, configuration
 
-## Developer Documentation
+### Architecture
+- **[Server](architecture/server.md)** — grains, ECS simulation, perception, worldgen, agents, narrative, events
+- **[Clients](architecture/clients.md)** — console, Unity 2D, Dashboard, and the planned Unreal client
+- **[Tooling & data](architecture/tooling-and-data.md)** — `aetherctl`, WorldGenCLI, scripts, `Data/` assets
 
-Documentation for developers working on the codebase.
+### Subsystems
+- **[Agent system](agents/README.md)** — LLM/heuristic agents, profiles, and the shared tool API · **[Tool catalog](agents/TOOLS.md)** · **[Tool profiles](agents/TOOL_PROFILES.md)**
+- **[Narrative systems](narrative-systems.md)** — procedural quests, consequence engine, emergent storytelling
+- **[Multi-world ecosystems](multiworld-ecosystems.md)** — clusters, portals, cross-world economy, meta-progression, hub worlds
+- **[Instances](instances.md)** — dungeon instances, lockouts, party/raid grains
+- **[Procedural audio](PROCEDURAL_AUDIO_IMPLEMENTATION.md)** — biome audio profiles and the audio generation pass
+- **[PCG tools](pcg-tools.md)** — world generation via `aetherctl worldgen`
+- **[Monitoring](monitoring.md)** — real-time game monitoring quick start
+- **[Agent training](training/README.md)** — telemetry, curricula, benchmarks, and the training dashboard
 
-### Agents & AI
-📁 **[agents/](agents/)** - AI agent system documentation
+### Clients
+- **[Unity 2D client](unity/README.md)** — tilemap rendering, Xbox controller support · **[Unity testing](unity/testing.md)**
+- **[Unreal client guide](clients/unreal-client-guide.md)** — forward-looking migration guide (client not yet built)
 
-The game features a comprehensive extensible agent tool system:
-- **LLM-driven agents** using OpenAI-compatible APIs (phi-4 via LM Studio)
-- **Heuristic fallback agents** with simple rule-based behavior
-- **Extensible tool system** with 26+ discoverable tools
-- **Profile-based access control** (Explorer, Player, WorldBuilder, etc.)
-- **OpenAI function calling support** for advanced LLM integration
-- **CLI tools** for agent and tool management
-- **Rate limiting and error handling**
+## Audits & status
 
-**Start here:** [Agent System Guide](agents/README.md)  
-**Deep dive:** [Tool System Architecture](agents/TOOLS.md)
+Dated audit rounds live under **[docs/audits/](audits/README.md)**:
+- **[2026-07-03 subsystem audit](audits/2026-07-03-initial-subsystem-audit/README.md)** — ten subsystem audits, the [recommendations register](audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md), and the [improvement plan](audits/2026-07-03-initial-subsystem-audit/IMPROVEMENT_PLAN.md) (now complete)
+- **[2026-07-06 engine gap-analysis](audits/2026-07-06-engine-gap-analysis/design-next-steps.md)** — forward-looking roadmap of engine-level gameplay systems, plus the [authoring](audits/2026-07-06-engine-gap-analysis/design-authoring-and-scripting.md) and [ECA visual-scripting](audits/2026-07-06-engine-gap-analysis/design-eca-visual-scripting.md) design sketches
 
-### Architecture & Design
-- ✅ [Architecture Overview](architecture/overview.md) - System topology, protocol, data flow, configuration
-- ✅ [Server Architecture](architecture/server.md) - Grains, simulation, ECS, perception, worldgen, agents, narrative
-- ✅ [Client Architecture](architecture/clients.md) - Console, Unity, Dashboard, and planned Unreal clients
-- ✅ [Tooling & Data](architecture/tooling-and-data.md) - aetherctl, WorldGenCLI, scripts, Data/ assets
-- ✅ [Agent Tool System](agents/TOOLS.md) - Extensible tool architecture
-- ✅ [Narrative Systems](narrative-systems.md) - Procedural storytelling and emergent narratives
-- ✅ [Instance System](instances.md) - Dungeon instances, lockouts, and party support
-- ✅ [Development Guide](development.md) - Developer setup, testing, and workflow
-- ✅ [Multi-World Ecosystems](multiworld-ecosystems.md) - World clusters, portals, cross-world economy, meta-progression, and hub worlds
-- ✅ [Monitoring Guide](monitoring.md) - Real-time game monitoring quick start
+The audit index carries the authoritative build/test ground truth. **[docs/history/](history/README.md)** holds superseded, point-in-time status reports and plans — accurate for their date, not current.
 
-### Quality & Audits
-- 📋 [Audit Index & Scorecard](audits/2026-07-03-initial-subsystem-audit/README.md) - Per-subsystem audit reports with build/test ground truth
-- 📋 [Recommendations](audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md) - Prioritized findings register
-- 📋 [Design Analysis](audits/2026-07-03-initial-subsystem-audit/DESIGN_ANALYSIS.md) - High-level system design assessment
-- 📋 [Improvement Plan](audits/2026-07-03-initial-subsystem-audit/IMPROVEMENT_PLAN.md) - Phased quality-improvement roadmap
-- 🗄️ [Historical documents](history/README.md) - Archived point-in-time status reports
+## Spec-driven development
 
-### SignalR Hubs
+Requirements live in [openspec/specs/](../openspec/specs/) (what IS built) and change proposals in [openspec/changes/](../openspec/changes/) (what SHOULD change). Follow the [OpenSpec workflow](../openspec/AGENTS.md) for capability, architecture, or breaking changes; small bug fixes and wiring go straight in.
 
-#### ManagementHub (`/managementHub`)
-World management operations with Azure AD B2C authentication.
+## API surfaces
 
-**Available Methods:**
-- `Ping()`: Test connection
-- `GetServerInfo()`: Get server status and world counts
-- `ListWorlds()`: List all worlds
-- `GetWorldInfo(string worldId)`: Get detailed world information
-- `CreateWorld(CreateWorldRequest)`: Create a new world (Admin role required)
-- `PauseWorld(string worldId)`: Pause a world (Admin role required)
-- `ResumeWorld(string worldId)`: Resume a world (Admin role required)
-- `Shutdown(string worldId)`: Shutdown a world (Admin role required)
-
-**Client Usage:**
-```csharp
-using Aetherctl.SignalR;
-using Aetherctl.Auth;
-
-// Configure authentication
-var authService = new AuthService(tenant, policy, clientId, scopes);
-var token = await authService.AcquireTokenDeviceCodeAsync();
-
-// Create client
-await using var client = new ManagementClient(baseUrl, async () => token);
-await client.ConnectAsync();
-
-// Use methods
-var worlds = await client.ListWorldsAsync();
-var info = await client.GetWorldInfoAsync(worldId);
-```
-
-See [Development Guide - Unified CLI](development.md#unified-cli-aetherctl) for CLI usage examples.
-
-### API Reference
-- [SignalR Hubs](#signalr-hubs) - SignalR hub reference and usage
-- **ManagementHub**: World management operations with B2C authentication
-- **GameHub**: Gameplay communication between clients and server
-- **AgentDashboardHub**: Agent telemetry and monitoring
-- **REST APIs**:
-  - `/api/cluster` - Cluster, portal, and economy management
-  - `/api/metaprogression/{playerId}` - Meta-progression (discoveries, unlocks)
-  - `/api/management/worlds` - World creation and management
-- Coming soon: Game state DTOs reference
-
-### Contributing
-- See: [OpenSpec workflow](../openspec/AGENTS.md) for change proposals
-- Coming soon: Contribution guidelines
-- Coming soon: Code style guide
-
-## Quick Navigation
-
-### For Players
-- **New to Console Client?** → [Console User Docs](console/user/README.md)
-- **Need a quick reference?** → [Quick Reference](console/user/quick-reference.md)
-- **Want to learn the game?** → [Gameplay Guide](console/user/gameplay.md)
-- **Looking for a key?** → [Controls Guide](console/user/controls.md)
-
-### For Developers
-- **Getting started?** → [Development Guide](development.md)
-- **Planning a change?** → [OpenSpec Agents Guide](../openspec/AGENTS.md)
-- **Working with agents?** → [Agent System Guide](agents/README.md)
-- **Exploring the code?** → Start with `Aetherium.Server/` and `Aetherium.Console/`
-- **Running tests?** → [Development Guide - Testing](development.md#testing)
-
-## Project Structure
-
-```
-docs/                              # Documentation (you are here)
-├── README.md                      # This file
-├── architecture/                  # System architecture (overview, server, clients, tooling)
-├── audits/                        # Subsystem audits, recommendations, improvement plan
-├── history/                       # Archived point-in-time status docs
-├── clients/                       # Client guides (Unreal migration guide)
-├── console/user/                  # Console client user guides
-├── agents/                        # Agent system docs
-├── training/                      # Agent training & benchmark docs
-├── unity/                         # Unity client docs
-├── monitoring.md                  # Monitoring quick start
-└── development.md                 # Developer guide
-
-Aetherium.Server/                  # Server: engine, grains, hubs
-Aetherium.Model/                   # Shared DTOs
-Aetherium.Console/                 # Terminal client
-Aetherium.Unity/                   # Unity 2D client
-Aetherium.Dashboard/               # Blazor ops/training dashboard
-Aetherctl/                         # Operator CLI
-WorldGenCLI/                       # PCG client library
-Aetherium.Test/  Aetherctl.Test/   # Test suites
-openspec/                          # Specifications & change proposals
-```
-
-## Documentation Standards
-
-### User Documentation
-- **Audience**: Players who want to play the game
-- **Tone**: Friendly, instructive, example-driven
-- **Format**: Markdown with tables, lists, and clear sections
-- **Structure**: 
-  - Quick reference for fast lookup
-  - Detailed guides for learning
-  - Progressive disclosure (beginner → advanced)
-
-### Developer Documentation
-- **Audience**: Developers contributing to the codebase
-- **Tone**: Technical, precise, architectural
-- **Format**: Markdown with code examples and diagrams
-- **Structure**:
-  - Architecture overviews
-  - API references with signatures
-  - Design decisions and rationale
-
-## Contributing to Documentation
-
-### For User Docs
-1. Focus on player experience and clarity
-2. Include practical examples and screenshots (when applicable)
-3. Keep quick reference concise
-4. Make guides progressively detailed
-5. Test instructions by following them yourself
-
-### For Developer Docs
-1. Follow [OpenSpec workflow](../openspec/AGENTS.md) for major changes
-2. Keep technical accuracy high
-3. Include code examples
-4. Document "why" not just "what"
-5. Update docs when code changes
-
-## Documentation Roadmap
-
-### Planned User Documentation
-- [ ] FAQ for common issues
-- [ ] Video tutorial links (when available)
-- [ ] Multiplayer etiquette guide
-- [ ] Advanced strategies and tactics
-- [ ] Modding guide (if supported)
-
-### Planned Developer Documentation
-- [x] Agent tool system architecture
-- [x] Narrative systems guide
-- [x] Development guide (testing, workflow, best practices)
-- [x] System architecture overview (architecture/)
-- [ ] ECS system guide
-- [ ] Perception system deep dive
-- [ ] Network protocol specification
-- [ ] Performance optimization guide
-
-## Getting Help
-
-- **Gameplay questions?** See [user documentation](console/user/)
-- **Technical issues?** Check project README or open an issue
-- **Want to contribute?** See [OpenSpec workflow](../openspec/AGENTS.md)
-
----
-
-**Last Updated:** 2026-07-03  
-**Documentation Version:** 2.0  
-**Game Version:** Compatible with current main branch
-
-
+- **SignalR hubs** — `GameHub` (`/gamehub`, gameplay), `ManagementHub` (`/managementHub`, world management with Azure AD B2C auth), `AgentDashboardHub` (`/agentDashboardHub`, telemetry). Method signatures and client usage: [architecture/server.md](architecture/server.md) and [development.md](development.md#unified-cli-aetherctl).
+- **REST** — `/api/cluster` (clusters, portals, economy), `/api/metaprogression/{playerId}`, `/api/management/worlds`, `/api/benchmark`, `/api/curriculum`, `/api/agenttelemetry`. Auth model: reads open for the dashboard; mutations gated by API key (see [architecture/server.md](architecture/server.md)).

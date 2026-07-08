@@ -54,12 +54,19 @@ Switch between different vision and lighting combinations using number keys:
   - Switches between omnidirectional and cone-based field of view
   - Directional mode simulates realistic human peripheral vision
 
+### Navigation
+- **M** - Toggle compass mode
+  - Cycles the on-screen compass widget's display mode
+  - Hold **Shift** with **M** to cycle the music track instead (see Audio Controls)
+
 ## User Interface
 
 ### Audio Controls
-- **U** - Toggle audio on/off
+- **N** - Toggle audio on/off
   - Enables/disables sound effects and background music
   - Status message confirms current state
+- **Shift+M** - Cycle to the next music track
+  - Status message shows the current track
 
 ### Display Options
 - **H** - Cycle through themes
@@ -122,7 +129,9 @@ Switch between different vision and lighting combinations using number keys:
 | **3** | Infrared + Torch |
 | **4** | Infrared + Sunlight |
 | **T** | Toggle Directional Vision |
-| **U** | Toggle Audio |
+| **M** | Toggle Compass Mode |
+| **N** | Toggle Audio |
+| **Shift+M** | Next Music Track |
 | **H** | Cycle Theme |
 | **J** | Jump (Teleport) |
 | **Esc** | Quit |

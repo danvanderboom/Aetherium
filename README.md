@@ -1,6 +1,14 @@
 # Aetherium
 
-Aetherium is a server-authoritative multiplayer dungeon crawler built on .NET 10, Microsoft Orleans, and SignalR. The server simulates the entire game world — procedural generation, field-of-view and lighting, entities, interactions, weather and seasons, AI agents, and emergent narrative — and streams each player only what their character can perceive. Clients are thin renderers: a Spectre.Console terminal client, a Unity 2D client, and a planned Unreal Engine client all consume the same perception protocol.
+Aetherium is a server-authoritative multiplayer simulation engine built on .NET 10, Microsoft Orleans, and SignalR. The server simulates an entire game world — procedural generation, field-of-view and lighting, entities, interactions, weather and seasons, AI agents, and emergent narrative — and streams each player only what their character can perceive. Clients are thin renderers: a Spectre.Console terminal client (the reference renderer), a Unity 2D client, and a planned Unreal Engine client all consume the same semantic perception protocol. The first game built on it is a multiplayer dungeon crawler; the engine itself is designed to be a substrate for many.
+
+## Vision & goals
+
+Three constraints shape the engine's design. They are the north star for every subsystem — see the [engine gap-analysis & roadmap](docs/audits/2026-07-06-engine-gap-analysis/design-next-steps.md) for the full argument, and the [audit index](docs/audits/README.md) for where the codebase stands against them today.
+
+- **Render-agnostic.** The ASCII/console client is the *reference* renderer, not the target. The server, model, and protocol must never assume glyphs, fonts, colors, or character grids — every perception payload is semantic (entity kind, state, orientation, material, lighting, animation cue) so a terminal, a 2D tilemap, or a 3D isometric client can each bind it to its own asset pack.
+- **Continuous, speed-based simulation — not alternating turns.** There is no "your turn / my turn." Each actor has an independent action budget that refills at its own speed; idle players never pause the world, and monsters keep hunting, patrolling, and decaying. Every player acts independently against one continuous simulation clock.
+- **Genre-agnostic content.** The engine is a substrate for fantasy, sci-fi, post-apocalyptic, horror, or historical games. Mechanics are data-driven (abilities with resource pools and effect types, not hard-coded "spells"); a campaign or mod defines what the content means.
 
 ## Project map
 
@@ -42,8 +50,12 @@ The server listens on `http://localhost:5000` (SignalR hubs at `/gamehub`, `/man
 - **[docs/architecture/server.md](docs/architecture/server.md)** — server subsystems (grains, simulation, perception, worldgen, agents, narrative)
 - **[docs/architecture/clients.md](docs/architecture/clients.md)** — console, Unity, dashboard, and planned Unreal clients
 - **[docs/architecture/tooling-and-data.md](docs/architecture/tooling-and-data.md)** — CLI tools, scripts, monitoring, data assets
-- **[docs/audits/README.md](docs/audits/2026-07-03-initial-subsystem-audit/README.md)** — subsystem audit reports, recommendations, and improvement plan
+- **[docs/audits/README.md](docs/audits/README.md)** — dated audit rounds: subsystem audits & improvement plan (2026-07-03), engine gap-analysis & roadmap (2026-07-06)
 - **[docs/history/](docs/history/)** — archived point-in-time status documents
+
+## Project status
+
+The original subsystem-audit improvement plan is complete (foundation, live-path correctness, convergence, test depth, and the Phase-5 feature slices — combat, quests, instances, agent live-play, PCG placement). The forward-looking work is captured in the [2026-07-06 engine gap-analysis](docs/audits/2026-07-06-engine-gap-analysis/design-next-steps.md): deeper gameplay systems (a continuous action pipeline, combat depth, abilities, NPC AI, factions) and an authoring/scripting layer. See the [audit index](docs/audits/README.md) for the current state against the vision above.
 
 ## Spec-driven development
 

@@ -77,28 +77,42 @@ dotnet run
 
 Navigate to http://localhost:5001 to view the dashboard.
 
-### 2. Start Training an Agent
+### 2. Attach and Run an Agent
+
+The `aetherctl agent` commands attach an agent to a session and drive it. There is
+no dedicated `train` verb — curricula and benchmarks are managed through the REST
+API and the dashboard (see [API Endpoints](#api-endpoints) below).
 
 ```powershell
-# Attach agent to a session
-agentcli agent attach <sessionId> --agent <agentId> --runner <runnerId>
+# Attach an agent to a session
+aetherctl agent attach <sessionId> --agent <agentId>
 
-# Start a training curriculum
-agentcli train start <agentId> beginner-dungeon
+# Attach an agent directly to a live shared world
+aetherctl agent attach-world <worldId> --agent <agentId>
 
-# Monitor progress
-agentcli train status <agentId>
+# Step once, run continuously, check status, or stop
+aetherctl agent step <agentId>
+aetherctl agent run <agentId>
+aetherctl agent status <agentId>
+aetherctl agent stop <agentId>
 ```
 
-### 3. Run a Benchmark
+Curriculum progression is created/updated via `POST /api/curriculum` and observed
+on the dashboard's Curriculum Progress page.
+
+### 3. Generate a Benchmark World
+
+Benchmark scenarios are generated through `aetherctl worldgen`, not a separate CLI:
 
 ```powershell
-# Generate benchmark world
-worldgencli --benchmark navigation-basic --output benchmark.json
+# Generate a benchmark world by scenario ID
+aetherctl worldgen generate --benchmark navigation-basic --output benchmark.json
 
-# Run agent on benchmark
-agentcli train benchmark navigation-basic <agentId>
+# Render one to a PNG or ASCII preview
+aetherctl worldgen render --benchmark navigation-basic --png benchmark.png
 ```
+
+Benchmark catalog and result operations use the `/api/benchmark` endpoints below.
 
 ### 4. View Telemetry
 

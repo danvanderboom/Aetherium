@@ -65,6 +65,31 @@ The Agent Tool System provides a comprehensive, extensible framework for AI agen
 
 **Note**: World-building tools require the `world_edit` capability. When used during world building (via `WorldFeatureBuilder`), tools execute with `WorldBuildingToolContext` that provides direct `World` access without requiring game sessions.
 
+### Combat Tools (Category: `combat`)
+- **`attack`** - Melee-attack an adjacent target; applies damage and resolves defeat/loot
+
+### Instance & Party Tools (Category: `instances`, `party`)
+- **`create_party`** - Create a party for grouped/instanced play
+- **`enter_dungeon`** - Enter (allocate or reuse) a dungeon instance
+
+### Multi-World Tools (Category: `multiworld`, `cluster`)
+- **`createcluster`** - Create a world cluster
+- **`registerworldtocluster`** - Register a world into a cluster
+- **`registerportal`** - Register a portal between worlds
+- **`createtraderoute`** - Create a cross-world trade route
+- **`scheduletransport`** - Schedule caravan transport along a trade route
+
+### Narrative & Quest Tools (Category: `narrative`, `quest`)
+- **`accept_quest`** - Accept/activate a quest (populates the player's active quests)
+- **`list_quests`** - List quests available in the current world
+- **`quest_log`** - Show the player's active quests and objective progress
+
+> **Total: 29 tools across 8 categories.** The catalog is the source of truth in
+> code — see the `IAgentTool` implementations under
+> `Aetherium.Server/Agents/Tools/`. Each category maps to matching `aetherctl`
+> commands (`aetherctl combat`, `aetherctl instance`, `aetherctl world`,
+> `aetherctl quest`/`aetherctl narrative`).
+
 ## Quick Start
 
 ### For Players (Using New Unified API)

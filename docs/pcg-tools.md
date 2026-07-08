@@ -10,7 +10,7 @@ aetherctl worldgen generate \
   --generator AdvancedDungeon \
   --template dungeon \
   --width 60 --height 60 --levels 2 \
-  --seed 12345 --version 2.0.0 \
+  --seed 12345 --generator-version 1.0.0 \
   --param minLoopRatio=0.12 \
   --output artifacts/dungeon-12345.json
 

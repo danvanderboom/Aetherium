@@ -10,7 +10,7 @@
 
 2. **Start the game client with monitoring**:
    ```powershell
-   cd Aetherium
+   cd Aetherium.Console
    dotnet run
    ```
    
@@ -139,6 +139,6 @@ Frame #42 - 2025-10-30T12:34:56.789Z
 
 See:
 - `Aetherium.Console/Monitoring/README.md` - Full documentation
-- `MONITORING_IMPLEMENTATION_SUMMARY.md` - Technical details
+- [history/MONITORING_IMPLEMENTATION_SUMMARY.md](history/MONITORING_IMPLEMENTATION_SUMMARY.md) - Original implementation report (archived)
 
 

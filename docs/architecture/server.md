@@ -94,7 +94,7 @@ Persistence uses `[PersistentState]` against the three memory stores. Planned-bu
 
 ## Events (`Events/`)
 
-`IEventScheduler`/`EventScheduler` (host service) plus `EventSchedulerGrain`/`EventInstanceGrain`/`SpawnControllerGrain` schedule and run world events (spawn waves, timed occurrences). Integration plan: [docs/events-spawn-integration-plan.md](../events-spawn-integration-plan.md).
+`IEventScheduler`/`EventScheduler` (host service) plus `EventSchedulerGrain`/`EventInstanceGrain`/`SpawnControllerGrain` schedule and run world events (spawn waves, timed occurrences). The spawn-integration work — handler↔`SpawnControllerGrain` wiring, region→map resolution, and despawn-on-completion — is complete; the original plan is archived at [history/events-spawn-integration-plan.md](../history/events-spawn-integration-plan.md).
 
 ## Monitoring & telemetry
 

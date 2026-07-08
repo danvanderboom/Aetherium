@@ -298,14 +298,18 @@ When `AGENT_LLM_ENABLED=1`, agents:
 6. Rate limited to 10 requests/second
 7. Fall back to "move forward" on errors
 
-**Available Tool Categories:**
+**Available Tool Categories (29 tools total):**
 - **Movement** (4 tools): move, rotate, changelevel, jumptolocation
 - **Interaction** (5 tools): pickup, drop, use, open, close
   - **🆕 Multi-Use Tools**: The `use` tool now supports multiple usage modes with context-gated options (e.g., unlock-door, force-open, consume, lockpick). See [Tool System Documentation](TOOLS.md#multi-use-tools) for details.
-- **Vision** (4 tools): toggledirectionalvision, setfov, setlightingmode, setvisionmode
-- **World-Building** (13 tools): Entity/terrain/map/narrative management (for WorldBuilder agents)
+- **Vision** (4 tools): toggledirectionalvision, setfieldofview, setlightingmode, setvisionmode
+- **World-Building** (5 tools): setterrain, spawnentity, destroyentity, modifyentity, moveentity (for WorldBuilder agents)
+- **Combat** (1 tool): attack
+- **Instances & Party** (2 tools): create_party, enter_dungeon
+- **Multi-World** (5 tools): createcluster, registerworldtocluster, registerportal, createtraderoute, scheduletransport
+- **Narrative & Quest** (3 tools): accept_quest, list_quests, quest_log
 
-**Note:** Tool availability depends on the agent's profile. Use `aetherctl tools list --profile <profile>` to see which tools are available for each profile.
+See [TOOLS.md](TOOLS.md#available-tools) for the full catalog. **Note:** tool availability depends on the agent's profile. Use `aetherctl tools list --profile <profile>` to see which tools are available for each profile.
 
 ### Heuristic Agents
 
@@ -513,8 +517,8 @@ You can customize this prompt file to change agent behavior.
 ## See Also
 
 - **[Tool System Documentation](TOOLS.md)** - Complete architecture and usage guide for the extensible tool system
-- **[Tool Implementation Summary](FINAL_SUMMARY.md)** - Implementation status and metrics
 - [OpenSpec Agents Guide](../../openspec/AGENTS.md) - Development workflow
+- [Archived agent implementation reports](../history/README.md) - Original Oct-2025 status summaries (point-in-time, superseded by TOOLS.md)
 - [Agent Prompt Template](../../Aetherium.Server/Prompts/agent_explorer.md) - LLM prompt definition
 
 ## Adding New Tools

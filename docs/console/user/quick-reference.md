@@ -12,11 +12,12 @@ S/↓   Backward    | 2  Normal + Sun     | P  Drop Item
 A/←   Left        | 3  Infrared + Torch | O  Open
 D/→   Right       | 4  Infrared + Sun   | L  Close
 Q     Rotate CCW  | T  Toggle Direction |
-E     Rotate CW   |                     | UI
+E     Rotate CW   | M  Compass Mode     | UI
 Z     Turn Left   | Debug/Special       | ----------------
-C     Turn Right  | ----------------    | U  Toggle Audio
-R/PgUp   Up Level | J  Teleport        | H  Cycle Theme
-F/PgDn   Down Lvl |                     | Esc Quit
+C     Turn Right  | ----------------    | N  Toggle Audio
+R/PgUp   Up Level | J  Teleport        | ⇧M Next Music Track
+F/PgDn   Down Lvl |                     | H  Cycle Theme
+                  |                     | Esc Quit
 ```
 
 ## Vision Mode Quick Guide
