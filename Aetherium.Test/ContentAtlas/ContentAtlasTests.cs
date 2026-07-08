@@ -6,6 +6,8 @@ namespace Aetherium.Test.ContentAtlas
     /// <summary>
     /// Unit coverage of the content-atlas schema (engine gap-analysis §4.10, Phase 1 — see
     /// openspec/changes/add-content-atlas). Not yet referenced by any live DTO.
+    /// Verifies "Content Atlas Schema", "Content Atlas Versioning", and "Content Atlas Lookup"
+    /// in specs/content-atlas/spec.md.
     /// </summary>
     [TestFixture]
     public class ContentAtlasTests

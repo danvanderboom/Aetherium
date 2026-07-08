@@ -10,6 +10,7 @@ namespace Aetherium.Test.ContentAtlas
     /// level since no DTO references atlas ids yet (Phase 1): asserts the seed atlas never falls
     /// behind the real terrain vocabulary <see cref="TorusWorldBuilder"/> actually produces. Add a
     /// tile type without updating <c>DefaultContentAtlas</c>, and this test fails.
+    /// Verifies "Default Content Atlas Coverage" in specs/content-atlas/spec.md.
     /// </summary>
     [TestFixture]
     public class DefaultContentAtlasCoverageTests

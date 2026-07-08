@@ -8,6 +8,7 @@
 - [x] 1.6 Coverage test: every `TorusWorldBuilder().TileTypes` name resolves to a `TerrainTag` in `DefaultContentAtlas`
 - [x] 1.7 Unit tests: duplicate-id rejection, `Contains` across categories, `SupportsClientVersion` major/minor/patch behavior
 - [x] 1.8 `openspec/specs/content-atlas/spec.md` delta: ADDED requirements
+- [x] 1.9 Cross-link every requirement with a `**Verified by:**` line naming the test(s) that cover it
 
 ## 2. Live wiring (Phase 2 — separate follow-up change, not started here)
 

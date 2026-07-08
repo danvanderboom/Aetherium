@@ -86,6 +86,17 @@ siloBuilder.Services.AddSingleton<ServiceType>(sp =>
 - All tests must pass before commits
 - Use xUnit for new tests, maintain existing NUnit tests
 
+### Requirement Traceability (spec ↔ test)
+Every `## ADDED`/`## MODIFIED Requirements` entry in a change's `specs/**/spec.md` MUST carry a `**Verified by:**` line, placed right after the requirement's normative paragraph and before its first `#### Scenario:`, naming the fully-qualified test class (and method names, comma-separated) that cover it — e.g. `**Verified by:** \`Aetherium.Test.Combat.ResistancesTests.Mitigate_AppliesFlatThenPercent_ThenMinimumFloor\``. This is bidirectional:
+- **Spec → test**: a reviewer reading a requirement can jump straight to its coverage.
+- **Test → spec**: when a requirement has no scenario a test actually exercises, that's a real gap — write the missing test before shipping, don't just claim coverage in the spec (this caught a missing test for "Per-NPC Behavior Tree Instance" in `add-npc-behavior-trees`).
+
+Practical rules:
+- One test method may satisfy multiple scenarios of the same requirement; list it once.
+- Prefer naming the most direct test — an integration test that exercises a requirement as a side effect (e.g. `DamagePipelineTests` covering the "Death State Transition" requirement's Dying-entry scenario) is fine to cite alongside the more unit-focused test.
+- When a `tasks.md` Phase 1 checklist item adds a spec delta, add a matching task item ("Cross-link every requirement with a `**Verified by:**` line...") so the checklist reflects that the traceability pass actually happened, not just the schema.
+- This applies to every change going forward, including the remaining Wave 1–3 items from the [2026-07-06 engine gap-analysis](../docs/audits/2026-07-06-engine-gap-analysis/design-next-steps.md).
+
 ### Git Workflow
 - Main branch: `main`
 - Feature branches for larger changes

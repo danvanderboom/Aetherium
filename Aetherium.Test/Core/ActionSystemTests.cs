@@ -11,6 +11,8 @@ namespace Aetherium.Test.Core
     /// Unit coverage of the continuous action pipeline's ECS primitives (engine gap-analysis
     /// §4.1, Phase 1 — see openspec/changes/add-continuous-action-pipeline). Not yet wired into
     /// any live grain/command path; these tests exercise <see cref="ActionSystem"/> in isolation.
+    /// Verifies "Action Budget", "Action Queue", and "Action Tick Scheduling" in
+    /// specs/engine-core/spec.md.
     /// </summary>
     [TestFixture]
     public class ActionSystemTests
