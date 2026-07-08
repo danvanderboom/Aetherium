@@ -1,0 +1,16 @@
+## Why
+
+Aetherium's render-agnostic vision requires every perception payload to be semantic — "entity kind, state, orientation, material, lighting, animation cue" — so any renderer (ASCII console, Unity 2D tilemap, a future Unreal client) can bind it to its own asset pack without the server knowing about glyphs or ANSI colors. Today it isn't: `TileTypeDto`/`VisualDto` carry a raw `Settings: Dictionary<string,string>` where tile definitions bake literal console glyphs and `ConsoleColor` names directly (`Aetherium.Server/WorldBuilders/TorusWorldBuilder.cs:221-357`, e.g. `Settings["MapCharacter"] = "|"`, `Settings["BackgroundColor"] = "DarkRed"`), and `VisualDto.LightLevel` is a bare scalar with no color/source model. The console client reads those ANSI-shaped keys directly (`Aetherium.Console/Views/ClientConsoleMapView.cs:345-387`); the Unity client's DTO mirrors (`TileTypeLite`/`VisualLite`) inherited the same untyped shape with no real rendering built on it yet. There is no typed, versioned vocabulary a renderer could bind to instead — exactly the gap the [2026-07-06 engine gap-analysis](../../docs/audits/2026-07-06-engine-gap-analysis/design-next-steps.md) §4.10 calls out, and the other **P0** in Wave 0 alongside the [continuous action pipeline](../add-continuous-action-pipeline/proposal.md).
+
+## What Changes
+
+- Add a `ContentAtlas` schema in `Aetherium.Model` (shared by server and every client): seven typed, string-id-keyed tag categories — `TerrainTag`, `EntityKindTag`, `MaterialTag` (hardness/friction/combustibility), `LightSourceTag` (color/intensity/flicker), `AnimationCueTag`, `EffectTag`, `AudioTag` — plus a semver `Version`.
+- Add `DefaultContentAtlas` (`Aetherium.Server`): a seed atlas (`v1.0.0`) covering the tile types and entity kinds that exist in the codebase *today* (`TorusWorldBuilder`'s 11 terrain names, the known entity classes), so the atlas describes real content, not a hypothetical one.
+- Add a coverage test — the design doc's "null renderer" — that asserts every tile-type name `TorusWorldBuilder` actually produces has a corresponding `TerrainTag` in `DefaultContentAtlas`. This is deliberately a living check: add a tile type without updating the atlas, and this test fails.
+- **Phase 1 (this change): schema + seed atlas + coverage test only.** `TileTypeDto`, `VisualDto`, `PerceptionDto`, and both renderers are **not modified** — the raw `Settings["MapCharacter"]`/`ConsoleColor` path keeps working exactly as it does today.
+- Phase 2 (follow-up change): retrofit `VisualDto`/`TileTypeDto` to reference atlas ids (`EntityKindTag`/`TerrainTag`) alongside (not yet replacing) the existing `Settings` dict; replace `VisualDto.LightLevel` (scalar) with `{intensity, colorTag, source[]}` per `LightSourceTag`; add `intent`/`cadence` to entity perception DTOs from `AnimationCueTag`; migrate the console renderer off `Settings["MapCharacter"]` onto atlas-id lookups; only then remove the old `Settings` keys.
+
+## Impact
+
+- Affected specs: new capability `content-atlas` (schema requirements)
+- Affected code: new `Aetherium.Model/ContentAtlas/*.cs`, new `Aetherium.Server/ContentAtlas/DefaultContentAtlas.cs`, new tests under `Aetherium.Test/ContentAtlas/`. No changes to `TileTypeDto`, `VisualDto`, `PerceptionDto`, `PerceptionService`, `ClientConsoleMapView`, or any Unity DTO in this change.
