@@ -8,10 +8,10 @@ The agent system allows NPCs (non-player characters) to autonomously explore the
 - **LLM-driven decisions**: Powered by local LLMs via LM Studio (phi-4 model) with OpenAI function calling support
 - **Heuristic fallback**: Simple rule-based behavior (always works, no LLM required)
 
-### New: Extensible Tool System
+### Extensible Tool System
 
-The agent system now features a fully extensible tool architecture with:
-- **26+ discoverable tools** organized into categories (movement, interaction, vision, world-building)
+The agent system features a fully extensible tool architecture with:
+- **29 discoverable tools** across 8 categories (movement, interaction, vision, world-building, combat, instances/party, multi-world, narrative/quest)
 - **Profile-based access control** with predefined profiles (Explorer, Player, WorldBuilder, Admin, etc.)
 - **OpenAI function calling** support for advanced LLM integration
 - **Dual API support** for both human players (SignalR) and AI agents (Orleans)
@@ -20,9 +20,9 @@ The agent system now features a fully extensible tool architecture with:
 
 **📖 For detailed architecture and usage, see: [Tool System Documentation](TOOLS.md)**
 
-### New: Unified CLI (`aetherctl`)
+### Unified CLI (`aetherctl`)
 
-`aetherctl` is the new cross‑platform CLI that unifies AgentCLI and WorldGenCLI (both are now deprecated). It supports consistent flags, JSON output via `--json`, and Orleans connectivity options.
+`aetherctl` is the single cross-platform CLI for Aetherium. It replaced the old `AgentCLI` (removed — the directory has no project left, only stale build output) and wraps `WorldGenCLI`, which is now a library consumed by `aetherctl` rather than a standalone binary. `aetherctl` supports consistent flags, JSON output via `--json`, and Orleans connectivity options.
 
 Quick examples:
 
@@ -63,9 +63,6 @@ aetherctl worldgen render --template dungeon --width 80 --height 60 --png .\out.
 aetherctl monitor --server-url ws://localhost:5001/monitor --ascii --save .\frames
 ```
 
-Migration tip:
-- Replace `agentcli ...` and `worldgencli ...` with `aetherctl ...` equivalents above.
-
 ## Quick Start
 
 ### 1. Start the Game Server
@@ -95,42 +92,24 @@ $env:OPENAI_API_KEY="lm-studio"
 $env:AGENT_MODEL="phi-4"
 ```
 
-### 4. Use AgentCLI to Control Agents
+### 4. Attach and Run an Agent with `aetherctl`
 
 ```powershell
-# List active game sessions
-agentcli mgmt sessions
+# Find a session to attach to
+aetherctl session list
 
-# List available tools
-agentcli tools list
-agentcli tools list --profile explorer
-agentcli tools list --category movement
+# Attach an agent (defaults: --agent agent-1 --runner runner-1)
+aetherctl agent attach <sessionId> --agent agent-1 --runner runner-1
 
-# Get tool details
-agentcli tools describe move
+# Run it for up to 50 steps, 200ms apart
+aetherctl agent run runner-1 --max-steps 50 --delay 200
 
-# View tool categories
-agentcli tools categories
-
-# Test a tool execution
-agentcli tools test move --session-id <sessionId> --args '{"direction":"forward"}'
-
-# List agent profiles
-agentcli tools profile list
-agentcli tools profile show worldbuilder
-
-# Attach an agent to a session
-agentcli agent attach <sessionId> --agent agent-1 --runner runner-1
-
-# Run the agent (with max steps and delay)
-agentcli agent run runner-1 --max-steps 50 --delay 200
-
-# Check agent status
-agentcli agent status runner-1
-
-# Stop the agent
-agentcli agent stop runner-1
+# Check status, then stop it
+aetherctl agent status runner-1
+aetherctl agent stop runner-1
 ```
+
+See the [Unified CLI](#unified-cli-aetherctl) examples above for the full `tools`/`vision`/`world` surface.
 
 ## Configuration
 
@@ -147,26 +126,22 @@ agentcli agent stop runner-1
 
 ### Policy Switching
 
-You can switch between LLM and heuristic policies at runtime using the CLI:
+There is no CLI subcommand to switch policy at runtime — `AgentRunnerGrain` reads `AGENT_LLM_ENABLED` (and `AGENT_DEBUG`) from the **server process's** environment on every step, so switching means changing the env var and restarting the server before it launches:
 
 ```powershell
-# Use LLM policy
-agentcli agent policy set llm
+# Heuristic policy (no LLM required)
+$env:AGENT_LLM_ENABLED = "0"
+cd Aetherium.Server
+dotnet run
 
-# Use heuristic policy
-agentcli agent policy set heuristic
-
-# Check current policy
-agentcli agent policy get
-
-# Enable debug output
-agentcli agent debug on
-
-# Disable debug output
-agentcli agent debug off
+# LLM-driven policy
+$env:AGENT_LLM_ENABLED = "1"
+$env:AGENT_DEBUG = "1"   # optional: verbose agent decision logging
+cd Aetherium.Server
+dotnet run
 ```
 
-**Note**: Policy changes affect new agent steps. Restart agents to apply immediately.
+`scripts/start-llm-agents.ps1` wraps this — pass `-HeuristicOnly` for heuristic mode, or omit it for LLM mode — and sets `AGENT_DEBUG=1` for you.
 
 ## LM Studio Setup
 
@@ -417,24 +392,21 @@ Update status & log
 
 3. **Check agent status**
    ```powershell
-   agentcli agent status runner-1
+   aetherctl agent status runner-1
    ```
 
-4. **Enable debug mode**
-   ```powershell
-   agentcli agent debug on
-   ```
+4. **Enable debug mode** — set `AGENT_DEBUG=1` before starting the server (see [Policy Switching](#policy-switching))
 
 ### Agent Not Moving
 
 1. **Check session exists**
    ```powershell
-   agentcli mgmt sessions
+   aetherctl session list
    ```
 
 2. **Verify agent is attached**
    ```powershell
-   agentcli agent status runner-1
+   aetherctl agent status runner-1
    ```
 
 3. **Check perception data** (if debug enabled)
@@ -462,37 +434,46 @@ In another terminal:
 
 ```powershell
 # List sessions to get session ID
-agentcli mgmt sessions
+aetherctl session list
 
 # Attach two agents
-agentcli agent attach <sessionId> --agent agent-1 --runner runner-1
-agentcli agent attach <sessionId> --agent agent-2 --runner runner-2
+aetherctl agent attach <sessionId> --agent agent-1 --runner runner-1
+aetherctl agent attach <sessionId> --agent agent-2 --runner runner-2
 
 # Run both agents
-agentcli agent run runner-1 --max-steps 100 --delay 200
-agentcli agent run runner-2 --max-steps 100 --delay 200
+aetherctl agent run runner-1 --max-steps 100 --delay 200
+aetherctl agent run runner-2 --max-steps 100 --delay 200
 
 # Monitor status
-agentcli agent status runner-1
-agentcli agent status runner-2
+aetherctl agent status runner-1
+aetherctl agent status runner-2
 ```
 
-### Example 2: Switch Policies at Runtime
+### Example 2: Switch Between Heuristic and LLM Policy
+
+Policy is a server-startup env var, not a live CLI switch (see [Policy Switching](#policy-switching)) — switching means stopping the server and restarting it with a different `AGENT_LLM_ENABLED` value:
 
 ```powershell
-# Start with heuristic
-agentcli agent policy set heuristic
-agentcli agent run runner-1 --max-steps 20
-
-# Switch to LLM
-agentcli agent policy set llm
-agentcli agent stop runner-1
-agentcli agent run runner-1 --max-steps 20
-
-# Switch back to heuristic
-agentcli agent policy set heuristic
-agentcli agent stop runner-1
-agentcli agent run runner-1 --max-steps 20
+# Terminal 1: start heuristic, run some steps
+$env:AGENT_LLM_ENABLED = "0"
+cd Aetherium.Server; dotnet run
+```
+```powershell
+# Terminal 2
+aetherctl agent attach <sessionId> --agent agent-1 --runner runner-1
+aetherctl agent run runner-1 --max-steps 20
+aetherctl agent stop runner-1
+```
+```powershell
+# Terminal 1: stop the server (Ctrl+C), then restart with LLM enabled
+$env:AGENT_LLM_ENABLED = "1"
+$env:OPENAI_API_BASE = "http://localhost:1234/v1"
+cd Aetherium.Server; dotnet run
+```
+```powershell
+# Terminal 2: re-attach and run again — now LLM-driven
+aetherctl agent attach <sessionId> --agent agent-1 --runner runner-1
+aetherctl agent run runner-1 --max-steps 20
 ```
 
 ## Prompts
@@ -564,13 +545,13 @@ public class MyTool : IAgentTool
 3. **Test it**:
 ```powershell
 # Verify tool was discovered
-agentcli tools list | Select-String mytool
+aetherctl tools list | Select-String mytool
 
 # Get tool details
-agentcli tools describe mytool
+aetherctl tools describe mytool
 
 # Test tool execution (requires active session)
-agentcli tools test mytool --session-id <sessionId> --args '{"param1":"value1"}'
+aetherctl tools test mytool --session-id <sessionId> --args '{"param1":"value1"}'
 ```
 
 For more details, see [TOOLS.md](TOOLS.md).

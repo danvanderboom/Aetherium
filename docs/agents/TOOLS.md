@@ -243,32 +243,30 @@ public static AgentToolProfile CustomProfile => new()
 
 ## Testing
 
-### Manual Testing with AgentCLI
+### Manual Testing with `aetherctl`
 
 ```powershell
 # Start server
 cd Aetherium.Server
 dotnet run
 
-# In another terminal, use AgentCLI
-cd AgentCLI
-
+# In another terminal
 # List active sessions
-dotnet run -- mgmt sessions
+aetherctl session list
 
 # List available tools
-dotnet run -- tools list
-dotnet run -- tools list --profile explorer
-dotnet run -- tools describe move
+aetherctl tools list
+aetherctl tools list --profile explorer
+aetherctl tools describe move
 
 # Test a tool execution (requires active session)
-dotnet run -- tools test move --session-id <sessionId> --args '{"direction":"forward"}'
-dotnet run -- tools test pickup --session-id <sessionId> --args '{"targetEntityId":"entity-123"}'
+aetherctl tools test move --session-id <sessionId> --args '{"direction":"forward"}'
+aetherctl tools test pickup --session-id <sessionId> --args '{"targetEntityId":"entity-123"}'
 
 # Agent management
-dotnet run -- agent attach <sessionId> --agent test-agent --runner runner-1
-dotnet run -- agent run runner-1 --max-steps 10 --delay 500
-dotnet run -- agent status runner-1
+aetherctl agent attach <sessionId> --agent test-agent --runner runner-1
+aetherctl agent run runner-1 --max-steps 10 --delay 500
+aetherctl agent status runner-1
 ```
 
 ### Testing New Unified API
