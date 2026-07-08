@@ -49,6 +49,13 @@ namespace Aetherium.Server.MultiWorld
         // Pruned in StepNpcsAsync whenever a monster leaves _world.Entities.
         private readonly Dictionary<string, BehaviorTree> _monsterTrees = new();
 
+        // AP a monster spends per behavior-tree tick in the continuous action pipeline
+        // (engine gap-analysis §4.1). A default Monster carries Speed == MaxBudget == this,
+        // so it affords an action every eligible tick (parity with pre-pipeline behavior);
+        // a creature with a lower Speed acts on a sub-cadence. See StepNpcsAsync and
+        // openspec/changes/wire-npc-action-budget-live.
+        private const double NpcActionCost = 1.0;
+
         // Highest WorldSnapshot.SnapshotVersion this binary knows how to hydrate.
         // Bumping requires a deliberate schema migration; cold-start refuses to
         // load snapshots written at a higher version. Phase F wire-stability hook.
@@ -896,10 +903,13 @@ namespace Aetherium.Server.MultiWorld
         /// <see cref="BehaviorTree"/> instance (cached in <see cref="_monsterTrees"/>) built from
         /// <see cref="MonsterBehaviors.BuildWanderAndMeleeTree"/> — attack an adjacent player if
         /// one is in reach, else wander — reproducing the decision this method made inline before
-        /// the tree took over. World mutations happen synchronously (no awaits between them) so a
-        /// reentrant player move cannot interleave mid-sweep; the resulting deltas are broadcast
-        /// afterward. Each landed move also lays a heat trail via the world-event subscriber,
-        /// exactly as a player move does.
+        /// the tree took over. Each monster's tree tick is gated on its <see cref="ActionSpeed"/>
+        /// budget (engine gap-analysis §4.1): it acts only on ticks where it can afford
+        /// <see cref="NpcActionCost"/>, so speed differentiates action cadence with no global turn
+        /// order. World mutations happen synchronously (no awaits between them) so a reentrant
+        /// player move cannot interleave mid-sweep; the resulting deltas are broadcast afterward.
+        /// Each landed move also lays a heat trail via the world-event subscriber, exactly as a
+        /// player move does.
         /// </summary>
         private async Task StepNpcsAsync()
         {
@@ -953,6 +963,16 @@ namespace Aetherium.Server.MultiWorld
             var combatDeltas = new List<MapDelta>();
             foreach (var monster in monsters)
             {
+                // Continuous action pipeline (engine gap-analysis §4.1): a monster acts only when
+                // it has accrued enough AP this tick. TrySpend refills its budget and, if the cost
+                // is covered, deducts it and returns true; otherwise the monster keeps accruing and
+                // skips this tick. A default Monster (Speed == MaxBudget == NpcActionCost) affords
+                // every eligible tick — parity with pre-pipeline behavior — while a slower creature
+                // acts on a sub-cadence. Monsters without an ActionSpeed (none today) always act.
+                if (monster.Has<Aetherium.Components.ActionSpeed>()
+                    && !monster.Get<Aetherium.Components.ActionSpeed>().TrySpend(NpcActionCost))
+                    continue;
+
                 if (!_monsterTrees.TryGetValue(monster.EntityId, out var tree))
                 {
                     tree = MonsterBehaviors.BuildWanderAndMeleeTree(_combatSystem);

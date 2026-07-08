@@ -29,9 +29,17 @@ namespace Aetherium
             // (P3-7 slice 2) chips a player down rather than bursting them.
             Set(new AttackPower(6));
             Set(new Tile { Type = world.TileTypes["Monster"] });
-            
+
             // Monsters emit slightly lower heat than characters but still high
             Set(new HeatSignature(0.8, TimeSpan.FromSeconds(8)));
+
+            // Continuous action pipeline (engine gap-analysis §4.1): a monster accrues AP each
+            // world tick and only acts once it can afford an action, so speed differentiates how
+            // often it acts — no global turn order. The default (Speed == MaxBudget == cost) makes
+            // a plain Monster act every eligible tick, matching pre-pipeline behavior; slower or
+            // faster creatures override these to act less/more often. See
+            // GameMapGrain.StepNpcsAsync and openspec/changes/wire-npc-action-budget-live.
+            Set(new ActionSpeed(speed: 1.0, maxBudget: 1.0));
         }
 
         /// <summary>

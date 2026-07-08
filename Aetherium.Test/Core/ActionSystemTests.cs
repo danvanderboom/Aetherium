@@ -47,6 +47,43 @@ namespace Aetherium.Test.Core
             Assert.That(speed.Budget, Is.EqualTo(1.0).Within(1e-9), "Refill must not exceed MaxBudget.");
         }
 
+        // Verifies "Action Budget" (TrySpend) in specs/engine-core/spec.md
+        // (openspec/changes/wire-npc-action-budget-live).
+        [Test]
+        public void TrySpend_RefillsThenSpends_WhenAffordable()
+        {
+            var speed = new ActionSpeed(speed: 1.0, maxBudget: 1.0, budget: 0.0);
+
+            // Refill brings 0.0 → 1.0, which covers a cost of 1.0: spend succeeds, leaving 0.0.
+            Assert.That(speed.TrySpend(1.0), Is.True);
+            Assert.That(speed.Budget, Is.EqualTo(0.0).Within(1e-9));
+        }
+
+        [Test]
+        public void TrySpend_Defers_WhenUnaffordable_ButRetainsRefilledAp()
+        {
+            var speed = new ActionSpeed(speed: 0.5, maxBudget: 1.0, budget: 0.0);
+
+            // Refill brings 0.0 → 0.5, which does NOT cover a cost of 1.0: spend fails, but the
+            // refilled 0.5 is retained (accrues toward a later tick), not discarded.
+            Assert.That(speed.TrySpend(1.0), Is.False);
+            Assert.That(speed.Budget, Is.EqualTo(0.5).Within(1e-9), "A failed TrySpend must keep the refilled AP.");
+        }
+
+        [Test]
+        public void TrySpend_HalfSpeedActor_AffordsEveryOtherTick()
+        {
+            // A Speed-0.5 actor with cost 1.0 and Budget starting full (1.0): affords tick 1
+            // (refill caps at 1.0, spend → 0.0), defers tick 2 (0.5 < 1.0), affords tick 3
+            // (0.5 + 0.5 = 1.0). This is the differential cadence the pipeline exists to give.
+            var speed = new ActionSpeed(speed: 0.5, maxBudget: 1.0);
+
+            Assert.That(speed.TrySpend(1.0), Is.True,  "Tick 1: full budget affords.");
+            Assert.That(speed.TrySpend(1.0), Is.False, "Tick 2: only 0.5 accrued, cannot afford.");
+            Assert.That(speed.TrySpend(1.0), Is.True,  "Tick 3: accrued back to 1.0, affords again.");
+            Assert.That(speed.TrySpend(1.0), Is.False, "Tick 4: defers again — a 2-tick cadence.");
+        }
+
         [Test]
         public void ActionQueue_Enqueue_RejectsBeyondMaxDepth()
         {

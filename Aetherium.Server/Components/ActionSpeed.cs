@@ -33,5 +33,23 @@ namespace Aetherium.Components
         {
             Budget = System.Math.Min(MaxBudget, Budget + Speed);
         }
+
+        /// <summary>
+        /// Refills the budget for this tick, then — if the (post-refill) budget covers
+        /// <paramref name="cost"/> — spends it and returns <c>true</c>. When the budget is
+        /// insufficient the refilled AP is retained (accrues toward a later tick) and the method
+        /// returns <c>false</c>. This is the single-actor equivalent of one <see cref="ActionSystem"/>
+        /// dispatch step (refill → afford → deduct), for callers that gate an inline action on an
+        /// actor's cadence rather than routing it through an <see cref="ActionQueue"/> — e.g. a
+        /// monster's behavior-tree tick in <c>GameMapGrain.StepNpcsAsync</c>.
+        /// </summary>
+        public bool TrySpend(double cost)
+        {
+            Refill();
+            if (Budget < cost)
+                return false;
+            Budget -= cost;
+            return true;
+        }
     }
 }
