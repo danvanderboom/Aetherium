@@ -84,6 +84,7 @@ namespace Aetherium.Server.MultiWorld
             };
             _worldState.State.DeathPolicy = config.DeathPolicy;
             _worldState.State.AbilityConfig = config.AbilityConfig;
+            _worldState.State.ProgressionConfig = config.ProgressionConfig;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -165,7 +166,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -350,6 +351,10 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world ability content (engine gap-analysis §4.3), set once at InitializeAsync
         /// and applied to every map this world creates (initial and later). Null means no abilities.</summary>
         public Aetherium.Model.Abilities.AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content (engine gap-analysis §4.4), set once at
+        /// InitializeAsync and applied to every map this world creates. Null means no progression.</summary>
+        public Aetherium.Model.Progression.ProgressionConfig? ProgressionConfig { get; set; }
     }
 }
 

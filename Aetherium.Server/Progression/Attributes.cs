@@ -22,5 +22,8 @@ namespace Aetherium.Server.Progression
         public void Set(string name, double value) => _values[name] = value;
 
         public bool Has(string name) => _values.ContainsKey(name);
+
+        /// <summary>Every named attribute this actor carries — used by the read accessor.</summary>
+        public IReadOnlyDictionary<string, double> Values => _values;
     }
 }

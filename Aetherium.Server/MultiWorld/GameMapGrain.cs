@@ -7,8 +7,10 @@ using Aetherium.Entities;
 using Aetherium.Server.Ai;
 using Aetherium.Server.Combat;
 using Aetherium.Server.Abilities;
+using Aetherium.Server.Progression;
 using Aetherium.Model.Combat;
 using Aetherium.Model.Abilities;
+using Aetherium.Model.Progression;
 using Aetherium.WorldGen;
 using Passes = Aetherium.WorldGen.Passes;
 using System;
@@ -263,6 +265,9 @@ namespace Aetherium.Server.MultiWorld
             // without re-running InitializeAsync. Null config yields an empty catalog.
             ApplyAbilityConfig(_mapState.State?.AbilityConfig);
 
+            // Likewise recompile progression (engine gap-analysis §4.4 — see wire-progression-live).
+            ApplyProgressionConfig(_mapState.State?.ProgressionConfig);
+
             if (_mapState.State != null && _mapState.State.Recipe != null && _world == null)
             {
                 // Reactivation after silo restart. Prefer a persisted snapshot when
@@ -494,12 +499,13 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null)
         {
             var mapId = this.GetPrimaryKeyString();
 
             _deathPolicy = deathPolicy ?? DeathPolicy.Default;
             ApplyAbilityConfig(abilityConfig);
+            ApplyProgressionConfig(progressionConfig);
 
             parameters ??= new Dictionary<string, object>();
 
@@ -600,6 +606,7 @@ namespace Aetherium.Server.MultiWorld
                 Recipe = recipe,
                 DeathPolicy = deathPolicy,
                 AbilityConfig = abilityConfig,
+                ProgressionConfig = progressionConfig,
             };
 
             await _mapState.WriteStateAsync();
@@ -710,6 +717,22 @@ namespace Aetherium.Server.MultiWorld
             // with none — the engine never invents a genre-specific pool.
             if (_characterResourcePools.Count > 0)
                 character.Set(CreateAbilityCompiler().BuildResourcePools(_characterResourcePools));
+
+            // Stamp the world's progression components (engine gap-analysis §4.4 — see
+            // wire-progression-live): fresh XP pools, attributes, role affinity, unlocked-skills and
+            // granted-abilities sets, then apply any attribute→stat derivations from the starting
+            // attributes. A world declaring no progression leaves the character with none, keeping
+            // Character genre-neutral (same posture as resource pools).
+            if (_progressionConfig is not null)
+            {
+                var pc = new ProgressionCompiler();
+                character.Set(pc.BuildProgressPools(_progressionConfig.Pools));
+                character.Set(pc.BuildAttributes(_progressionConfig.StartingAttributes));
+                character.Set(pc.BuildRoleAffinity(_progressionConfig.StartingRoleAffinity));
+                character.Set(new UnlockedSkills());
+                character.Set(new GrantedAbilities());
+                ApplyAttributeDerivations(character);
+            }
 
             _world.AddEntity(character);
 
@@ -1849,6 +1872,28 @@ namespace Aetherium.Server.MultiWorld
                 : Array.Empty<ResourcePoolDefinition>();
         }
 
+        // Per-world progression content (engine gap-analysis §4.4 — see wire-progression-live),
+        // compiled from the world's ProgressionConfig. _skillCatalog + _levelCurvesByPool are the
+        // runtime (compiled) forms; the raw config drives XP-award rules, attribute derivations, and
+        // the optional skill-gated-casting flag. All default to empty (no progression) until a config
+        // is applied — the engine ships no progression content, it is entirely per-world data.
+        private ProgressionConfig? _progressionConfig;
+        private SkillCatalog _skillCatalog = new SkillCatalog();
+        private IReadOnlyDictionary<string, ILevelCurve> _levelCurvesByPool = new Dictionary<string, ILevelCurve>();
+        private readonly SkillUnlockService _skillUnlockService = new SkillUnlockService();
+
+        /// <summary>Compiles a world's <see cref="ProgressionConfig"/> into this map's runtime skill
+        /// catalog + per-pool level curves and remembers the config (for award rules / derivations /
+        /// the cast-gate flag). Called from InitializeAsync (fresh) and OnActivateAsync (rehydrate);
+        /// null yields an empty catalog and no progression behavior.</summary>
+        private void ApplyProgressionConfig(ProgressionConfig? config)
+        {
+            _progressionConfig = config;
+            var compiler = new ProgressionCompiler();
+            _skillCatalog = compiler.CompileSkillCatalog(config?.Skills);
+            _levelCurvesByPool = compiler.CompileCurvesByPool(config?.Pools);
+        }
+
         private ActionContext? TryBuildActionContext(string sessionId)
         {
             if (_world is null) return null;
@@ -1966,7 +2011,10 @@ namespace Aetherium.Server.MultiWorld
             // Combat analytics (persisted with the map): total damage, and kills on defeat.
             _mapState.State.TotalDamageDealt += roundedDamage;
             if (result.TargetEnteredDying && targetWasMonster)
+            {
                 _mapState.State.MonstersDefeated++;
+                AwardKillXp(ctx.Player, targetType);
+            }
 
             // Death loot: a slain monster drops a weapon where it fell, at the same moment it
             // enters Dying (not later, on its eventual Corpse conversion) — preserves the
@@ -2038,6 +2086,13 @@ namespace Aetherium.Server.MultiWorld
                 return AbilityResultDto.Fail("No ability specified");
             if (!_abilityCatalog.TryGet(abilityId, out var ability) || ability is null)
                 return AbilityResultDto.Fail("Unknown ability");
+
+            // Skill-gated casting (engine gap-analysis §4.4 — see wire-progression-live): enforced
+            // only when the world opts in via RequireSkillToCastAbilities. When false (the default)
+            // catalog membership remains the sole ability gate, preserving pre-progression behavior.
+            if (_progressionConfig?.RequireSkillToCastAbilities == true
+                && (!ctx.Player.Has<GrantedAbilities>() || !ctx.Player.Get<GrantedAbilities>().Has(abilityId)))
+                return AbilityResultDto.Fail("Ability not yet learned");
 
             // Cooldown gate.
             if (ctx.Player.Has<AbilityCooldowns>() && ctx.Player.Get<AbilityCooldowns>().IsOnCooldown(abilityId))
@@ -2121,6 +2176,7 @@ namespace Aetherium.Server.MultiWorld
                     {
                         _mapState.State.MonstersDefeated++;
                         targetDefeated = true;
+                        AwardKillXp(ctx.Player, target.GetType().Name);
                     }
 
                     await _mapState.WriteStateAsync();
@@ -2207,6 +2263,146 @@ namespace Aetherium.Server.MultiWorld
                 foreach (var kv in player.Get<AbilityCooldowns>().Snapshot)
                     result[kv.Key] = kv.Value;
             return Task.FromResult(result);
+        }
+
+        /// <summary>Awards XP to <paramref name="killer"/>'s progress pools for defeating an entity of
+        /// type <paramref name="defeatedType"/> (engine gap-analysis §4.4 — see wire-progression-live),
+        /// per the world's declarative <see cref="XpAwardRule"/>s. Called from the shared monster-defeat
+        /// branch of both <see cref="AttackAsync"/> and <see cref="UseAbilityAsync"/> so melee and
+        /// ability kills award identically. A rule targeting an undefined pool (no compiled curve) is
+        /// skipped. No-op when the world declares no progression.</summary>
+        private void AwardKillXp(Character killer, string defeatedType)
+        {
+            if (_progressionConfig is null || _progressionConfig.XpAwardRules.Count == 0)
+                return;
+            if (!killer.Has<ProgressPools>())
+                return;
+
+            var pools = killer.Get<ProgressPools>();
+            foreach (var rule in _progressionConfig.XpAwardRules)
+            {
+                if (rule.OnEvent != XpAwardEvent.MonsterDefeated)
+                    continue;
+                if (!string.IsNullOrEmpty(rule.EnemyTypeFilter)
+                    && !string.Equals(rule.EnemyTypeFilter, defeatedType, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (_levelCurvesByPool.TryGetValue(rule.PoolId, out var curve) && curve is not null)
+                    pools.AddXp(rule.PoolId, rule.Amount, curve);
+            }
+        }
+
+        /// <summary>Applies the world's <see cref="AttributeDerivation"/>s to <paramref name="player"/>
+        /// (engine gap-analysis §4.4): writes each derived stat (<c>Base + PerPoint × attribute</c>)
+        /// onto its component. A rise in a derived max (e.g. vitality → max health) also raises the
+        /// current value by the same delta, so joining at higher vitality spawns at full derived
+        /// health and a mid-run vitality gain heals proportionally. Called at join and after any
+        /// attribute change; no-op when the world declares no derivations.</summary>
+        private void ApplyAttributeDerivations(Character player)
+        {
+            if (_progressionConfig is null || _progressionConfig.AttributeDerivations.Count == 0)
+                return;
+            if (!player.Has<Aetherium.Server.Progression.Attributes>())
+                return;
+
+            var attrs = player.Get<Aetherium.Server.Progression.Attributes>();
+            foreach (var d in _progressionConfig.AttributeDerivations)
+            {
+                double value = d.Base + d.PerPoint * attrs.Get(d.AttributeId, 0);
+                switch (d.DerivedStat)
+                {
+                    case DerivedStat.HealthMax when player.Has<Aetherium.Components.Health>():
+                        var health = player.Get<Aetherium.Components.Health>();
+                        int newMax = (int)Math.Round(value);
+                        int delta = newMax - health.MaxLevel;
+                        health.MaxLevel = newMax;
+                        if (delta > 0)
+                            health.Level += delta;
+                        health.Level = Math.Clamp(health.Level, 0, newMax);
+                        break;
+                    case DerivedStat.ActionSpeed when player.Has<Aetherium.Components.ActionSpeed>():
+                        player.Get<Aetherium.Components.ActionSpeed>().Speed = value;
+                        break;
+                }
+            }
+        }
+
+        /// <summary>Unlocks a skill for the session's player (engine gap-analysis §4.4 — see
+        /// wire-progression-live): gated by <see cref="SkillUnlockService"/> (prerequisites + optional
+        /// pool-level requirement), then applies the skill's effects — <c>ModifiesAttributeId</c>
+        /// adjusts an attribute (re-deriving dependent stats) and <c>UnlocksAbilityId</c> adds to the
+        /// player's granted abilities.</summary>
+        public Task<UnlockSkillResultDto> UnlockSkillAsync(string sessionId, string skillId)
+        {
+            var player = GetPlayerCharacter(sessionId);
+            if (player is null)
+                return Task.FromResult(UnlockSkillResultDto.Fail("Map not initialized or player not on map"));
+            if (!IsActionable(player))
+                return Task.FromResult(UnlockSkillResultDto.Fail(DownedFailureReason));
+            if (!player.Has<UnlockedSkills>())
+                return Task.FromResult(UnlockSkillResultDto.Fail("This world has no progression"));
+
+            var unlocked = player.Get<UnlockedSkills>();
+            var pools = player.Has<ProgressPools>() ? player.Get<ProgressPools>() : null;
+            var outcome = _skillUnlockService.TryUnlock(unlocked, _skillCatalog, skillId, pools);
+            if (outcome != SkillUnlockResult.Unlocked)
+                return Task.FromResult(new UnlockSkillResultDto
+                {
+                    Success = false,
+                    SkillId = skillId,
+                    Result = outcome.ToString(),
+                    Reason = outcome switch
+                    {
+                        SkillUnlockResult.AlreadyUnlocked => "Skill already unlocked",
+                        SkillUnlockResult.UnknownSkill => "Unknown skill",
+                        SkillUnlockResult.PrerequisitesNotMet => "Prerequisites not met",
+                        SkillUnlockResult.PoolLevelTooLow => "Required pool level not reached",
+                        _ => "Skill could not be unlocked",
+                    },
+                });
+
+            // Apply the unlocked skill's effects.
+            if (_skillCatalog.TryGet(skillId, out var skill) && skill is not null)
+            {
+                if (!string.IsNullOrEmpty(skill.ModifiesAttributeId)
+                    && player.Has<Aetherium.Server.Progression.Attributes>())
+                {
+                    var attrs = player.Get<Aetherium.Server.Progression.Attributes>();
+                    attrs.Set(skill.ModifiesAttributeId!, attrs.Get(skill.ModifiesAttributeId!) + skill.ModifierAmount);
+                    ApplyAttributeDerivations(player);
+                }
+                if (!string.IsNullOrEmpty(skill.UnlocksAbilityId) && player.Has<GrantedAbilities>())
+                    player.Get<GrantedAbilities>().Grant(skill.UnlocksAbilityId!);
+            }
+
+            return Task.FromResult(new UnlockSkillResultDto
+            {
+                Success = true,
+                SkillId = skillId,
+                Result = SkillUnlockResult.Unlocked.ToString(),
+            });
+        }
+
+        public Task<ProgressionStateDto> GetProgressionAsync(string sessionId)
+        {
+            var dto = new ProgressionStateDto();
+            var player = GetPlayerCharacter(sessionId);
+            if (player is not null)
+            {
+                if (player.Has<ProgressPools>())
+                    foreach (var kv in player.Get<ProgressPools>().Pools)
+                        dto.Pools.Add(new ProgressPoolDto { Id = kv.Key, Xp = kv.Value.Xp, Level = kv.Value.Level });
+
+                if (player.Has<Aetherium.Server.Progression.Attributes>())
+                    foreach (var kv in player.Get<Aetherium.Server.Progression.Attributes>().Values)
+                        dto.Attributes[kv.Key] = kv.Value;
+
+                if (player.Has<UnlockedSkills>())
+                    dto.UnlockedSkills.AddRange(player.Get<UnlockedSkills>().Ids);
+
+                if (player.Has<GrantedAbilities>())
+                    dto.GrantedAbilities.AddRange(player.Get<GrantedAbilities>().Ids);
+            }
+            return Task.FromResult(dto);
         }
 
         public async Task<Aetherium.Model.InteractionResultDto> OpenAsync(string sessionId, string targetEntityId)
@@ -2562,6 +2758,12 @@ namespace Aetherium.Server.MultiWorld
         /// catalog and re-stamp resource pools on reactivation without re-running InitializeAsync.
         /// Null means the world specified no abilities.</summary>
         [Id(12)] public Aetherium.Model.Abilities.AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content captured at <c>InitializeAsync</c> time
+        /// (engine gap-analysis §4.4 — see wire-progression-live), so the grain can recompile its
+        /// skill catalog/curves and re-stamp progression components on reactivation. Null means the
+        /// world specified no progression.</summary>
+        [Id(13)] public Aetherium.Model.Progression.ProgressionConfig? ProgressionConfig { get; set; }
     }
 }
 

@@ -22,8 +22,14 @@ namespace Aetherium.Server.Progression
         public string? ModifiesAttributeId { get; }
         public double ModifierAmount { get; }
 
+        /// <summary>Optional XP gate: the actor's <see cref="RequiredPoolId"/> pool must be at least
+        /// <see cref="RequiredLevel"/> to unlock. Null/zero means no level gate (prerequisites only).</summary>
+        public string? RequiredPoolId { get; }
+        public int RequiredLevel { get; }
+
         public SkillDefinition(string id, string description, IReadOnlyList<string>? prerequisites = null,
-            string? unlocksAbilityId = null, string? modifiesAttributeId = null, double modifierAmount = 0)
+            string? unlocksAbilityId = null, string? modifiesAttributeId = null, double modifierAmount = 0,
+            string? requiredPoolId = null, int requiredLevel = 0)
         {
             Id = id;
             Description = description;
@@ -31,6 +37,8 @@ namespace Aetherium.Server.Progression
             UnlocksAbilityId = unlocksAbilityId;
             ModifiesAttributeId = modifiesAttributeId;
             ModifierAmount = modifierAmount;
+            RequiredPoolId = requiredPoolId;
+            RequiredLevel = requiredLevel;
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Orleans;
 using Aetherium.Model.Combat;
 using Aetherium.Model.Abilities;
+using Aetherium.Model.Progression;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -34,6 +35,10 @@ namespace Aetherium.Server.MultiWorld
         /// world's maps and the resource pools its characters start with. Null means no abilities. See
         /// wire-abilities-live.</summary>
         [Id(14)] public AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content (engine gap-analysis §4.4). Null means no
+        /// progression. See wire-progression-live.</summary>
+        [Id(15)] public ProgressionConfig? ProgressionConfig { get; set; }
     }
 
     /// <summary>
@@ -103,6 +108,10 @@ namespace Aetherium.Server.MultiWorld
         /// world's maps and the resource pools its characters start with. Null means no abilities. See
         /// wire-abilities-live.</summary>
         [Id(9)] public AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content (engine gap-analysis §4.4). Null means no
+        /// progression. See wire-progression-live.</summary>
+        [Id(10)] public ProgressionConfig? ProgressionConfig { get; set; }
     }
 
     /// <summary>

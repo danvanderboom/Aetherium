@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Aetherium.Model.Combat;
 using Aetherium.Model.Abilities;
+using Aetherium.Model.Progression;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -19,8 +20,10 @@ namespace Aetherium.Server.MultiWorld
         /// <see cref="DeathPolicy.Default"/> — see openspec/changes/wire-death-respawn-live.
         /// <paramref name="abilityConfig"/> is the owning world's ability content (engine gap-analysis
         /// §4.3); null means the map has no abilities — see openspec/changes/wire-abilities-live.
+        /// <paramref name="progressionConfig"/> is the owning world's character-progression content
+        /// (engine gap-analysis §4.4); null means no progression — see wire-progression-live.
         /// </summary>
-        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null);
+        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null);
 
         /// <summary>
         /// Gets the current world state for this map.
@@ -110,6 +113,17 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>The session player's ability cooldowns (engine gap-analysis §4.3): remaining ticks
         /// keyed by ability id. Empty when nothing is on cooldown.</summary>
         Task<Dictionary<string, int>> GetAbilityCooldownsAsync(string sessionId);
+
+        /// <summary>Unlocks a skill for the session's player from this map's per-world skill catalog
+        /// (engine gap-analysis §4.4 — see wire-progression-live): gated by prerequisites and an
+        /// optional pool-level requirement, then applies the skill's ability grant / attribute
+        /// modification.</summary>
+        Task<UnlockSkillResultDto> UnlockSkillAsync(string sessionId, string skillId);
+
+        /// <summary>The session player's live progression (engine gap-analysis §4.4): progress pools
+        /// (xp/level), attributes, unlocked skills, and granted abilities. Empty when the world has no
+        /// progression.</summary>
+        Task<ProgressionStateDto> GetProgressionAsync(string sessionId);
 
         /// <summary>
         /// Removes a player's Character from <c>_world</c> on disconnect or explicit

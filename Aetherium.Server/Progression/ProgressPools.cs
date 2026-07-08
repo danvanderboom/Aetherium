@@ -10,6 +10,10 @@ namespace Aetherium.Server.Progression
 
         public IReadOnlyDictionary<string, ProgressPool> Pools => _pools;
 
+        /// <summary>Seeds a pre-built pool (used by <c>ProgressionCompiler</c> to stamp a character's
+        /// starting pools with their configured starting xp/level).</summary>
+        public void Add(ProgressPool pool) => _pools[pool.Id] = pool;
+
         public ProgressPool GetOrCreate(string poolId)
         {
             if (!_pools.TryGetValue(poolId, out var pool))

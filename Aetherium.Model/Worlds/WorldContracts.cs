@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Orleans;
 using Aetherium.Model.Combat;
 using Aetherium.Model.Abilities;
+using Aetherium.Model.Progression;
 
 namespace Aetherium.Model.Worlds
 {
@@ -89,6 +90,11 @@ namespace Aetherium.Model.Worlds
         /// this world's maps and the resource pools its characters start with. Null means no abilities
         /// — the engine ships none. See wire-abilities-live.</summary>
         [Id(8)] public AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content (engine gap-analysis §4.4): XP pools,
+        /// skills, starting attributes, XP-award and attribute-derivation rules. Null means no
+        /// progression — the engine ships none. See wire-progression-live.</summary>
+        [Id(9)] public ProgressionConfig? ProgressionConfig { get; set; }
     }
 
     /// <summary>

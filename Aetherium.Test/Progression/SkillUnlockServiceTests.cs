@@ -93,5 +93,65 @@ namespace Aetherium.Test.Progression
             var nowUnlocked = new SkillUnlockService().TryUnlock(unlocked, catalog, "combo");
             Assert.That(nowUnlocked, Is.EqualTo(SkillUnlockResult.Unlocked));
         }
+
+        // ---- RequiredPoolLevel gate (wire-progression-live) ------------------------------------
+
+        [Test]
+        public void RequiredPoolLevel_BelowIsRejected()
+        {
+            var catalog = new SkillCatalog();
+            catalog.Add(new SkillDefinition("veteran", "Needs combat level 3.",
+                requiredPoolId: "combat", requiredLevel: 3));
+            var unlocked = new UnlockedSkills();
+            var pools = new ProgressPools();
+            pools.Add(new ProgressPool("combat", xp: 0, level: 1));
+
+            var result = new SkillUnlockService().TryUnlock(unlocked, catalog, "veteran", pools);
+
+            Assert.That(result, Is.EqualTo(SkillUnlockResult.PoolLevelTooLow));
+            Assert.That(unlocked.Has("veteran"), Is.False);
+        }
+
+        [Test]
+        public void RequiredPoolLevel_AtOrAboveIsAccepted()
+        {
+            var catalog = new SkillCatalog();
+            catalog.Add(new SkillDefinition("veteran", "Needs combat level 3.",
+                requiredPoolId: "combat", requiredLevel: 3));
+            var unlocked = new UnlockedSkills();
+            var pools = new ProgressPools();
+            pools.Add(new ProgressPool("combat", xp: 0, level: 3));
+
+            var result = new SkillUnlockService().TryUnlock(unlocked, catalog, "veteran", pools);
+
+            Assert.That(result, Is.EqualTo(SkillUnlockResult.Unlocked));
+            Assert.That(unlocked.Has("veteran"), Is.True);
+        }
+
+        [Test]
+        public void RequiredPoolLevel_MissingPools_IsRejected()
+        {
+            var catalog = new SkillCatalog();
+            catalog.Add(new SkillDefinition("veteran", "Needs combat level 3.",
+                requiredPoolId: "combat", requiredLevel: 3));
+            var unlocked = new UnlockedSkills();
+
+            // No pools supplied — a level-gated skill cannot be satisfied.
+            var result = new SkillUnlockService().TryUnlock(unlocked, catalog, "veteran", pools: null);
+
+            Assert.That(result, Is.EqualTo(SkillUnlockResult.PoolLevelTooLow));
+        }
+
+        [Test]
+        public void NoPoolRequirement_UnaffectedByPoolsArgument()
+        {
+            var catalog = new SkillCatalog();
+            catalog.Add(new SkillDefinition("basic", "No level gate."));
+            var unlocked = new UnlockedSkills();
+
+            var result = new SkillUnlockService().TryUnlock(unlocked, catalog, "basic", pools: null);
+
+            Assert.That(result, Is.EqualTo(SkillUnlockResult.Unlocked));
+        }
     }
 }
