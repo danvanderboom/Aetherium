@@ -1,5 +1,5 @@
 ## Why
-Three dashboard pages shipped as placeholder stubs — `BenchmarkComparison.razor`, `CurriculumProgress.razor`, and `ReplayViewer.razor` — each an `alert-info` "this page will show …" with a `// TODO` and no data. This is the first half of Phase 5 item **P3-10** (`docs/audits/RECOMMENDATIONS.md`: "finish the stub pages"). The data sources already exist and were simply never wired:
+Three dashboard pages shipped as placeholder stubs — `BenchmarkComparison.razor`, `CurriculumProgress.razor`, and `ReplayViewer.razor` — each an `alert-info` "this page will show …" with a `// TODO` and no data. This is the first half of Phase 5 item **P3-10** (`docs/audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md`: "finish the stub pages"). The data sources already exist and were simply never wired:
 - `IAgentTelemetryGrain.GetReplayAsync(replayId)` — the Replay Viewer's "View" button was a `// TODO`.
 - `ICurriculumProgressionGrain.GetProgressAsync()` (keyed by agent id) — curriculum stage/run progress.
 - `BenchmarkLibrary.GetAllBenchmarks()` — the built-in benchmark catalog.

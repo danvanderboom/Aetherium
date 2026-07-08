@@ -12,7 +12,7 @@ using Xunit;
 namespace Aetherium.Test
 {
     /// <summary>
-    /// Tests for the Phase 2 hardening items (docs/audits/RECOMMENDATIONS.md):
+    /// Tests for the Phase 2 hardening items (docs/audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md):
     /// P0-9 inventory-capacity exploit, P0-10 MoveEntity index consistency, and
     /// P0-12 cross-path session serialization.
     /// </summary>

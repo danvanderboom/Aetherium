@@ -30,12 +30,12 @@ An ambitious **server-authoritative, Orleans-backed, ECS-driven simulation** wit
 
 | Layer | Status |
 |---|---|
-| ECS core (Entity/Component, World, movement, terrain passability) | Solid — see [engine-core spec](../openspec/specs/engine-core/spec.md) |
-| PCG pipeline (pass-based, dungeons/outdoor/cities, validation, narrative constraints, deterministic seeds) | Mature — see [Aetherium.Server/WorldGen](../Aetherium.Server/WorldGen) |
-| Multi-world / cluster (WorldGrain, ClusterGrain, portals, ACLs, invites, content catalog) | Built out — see [Aetherium.Server/MultiWorld](../Aetherium.Server/MultiWorld) |
-| Emergent narrative (procedural quests, NPC goals, relationship matrix, consequence engine, lore, environmental storytelling) | Prototype-strong — see [narrative-systems.md](narrative-systems.md) |
-| Agent tool system (26+ discoverable tools, LLM agents with profiles, telemetry, curriculum, benchmarks, Blazor dashboard) | Deep — see [agents/](agents/) |
-| Simulation infrastructure (world clock, seasons, weather, spawn management, temporal modifiers) | In place — see [Aetherium.Server/Simulation](../Aetherium.Server/Simulation) |
+| ECS core (Entity/Component, World, movement, terrain passability) | Solid — see [engine-core spec](../../../openspec/specs/engine-core/spec.md) |
+| PCG pipeline (pass-based, dungeons/outdoor/cities, validation, narrative constraints, deterministic seeds) | Mature — see [Aetherium.Server/WorldGen](../../../Aetherium.Server/WorldGen) |
+| Multi-world / cluster (WorldGrain, ClusterGrain, portals, ACLs, invites, content catalog) | Built out — see [Aetherium.Server/MultiWorld](../../../Aetherium.Server/MultiWorld) |
+| Emergent narrative (procedural quests, NPC goals, relationship matrix, consequence engine, lore, environmental storytelling) | Prototype-strong — see [narrative-systems.md](../../narrative-systems.md) |
+| Agent tool system (26+ discoverable tools, LLM agents with profiles, telemetry, curriculum, benchmarks, Blazor dashboard) | Deep — see [agents/](../../agents/) |
+| Simulation infrastructure (world clock, seasons, weather, spawn management, temporal modifiers) | In place — see [Aetherium.Server/Simulation](../../../Aetherium.Server/Simulation) |
 | Perception model (vision, heat, affordances streamed over SignalR) | Working |
 | Clients | Console (mature), Unity 2D (in progress with gamepad), Unreal (planned) |
 | Ops / management | `aetherctl` CLI, ManagementHub with B2C auth, Azure Table Storage for grain state |
@@ -49,14 +49,11 @@ The infrastructure investment is substantial. **The gap is game systems** — th
 
 These claims were verified by direct code search, not assumed from spec titles.
 
-### 3.1 Combat — MISSING
+### 3.1 Combat — BASIC MVP EXISTS, DEPTH MISSING
 
-**Evidence.** Search for `TakeDamage|Attack|Combat|Weapon|Damage` across the tree found only:
-- `ActionType.Attack` and `SoundType.Attack` enum values in `Aetherium.Server/Enums.cs`, with **zero references** in server code (verified — no `ActionType.Attack` or `SoundType.Attack` call sites).
-- Difficulty-tuning strings like `"combat_assistance"` and `"combat_difficulty"` in the curriculum/adaptation subsystems — training telemetry only.
-- `Health` component in `Aetherium.Server/Components/Health.cs` — a data container with no damage pipeline hooked to it.
+**Correction (2026-07-08):** this section originally claimed combat was entirely missing. That was wrong even at the time of writing — Phase 5 item P3-7 (`add-combat-system`, merged 2026-07-04, two days before this doc's 2026-07-06 date) shipped a real melee pipeline: `Aetherium.Server/Core/CombatSystem.cs` resolves `TryAttack` (reach-checked, deterministic damage from `AttackPower` + best carried `Weapon`), `Health` is decremented and a defeated target is removed or downed, monsters retaliate on the world tick, kills feed the `enemy_defeated` quest hook, death drops loot (`SwordItem`), and per-map combat analytics are exposed (`GetCombatStatsAsync` / `aetherctl combat stats`). See [docs/audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md](../2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md) (P3-7) for the verified detail. Treat combat as **present but shallow**, not absent.
 
-There is **no attack pipeline, no damage model, no hit resolution, no armor/mitigation, no status effects, no death/respawn semantics**. The `Health` component is a stub waiting for a system.
+**What's genuinely still missing**, per direct code search: no damage-type packets (`kinetic`/`thermal`/etc.) or per-tag mitigation — damage is a single flat integer; no pluggable hit resolution (attack always lands if in range, no RNG/crit/miss); no status effects (`Burning`/`Slowed`/`Prone`); no `Dying`/`Corpse` entity-state transition — a defeated target is deleted or left at 0 HP, not given an interaction affordance; no threat/aggro ledger beyond simple on-tick retaliation; no ranged/projectile combat. §4.2 below still describes real, unshipped work — it should be read as "deepen the existing MVP," not "build from zero."
 
 ### 3.2 Factions & reputation — MISSING
 
@@ -154,7 +151,7 @@ Each subsystem below is written to become its own OpenSpec proposal. Every one i
 
 ### 4.2 Combat model
 
-**Purpose.** Turn `Health` from a stub into a real damage/mitigation/status pipeline usable by any genre.
+**Purpose.** Deepen the existing melee-only MVP (§3.1) into a real damage/mitigation/status pipeline usable by any genre.
 
 **Design sketch.**
 - **Damage packets** are the currency. A packet: `{types: [{tag: "kinetic", amount: 12}, {tag: "thermal", amount: 4}], source, delivery, hitLocation?, tags}`. Damage `tag` values are **data-driven per campaign** (fantasy: slashing/piercing/fire/cold/arcane; sci-fi: kinetic/plasma/EMP/radiation).
@@ -198,7 +195,7 @@ Each subsystem below is written to become its own OpenSpec proposal. Every one i
 - **Skills / talents** are `Ability`-adjacent data assets that modify effects, unlock abilities, or reshape passives. Trees / webs / point-buy are all expressible.
 - **XP** is a generic `ProgressPool`; multiple pools are allowed (combat XP, exploration XP, crafting XP, faction rep). A campaign chooses which pools exist and how they convert.
 - **Class / role** is optional — a campaign can enable freeform builds or fixed archetypes. The engine offers a `RoleAffinity` component with `{roleTag: weight}` that biases which abilities and skills are available.
-- **Meta-progression** ([Aetherium.Server/MetaProgression](../Aetherium.Server/MetaProgression)) already exists across worlds. Character progression is *within-run*; the two layers should be joined by a documented handoff (which meta-unlocks add to the character start-kit, which character achievements post to meta).
+- **Meta-progression** ([Aetherium.Server/MetaProgression](../../../Aetherium.Server/MetaProgression)) already exists across worlds. Character progression is *within-run*; the two layers should be joined by a documented handoff (which meta-unlocks add to the character start-kit, which character achievements post to meta).
 
 **Priority: P1.**
 
@@ -215,7 +212,7 @@ Each subsystem below is written to become its own OpenSpec proposal. Every one i
 - **Actions map to the §4.1 action queue.** An AI does not "attack"; it enqueues an `Attack` action, competes for its actor's budget, and can be interrupted by higher-priority tree branches.
 - **GOAP** as an optional overlay for planners (a settlement builder NPC, a heist boss coordinating a mob) — heavier and off by default.
 - **Authoring.** Trees are JSON assets shipped in mod packs; a designer tool in `aetherctl` renders and validates them. LLM agents can *author* trees as a mod contribution.
-- **Shared vocabulary.** Behavior trees and the ECA rule language are the *same tile vocabulary* in different arrangements — see [design-eca-visual-scripting.md](../docs/design-eca-visual-scripting.md). A BT node's conditions/actions are the same events/predicates/tools an ECA brain uses.
+- **Shared vocabulary.** Behavior trees and the ECA rule language are the *same tile vocabulary* in different arrangements — see [design-eca-visual-scripting.md](design-eca-visual-scripting.md). A BT node's conditions/actions are the same events/predicates/tools an ECA brain uses.
 
 **Priority: P0** (co-ships with 4.1 — without it, combat has no one to fight).
 
@@ -230,7 +227,7 @@ Each subsystem below is written to become its own OpenSpec proposal. Every one i
 - `Reputation` is an actor-to-faction ledger: `{faction: id, standing: -1000..+1000, ranks: [], flags: []}`. Standing changes via actions (help/harm) filtered through the faction's doctrine (a pacifist faction ranks you up for peaceful resolutions).
 - **Faction disposition** modifies NPC starting attitude, price mods, quest availability, access control (`WorldAclGrain` already has ACLs — factions plug in as principals).
 - **Rites / ranks** unlock abilities, titles, and start-kit items, feeding §4.4 and §4.3.
-- **Inter-faction state** is a sparse matrix (war, cold, neutral, ally, subordinate) that the consequence engine ([NarrativeConsequenceEngine](../Aetherium.Server/Narrative/Consequence/NarrativeConsequenceEngine.cs)) can mutate over time based on world events. Existing `RelationshipMatrix` becomes the *NPC-personal* layer atop this new faction layer.
+- **Inter-faction state** is a sparse matrix (war, cold, neutral, ally, subordinate) that the consequence engine ([NarrativeConsequenceEngine](../../../Aetherium.Server/Narrative/Consequence/NarrativeConsequenceEngine.cs)) can mutate over time based on world events. Existing `RelationshipMatrix` becomes the *NPC-personal* layer atop this new faction layer.
 
 **Priority: P1.**
 
@@ -359,7 +356,7 @@ Each subsystem below is written to become its own OpenSpec proposal. Every one i
 **Design sketch.**
 - **Content pack format:** a zipped bundle of `content-atlas.json` deltas, prefabs, ability definitions, behavior trees, faction definitions, quest templates, localization catalogs, and (optionally) sandboxed scripts.
 - **Sandboxed scripting** via Roslyn scripting or WASM with a capability-scoped API. Scripts run *inside grains* with quota limits.
-- **Logic-plugin tiles.** Beyond content data, plugins register **new ECA vocabulary** (events/conditions/actions/values) into the visual palette via `[Eca*]` attributes — the same `AgentToolAttribute` registration pattern the engine already uses (SC2 Native Function / Blueprint `UFUNCTION` model). Content packs and logic plugins **share one signing/capability model.** See [design-eca-visual-scripting.md](../docs/design-eca-visual-scripting.md) §7.
+- **Logic-plugin tiles.** Beyond content data, plugins register **new ECA vocabulary** (events/conditions/actions/values) into the visual palette via `[Eca*]` attributes — the same `AgentToolAttribute` registration pattern the engine already uses (SC2 Native Function / Blueprint `UFUNCTION` model). Content packs and logic plugins **share one signing/capability model.** See [design-eca-visual-scripting.md](design-eca-visual-scripting.md) §7.
 - **Signing & verification.** Packs are signed; clusters can accept only whitelisted signers by default. Multiplayer parity is enforced at handshake.
 - **Authoring surface:** LLM agents already speak the tool registry; extend it with a `ContentAuthoring` tool profile so an agent (or a Claude Code session) can propose a mod as a PR-shaped bundle. Combine with the existing `openspec` workflow.
 - **Delivery:** local sideload first; a hosted registry later.
@@ -378,7 +375,7 @@ Ship these first; every later system depends on them.
 
 1. **Content atlas & render contract** (§4.10). Sets the semantic vocabulary before we grow gameplay events that would leak ASCII assumptions.
 2. **Continuous action pipeline** (§4.1). The `ActionSpeed`/`ActionQueue`/`ActionSystem` triad. Cheap to spec, everything else stands on it.
-3. **Combat model** (§4.2). Turn `Health` into a real system.
+3. **Combat model** (§4.2). Deepen the existing melee-only MVP into a real damage/mitigation/status system.
 4. **Behavior-driven NPC AI** (§4.5). Combat needs opponents.
 
 ### Wave 1 — Character depth (P1)
@@ -415,7 +412,7 @@ Every OpenSpec proposal spun off from this document should include a section tha
 4. **Determinism.** Given `(seed, input-log)`, does this system reproduce byte-identically? If it uses randomness, is the RNG stream seedable and per-tick?
 5. **Multiplayer symmetry.** Does this system treat all N players symmetrically? Are there any implicit assumptions of a single "current player" or a single client?
 6. **Grain locality.** Which Orleans grain owns each piece of new state? How does it interact with `WorldGrain`, `ClusterGrain`, and existing subsystems' grains?
-7. **ECA vocabulary.** What new tiles (events/conditions/actions/values) does this system contribute to the visual ECA language ([design-eca-visual-scripting.md](../docs/design-eca-visual-scripting.md))? Are they render-agnostic and genre-neutral? Do actions route through the agent tool registry?
+7. **ECA vocabulary.** What new tiles (events/conditions/actions/values) does this system contribute to the visual ECA language ([design-eca-visual-scripting.md](design-eca-visual-scripting.md))? Are they render-agnostic and genre-neutral? Do actions route through the agent tool registry?
 
 ---
 

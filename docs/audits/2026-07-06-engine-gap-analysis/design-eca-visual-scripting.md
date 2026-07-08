@@ -400,7 +400,7 @@ Now `alert-nearby-allies(radius: 10)` is a tile any rule can use. **This covers 
 
 When a genuinely new *primitive* is needed — a novel sensor, a math function, an effect the engine can't express by composition — an author ships a **plugin** that registers new tiles into the palette. This is the **keystone extensibility mechanism** and it reuses infrastructure Aetherium already has.
 
-**The model is SC2's "Native Function declaration" + Unreal's `UFUNCTION(BlueprintCallable)`:** engine/plugin code is annotated so it appears as a typed tile in the visual palette. Aetherium already has this exact pattern in the **`AgentToolAttribute`** ([AgentToolAttribute.cs](../Aetherium.Server/Agents/Tools/AgentToolAttribute.cs)) — a tool declares its id, categories, capabilities, and parameter schema, and the registry makes it discoverable. **A plugin that registers a tool automatically becomes a DO tile.** We generalize the same attribute-driven registration to the other tile roles:
+**The model is SC2's "Native Function declaration" + Unreal's `UFUNCTION(BlueprintCallable)`:** engine/plugin code is annotated so it appears as a typed tile in the visual palette. Aetherium already has this exact pattern in the **`AgentToolAttribute`** ([AgentToolAttribute.cs](../../../Aetherium.Server/Agents/Tools/AgentToolAttribute.cs)) — a tool declares its id, categories, capabilities, and parameter schema, and the registry makes it discoverable. **A plugin that registers a tool automatically becomes a DO tile.** We generalize the same attribute-driven registration to the other tile roles:
 
 ```csharp
 // A plugin assembly (Roslyn-compiled or WASM), loaded from a signed Game Pack.

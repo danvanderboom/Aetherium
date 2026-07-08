@@ -8,7 +8,7 @@ using Xunit;
 namespace Aetherium.Test
 {
     /// <summary>
-    /// Tests for the control-plane API-key gate (P0-7 in docs/audits/RECOMMENDATIONS.md):
+    /// Tests for the control-plane API-key gate (P0-7 in docs/audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md):
     /// /api/management is protected for every method, and mutating requests
     /// (POST/PUT/PATCH/DELETE) to the other control-plane controllers require the
     /// key too — previously anyone who could reach the port could tick the economy

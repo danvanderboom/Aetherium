@@ -55,7 +55,7 @@ Blazor Server app for operators and agent-training workflows. Data paths: an Orl
 
 Pages: Index (status), AgentMonitor (live telemetry), AdaptationMonitor, BehaviorAnalysis, PerformanceAnalytics, BenchmarkComparison, CurriculumProgress (training), PCG (interactive generation), Worlds (world management), ReplayViewer.
 
-Status note (2026-07-03): the Dashboard **does not currently compile** (and hasn't since it was first committed ~8 months ago) — its Orleans client calls (`IClusterClient.Connect/Close`) predate Orleans 7's hosted-client model, and `Pages/BehaviorAnalysis.razor` has a type-shadowing collision (the unqualified name `BehaviorAnalysis` binds to the Razor component class instead of the server model). See [docs/audits/unity-and-dashboard.md](../audits/unity-and-dashboard.md). It has no test coverage.
+Status note (2026-07-03): the Dashboard **does not currently compile** (and hasn't since it was first committed ~8 months ago) — its Orleans client calls (`IClusterClient.Connect/Close`) predate Orleans 7's hosted-client model, and `Pages/BehaviorAnalysis.razor` has a type-shadowing collision (the unqualified name `BehaviorAnalysis` binds to the Razor component class instead of the server model). See [docs/audits/unity-and-dashboard.md](../audits/2026-07-03-initial-subsystem-audit/unity-and-dashboard.md). It has no test coverage.
 
 ## Planned Unreal client
 

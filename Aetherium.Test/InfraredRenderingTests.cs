@@ -11,7 +11,7 @@ namespace Aetherium.Test
 {
     /// <summary>
     /// Regression tests for the infrared black-screen bug (P0-8 in
-    /// docs/audits/RECOMMENDATIONS.md): the infrared branch of PerceptionService
+    /// docs/audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md): the infrared branch of PerceptionService
     /// used to build an empty LightFrame, so every VisualDto shipped with
     /// LightLevel = 0 and the client painted the whole map black. Infrared now
     /// records each heated location's intensity into the light frame — the DTO's

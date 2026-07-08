@@ -10,7 +10,7 @@
 2. **Definition of done = end-to-end + tested + honest docs.** A fix isn't done when the class compiles; it's done when a player or agent can reach it through a client, an automated test exercises that path, and the docs/`tasks.md` say what actually works.
 3. **Converge before you extend.** Every duplicate (two action paths, two clocks, two world-build paths, duplicated engine code) is fixed twice and drifts; collapse duplicates before building on them.
 4. **Deepen one slice.** After the foundation is solid, finish *single-world exploration with validated movement, working interactions, visible NPCs, and an agent playing it* before re-opening multi-world/narrative/persistence.
-5. **Respect OpenSpec.** Bug fixes and wiring go straight in; capability/architecture changes (P3 items, and the action-path convergence) get an OpenSpec proposal per [openspec/AGENTS.md](../../openspec/AGENTS.md), reusing/reconciling the seven active changes rather than duplicating them.
+5. **Respect OpenSpec.** Bug fixes and wiring go straight in; capability/architecture changes (P3 items, and the action-path convergence) get an OpenSpec proposal per [openspec/AGENTS.md](../../../openspec/AGENTS.md), reusing/reconciling the seven active changes rather than duplicating them.
 
 ---
 

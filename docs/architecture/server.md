@@ -18,8 +18,8 @@
 
 - **GameHub** (`/gamehub`) — the gameplay contract:
   - *Client → server*: `ExecuteTool(toolId, args)` and `ListAvailableTools()` (the unified action API), interaction methods (`Pickup`, `Drop`, `Use`, `Open`, `Close`), plus legacy `[Obsolete]` methods (`MovePlayer`, `RotatePlayer`, `RotatePlayerDegrees`, `ToggleDirectionalVision`, `ChangeLevel`, …) retained for backward compatibility.
-  - *Server → client*: `ReceiveGameState(GameStateDto)` (player ID + heading only) and `ReceivePerceptionUpdate(PerceptionDto)`. (Interaction methods return their `InteractionResultDto` as the RPC result rather than via a separate push; the client has no dedicated error channel — see [audit](../audits/client-server-protocol.md).)
-  - Forwards interaction events to the narrative consequence engine best-effort (failures are swallowed by design — and in practice the engine never runs because `session.WorldId` is null for real sessions; see [audit](../audits/narrative-and-multiworld.md)).
+  - *Server → client*: `ReceiveGameState(GameStateDto)` (player ID + heading only) and `ReceivePerceptionUpdate(PerceptionDto)`. (Interaction methods return their `InteractionResultDto` as the RPC result rather than via a separate push; the client has no dedicated error channel — see [audit](../audits/2026-07-03-initial-subsystem-audit/client-server-protocol.md).)
+  - Forwards interaction events to the narrative consequence engine best-effort (failures are swallowed by design — and in practice the engine never runs because `session.WorldId` is null for real sessions; see [audit](../audits/2026-07-03-initial-subsystem-audit/narrative-and-multiworld.md)).
 - **ManagementHub** (`/managementHub`) — world/session administration for `aetherctl` and the dashboard; write operations require the `Admin` role when auth is configured.
 - **AgentDashboardHub** (`/agentDashboardHub`) — streams agent telemetry to the dashboard.
 
@@ -51,7 +51,7 @@ The heart of the server-authoritative model. `PerceptionService.ComputePerceptio
 3. **Vision modes** — the `VisionMode` enum defines two values: Normal and Infrared (`InfraredVisionSystem` + `HeatTrailTracker` render heat signatures and movement trails). The `LightingMode` enum defines three: Torch, Ambient, Sunlight. (Older docs referencing 5 lighting modes or an "echolocation" vision mode are inaccurate.)
 4. **Rendering** — tiles resolved to icons/colors and packed into `PerceptionDto`.
 
-Audio perception (`Sound`, `HearingFrame`, `AudioPerceptionDto`) is modeled but only partially integrated. The FOV/rotation history is documented in `docs/history/FOV_*.md`; current status is assessed in [docs/audits/perception-fov-lighting.md](../audits/perception-fov-lighting.md).
+Audio perception (`Sound`, `HearingFrame`, `AudioPerceptionDto`) is modeled but only partially integrated. The FOV/rotation history is documented in `docs/history/FOV_*.md`; current status is assessed in [docs/audits/2026-07-03-initial-subsystem-audit/perception-fov-lighting.md](../audits/2026-07-03-initial-subsystem-audit/perception-fov-lighting.md).
 
 ## World generation (`WorldGen/`, `WorldBuilders/`)
 

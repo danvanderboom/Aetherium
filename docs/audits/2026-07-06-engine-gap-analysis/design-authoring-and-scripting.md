@@ -33,11 +33,11 @@ Aetherium already has the *bones* of a data-driven authoring system. This is not
 
 | Existing asset | What it proves | File |
 |---|---|---|
-| **Prefab JSON** — hand-authored maps as tile grids with embedded entities | Creators already place terrain + entities declaratively | [Data/Prefabs/Buildings/shop.json](../Data/Prefabs/Buildings/shop.json), [PrefabTemplate.cs](../Aetherium.Server/WorldGen/Prefabs/PrefabTemplate.cs) |
-| **Narrative JSON** — quests, objectives, rewards, loot tables, monster density, NPC goals | Rich game content is already fully declarative | [Data/Narratives/tutorial-village.json](../Data/Narratives/tutorial-village.json) |
-| **Agent tool registry** — `IAgentTool` with id, param schema, capabilities | A discoverable, capability-gated *verb vocabulary* already exists | [IAgentTool.cs](../Aetherium.Server/Agents/Tools/IAgentTool.cs), [UseTool.cs](../Aetherium.Server/Agents/Tools/Interaction/UseTool.cs) |
-| **Event handlers** — `IEventHandler` + `ScheduledEvent.EventData` dictionary | The event backbone for reactive rules is present | [ProceduralEvents.cs](../Aetherium.Server/Events/ProceduralEvents.cs), [EventScheduler.cs](../Aetherium.Server/Events/EventScheduler.cs) |
-| **`aetherctl`** — System.CommandLine CLI over Orleans + SignalR + a worldgen REST server | The control-plane surface already spans worldgen, worlds, narrative, tools, sessions | [Program.cs](../Aetherctl/Program.cs), [WorldCommands.cs](../Aetherctl/Commands/WorldCommands.cs) |
+| **Prefab JSON** — hand-authored maps as tile grids with embedded entities | Creators already place terrain + entities declaratively | [Data/Prefabs/Buildings/shop.json](../../../Data/Prefabs/Buildings/shop.json), [PrefabTemplate.cs](../../../Aetherium.Server/WorldGen/Prefabs/PrefabTemplate.cs) |
+| **Narrative JSON** — quests, objectives, rewards, loot tables, monster density, NPC goals | Rich game content is already fully declarative | [Data/Narratives/tutorial-village.json](../../../Data/Narratives/tutorial-village.json) |
+| **Agent tool registry** — `IAgentTool` with id, param schema, capabilities | A discoverable, capability-gated *verb vocabulary* already exists | [IAgentTool.cs](../../../Aetherium.Server/Agents/Tools/IAgentTool.cs), [UseTool.cs](../../../Aetherium.Server/Agents/Tools/Interaction/UseTool.cs) |
+| **Event handlers** — `IEventHandler` + `ScheduledEvent.EventData` dictionary | The event backbone for reactive rules is present | [ProceduralEvents.cs](../../../Aetherium.Server/Events/ProceduralEvents.cs), [EventScheduler.cs](../../../Aetherium.Server/Events/EventScheduler.cs) |
+| **`aetherctl`** — System.CommandLine CLI over Orleans + SignalR + a worldgen REST server | The control-plane surface already spans worldgen, worlds, narrative, tools, sessions | [Program.cs](../../../Aetherctl/Program.cs), [WorldCommands.cs](../../../Aetherctl/Commands/WorldCommands.cs) |
 
 The recommendation below **generalizes and unifies** these into a coherent authoring platform rather than inventing from scratch.
 
@@ -106,7 +106,7 @@ The existing prefab format already does this. The recommendation is to **promote
 
 ### 4.1 Today
 
-[shop.json](../Data/Prefabs/Buildings/shop.json) is a 9×7 grid where each tile carries `TerrainType`, optional `EntityType`, and an `EntityConfig` dictionary:
+[shop.json](../../../Data/Prefabs/Buildings/shop.json) is a 9×7 grid where each tile carries `TerrainType`, optional `EntityType`, and an `EntityConfig` dictionary:
 
 ```json
 { "TerrainType": "Floor", "EntityType": "NPC", "EntityConfig": { "Role": "Shopkeeper" } }
@@ -142,7 +142,7 @@ grid: |
 
 **b) Multi-level / Z-layer maps** (the engine is already 3D-aware) — stack grids with `level: -1`, `level: 0`, etc., and connect them with `stairs`/`portal` entities.
 
-**c) Region tagging** — named rectangles/polygons (`village-center`, `boss-arena`) that rules and spawn rules reference by name, exactly as [tutorial-village.json](../Data/Narratives/tutorial-village.json) already does with `AreaId`.
+**c) Region tagging** — named rectangles/polygons (`village-center`, `boss-arena`) that rules and spawn rules reference by name, exactly as [tutorial-village.json](../../../Data/Narratives/tutorial-village.json) already does with `AreaId`.
 
 **d) Composition** — a map can `include` prefabs at offsets, so a town map is assembled from reusable building prefabs rather than one giant grid.
 
@@ -183,7 +183,7 @@ Key points:
 
 ### 5.2 Item definitions
 
-Items are entities with item-specific components, and — crucially — they reuse the **tool/usage** vocabulary that already exists ([UseTool.cs](../Aetherium.Server/Agents/Tools/Interaction/UseTool.cs) already supports multi-use items with usage options):
+Items are entities with item-specific components, and — crucially — they reuse the **tool/usage** vocabulary that already exists ([UseTool.cs](../../../Aetherium.Server/Agents/Tools/Interaction/UseTool.cs) already supports multi-use items with usage options):
 
 ```yaml
 # items/plasma-cutter.item.yaml
@@ -230,7 +230,7 @@ Nothing here is fantasy- or sci-fi-specific except the *data*. A fireball is the
 
 ### 5.4 Factions, loot tables, quests, dialogue
 
-These already have precedent in [tutorial-village.json](../Data/Narratives/tutorial-village.json) (quests, objectives, rewards, loot tables, monster density, NPC goals). The recommendation is to **split them into per-file definitions** referenced by id (better for diffs, reuse, and validation) and add:
+These already have precedent in [tutorial-village.json](../../../Data/Narratives/tutorial-village.json) (quests, objectives, rewards, loot tables, monster density, NPC goals). The recommendation is to **split them into per-file definitions** referenced by id (better for diffs, reuse, and validation) and add:
 
 - **Factions & reputation** — `faction` definitions with doctrine, ranks, standing thresholds, and inter-faction disposition (fills the gap identified in [design-next-steps.md](design-next-steps.md) §4.6).
 - **Dialogue** — node graphs with condition-gated branches and effect hooks (`give_item`, `start_quest`, `adjust_reputation`).
@@ -277,13 +277,13 @@ do:
 ```
 
 Design notes:
-- **`when`** is an engine event id. Events come from a **documented catalog** (see §6.4) — the same event backbone that [EventScheduler.cs](../Aetherium.Server/Events/EventScheduler.cs) and [ProceduralEvents.cs](../Aetherium.Server/Events/ProceduralEvents.cs) already provide, exposed to authors.
+- **`when`** is an engine event id. Events come from a **documented catalog** (see §6.4) — the same event backbone that [EventScheduler.cs](../../../Aetherium.Server/Events/EventScheduler.cs) and [ProceduralEvents.cs](../../../Aetherium.Server/Events/ProceduralEvents.cs) already provide, exposed to authors.
 - **`if`** is an expression in the safe language — booleans, comparisons, arithmetic, and a curated set of **query functions** (`world.flag`, `world.actors_in_region`, `entity.has_component`, `player.reputation`). No arbitrary calls.
 - **`do`** is a sequence of **actions**, and here's the crucial architectural point:
 
 ### 6.3 Actions ARE the agent tool registry (the bridge to game resources)
 
-This is the key insight that ties scripting to the engine. Aetherium already has a **discoverable, capability-gated, parameter-schema'd verb vocabulary**: the agent tool registry ([IAgentTool.cs](../Aetherium.Server/Agents/Tools/IAgentTool.cs)). Agents already invoke `move`, `use`, `pickup`, `open`, `spawn_entity`, `set_terrain`, etc. through it.
+This is the key insight that ties scripting to the engine. Aetherium already has a **discoverable, capability-gated, parameter-schema'd verb vocabulary**: the agent tool registry ([IAgentTool.cs](../../../Aetherium.Server/Agents/Tools/IAgentTool.cs)). Agents already invoke `move`, `use`, `pickup`, `open`, `spawn_entity`, `set_terrain`, etc. through it.
 
 **Recommendation: ECA rule actions dispatch through the same tool registry** (extended with authoring/world-mutation tools). This means:
 
@@ -386,7 +386,7 @@ neon-station/
 
 ## 9. Where `aetherctl` fits — the creator & operator control plane
 
-`aetherctl` is already a System.CommandLine CLI spanning `worldgen`, `world`, `narrative`, `tools`, `agent`, `session`, `prompts`, `monitor`, `vision`, `server` ([Program.cs](../Aetherctl/Program.cs)). It talks to Orleans grains, the SignalR ManagementHub, and a worldgen REST server. It is the natural home for the **entire game-creation and management lifecycle** — the "IDE without an IDE."
+`aetherctl` is already a System.CommandLine CLI spanning `worldgen`, `world`, `narrative`, `tools`, `agent`, `session`, `prompts`, `monitor`, `vision`, `server` ([Program.cs](../../../Aetherctl/Program.cs)). It talks to Orleans grains, the SignalR ManagementHub, and a worldgen REST server. It is the natural home for the **entire game-creation and management lifecycle** — the "IDE without an IDE."
 
 The recommendation is to organize `aetherctl` around the creator's journey:
 
@@ -449,7 +449,7 @@ aetherctl telemetry query --world <id> --metric ttk           # gameplay telemet
 
 ### 9.6 `aetherctl` as the substrate for GUI tools
 
-Because `aetherctl` speaks JSON (`--json` global option already exists) and wraps the grain/REST APIs, a future **web-based visual editor** (map painter, rule-card editor, dialogue-graph editor) is a *front-end over the same commands and endpoints* — not a parallel implementation. Ship the CLI first; the GUI is a thin client on top. The worldgen REST server ([`aetherctl worldgen serve`](../docs/pcg-tools.md)) is the precedent.
+Because `aetherctl` speaks JSON (`--json` global option already exists) and wraps the grain/REST APIs, a future **web-based visual editor** (map painter, rule-card editor, dialogue-graph editor) is a *front-end over the same commands and endpoints* — not a parallel implementation. Ship the CLI first; the GUI is a thin client on top. The worldgen REST server ([`aetherctl worldgen serve`](../../pcg-tools.md)) is the precedent.
 
 ---
 
@@ -474,7 +474,7 @@ then:
     assert: { world_ended: station_lost }
 ```
 
-This reuses the **agent/benchmark harness** that already exists ([Data/Benchmarks](../Data/Benchmarks), curriculum/telemetry systems) — a pack test is a benchmark scenario with assertions. Creators get CI-grade confidence with zero C#.
+This reuses the **agent/benchmark harness** that already exists ([Data/Benchmarks](../../../Data/Benchmarks), curriculum/telemetry systems) — a pack test is a benchmark scenario with assertions. Creators get CI-grade confidence with zero C#.
 
 ---
 

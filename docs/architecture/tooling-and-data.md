@@ -22,7 +22,7 @@ The unified operator CLI, built on System.CommandLine. It is stateless — all s
 
 Auth: Azure AD B2C device flow (`Auth/`) for management writes when the server has auth enabled.
 
-Aetherctl pins `Microsoft.Orleans.Client` **9.2.1**, matching the server (previously pinned to 8.0.0 — fixed on `develop`; see [docs/audits/tooling-testing-devex.md](../audits/tooling-testing-devex.md)).
+Aetherctl pins `Microsoft.Orleans.Client` **9.2.1**, matching the server (previously pinned to 8.0.0 — fixed on `develop`; see [docs/audits/2026-07-03-initial-subsystem-audit/tooling-testing-devex.md](../audits/2026-07-03-initial-subsystem-audit/tooling-testing-devex.md)).
 
 ## WorldGenCLI (`WorldGenCLI/`)
 
@@ -67,4 +67,4 @@ Aetherium uses spec-driven development. `openspec/specs/<capability>/spec.md` is
 - **Aetherium.Test** — engine/server suite (xUnit + NUnit side by side, Orleans TestingHost for grain tests, Moq). Areas: FOV/vision, lighting, interaction/inventory, client-server hubs, worldgen, geometry, grains, tools, UI self-test.
 - **Aetherctl.Test** — command-structure, common-options, session commands, worldgen PNG rendering.
 - **Unity** — EditMode (JSON parsing) + PlayMode (input/gamepad/tilemap) suites inside the Unity project.
-- Current ground-truth results and runtime caveats: [docs/audits/README.md](../audits/README.md). Client-side console UI logic (widgets, themes, audio) still lacks a dedicated test project (`Aetherium.Test/CLIENT_TESTS_README.md` has templates).
+- Current ground-truth results and runtime caveats: [docs/audits/2026-07-03-initial-subsystem-audit/README.md](../audits/2026-07-03-initial-subsystem-audit/README.md). Client-side console UI logic (widgets, themes, audio) still lacks a dedicated test project (`Aetherium.Test/CLIENT_TESTS_README.md` has templates).

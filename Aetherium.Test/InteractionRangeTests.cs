@@ -8,7 +8,7 @@ using Xunit;
 namespace Aetherium.Test
 {
     /// <summary>
-    /// Tests for the interaction reach rule (P0-3 in docs/audits/RECOMMENDATIONS.md):
+    /// Tests for the interaction reach rule (P0-3 in docs/audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md):
     /// direct physical interactions — open/close, unlock, lockpick, force, activate —
     /// must fail when the target is not at or cardinally adjacent to the actor on the
     /// same Z level. Previously any entity could be acted on by ID map-wide.

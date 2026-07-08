@@ -42,7 +42,7 @@ The server listens on `http://localhost:5000` (SignalR hubs at `/gamehub`, `/man
 - **[docs/architecture/server.md](docs/architecture/server.md)** — server subsystems (grains, simulation, perception, worldgen, agents, narrative)
 - **[docs/architecture/clients.md](docs/architecture/clients.md)** — console, Unity, dashboard, and planned Unreal clients
 - **[docs/architecture/tooling-and-data.md](docs/architecture/tooling-and-data.md)** — CLI tools, scripts, monitoring, data assets
-- **[docs/audits/README.md](docs/audits/README.md)** — subsystem audit reports, recommendations, and improvement plan
+- **[docs/audits/README.md](docs/audits/2026-07-03-initial-subsystem-audit/README.md)** — subsystem audit reports, recommendations, and improvement plan
 - **[docs/history/](docs/history/)** — archived point-in-time status documents
 
 ## Spec-driven development

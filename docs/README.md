@@ -56,10 +56,10 @@ The game features a comprehensive extensible agent tool system:
 - ✅ [Monitoring Guide](monitoring.md) - Real-time game monitoring quick start
 
 ### Quality & Audits
-- 📋 [Audit Index & Scorecard](audits/README.md) - Per-subsystem audit reports with build/test ground truth
-- 📋 [Recommendations](audits/RECOMMENDATIONS.md) - Prioritized findings register
-- 📋 [Design Analysis](audits/DESIGN_ANALYSIS.md) - High-level system design assessment
-- 📋 [Improvement Plan](audits/IMPROVEMENT_PLAN.md) - Phased quality-improvement roadmap
+- 📋 [Audit Index & Scorecard](audits/2026-07-03-initial-subsystem-audit/README.md) - Per-subsystem audit reports with build/test ground truth
+- 📋 [Recommendations](audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md) - Prioritized findings register
+- 📋 [Design Analysis](audits/2026-07-03-initial-subsystem-audit/DESIGN_ANALYSIS.md) - High-level system design assessment
+- 📋 [Improvement Plan](audits/2026-07-03-initial-subsystem-audit/IMPROVEMENT_PLAN.md) - Phased quality-improvement roadmap
 - 🗄️ [Historical documents](history/README.md) - Archived point-in-time status reports
 
 ### SignalR Hubs

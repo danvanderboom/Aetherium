@@ -1,5 +1,5 @@
 ## Why
-The console client's audio was audible in spec but broken in practice (Phase 5 item **P3-9**, `docs/audits/console-client.md`):
+The console client's audio was audible in spec but broken in practice (Phase 5 item **P3-9**, `docs/audits/2026-07-03-initial-subsystem-audit/console-client.md`):
 
 - **The null-fallback path was dead.** `CreateAudioSystem` wrapped `new NAudioSystem(config)` in a try/catch and only returned `NullAudioSystem` if the *constructor* threw — but the constructor never touches a device. NAudio opens the output device lazily on first play, so on audio-less or non-Windows hosts every play call threw, was caught, and wrote `[Audio] Error …` straight into the Spectre TUI — corrupting the frame.
 - **Assets were unreachable even if present.** No audio files ship (only `.gitkeep`/README), the `.csproj` copied nothing to output, and `AudioConfig.AssetPath` was cwd-relative — so lookups from `bin/` could never resolve.

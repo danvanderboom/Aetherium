@@ -400,7 +400,7 @@ using Microsoft.Extensions.DependencyInjection;
 - [Agent System Guide](agents/README.md) - AI agent system documentation
 - [Architecture Overview](architecture/overview.md) - Client-server architecture details
 - [Tooling & Data](architecture/tooling-and-data.md) - CLI tools, scripts, and data assets
-- [Audit Reports](audits/README.md) - Current build/test ground truth and subsystem audits
+- [Audit Reports](audits/2026-07-03-initial-subsystem-audit/README.md) - Current build/test ground truth and subsystem audits
 
 ## Contributing
 

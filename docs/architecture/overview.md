@@ -126,4 +126,4 @@ Detailed in [server.md](server.md), [clients.md](clients.md), and [tooling-and-d
 
 - Spec-driven development via **OpenSpec**: `openspec/specs/` holds 20 capability specs (current truth), `openspec/changes/` holds active proposals. See [openspec/AGENTS.md](../../openspec/AGENTS.md).
 - Dev scripts: `start-game-test.ps1` / `stop-game.ps1` (run server + console client with PID tracking), `scripts/monitor-game.ps1` / `monitor-lite.ps1` (attach to the monitoring WebSocket), `scripts/start-llm-agents.ps1`.
-- Tests: `dotnet test` (see [docs/audits/README.md](../audits/README.md) for current ground-truth results and runtime caveats).
+- Tests: `dotnet test` (see [docs/audits/README.md](../audits/2026-07-03-initial-subsystem-audit/README.md) for current ground-truth results and runtime caveats).

@@ -9,7 +9,7 @@
 - [x] 1.6 Resolve portal link targets within cluster and persist mappings
 - [x] 1.7 Implement markets, trade routes, and transport schedules with ticking
 - [x] 1.8 Add CrossWorldConstraint types and resolver; extend NarrativeGraphGenerator
-- [ ] 1.9 Emit and evaluate travel_to objective; complete via NarrativeStateGrain events (unchecked 2026-07-03: ActiveQuestIds is never populated — no StartQuest/ActivateQuest API exists, so travel_to objectives can never complete; see docs/audits/narrative-and-multiworld.md)
+- [ ] 1.9 Emit and evaluate travel_to objective; complete via NarrativeStateGrain events (unchecked 2026-07-03: ActiveQuestIds is never populated — no StartQuest/ActivateQuest API exists, so travel_to objectives can never complete; see docs/audits/2026-07-03-initial-subsystem-audit/narrative-and-multiworld.md)
 - [x] 1.10 Implement MetaProgressionGrain and models; expose unlock queries
 - [x] 1.11 Implement HubWorldLoader for Data/Hubs assets and map creation
 - [x] 1.12 Add hub-world generator/passes and template resolution hook

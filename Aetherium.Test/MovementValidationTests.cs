@@ -10,7 +10,7 @@ namespace Aetherium.Test
     /// <summary>
     /// Tests for the validated movement API (World.TryMoveSteps / TryChangeLevel)
     /// that every live movement path routes through — see P0-1 in
-    /// docs/audits/RECOMMENDATIONS.md. These would have caught the original
+    /// docs/audits/2026-07-03-initial-subsystem-audit/RECOMMENDATIONS.md. These would have caught the original
     /// walk-through-walls / teleport-between-floors defects.
     /// </summary>
     public class MovementValidationTests
