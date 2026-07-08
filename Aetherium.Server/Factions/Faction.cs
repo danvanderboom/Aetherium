@@ -38,5 +38,9 @@ namespace Aetherium.Server.Factions
         public bool Add(Faction faction) => _factions.TryAdd(faction.Id, faction);
 
         public bool TryGet(string id, out Faction? faction) => _factions.TryGetValue(id, out faction);
+
+        /// <summary>Every registered faction — used by the standing-action loop, which applies an
+        /// action tag against every faction's doctrine (each judges the act by its own values).</summary>
+        public IReadOnlyCollection<Faction> All => _factions.Values;
     }
 }

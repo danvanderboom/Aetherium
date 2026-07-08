@@ -4,6 +4,7 @@ using Orleans;
 using Aetherium.Model.Combat;
 using Aetherium.Model.Abilities;
 using Aetherium.Model.Progression;
+using Aetherium.Model.Factions;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -39,6 +40,10 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world character-progression content (engine gap-analysis §4.4). Null means no
         /// progression. See wire-progression-live.</summary>
         [Id(15)] public ProgressionConfig? ProgressionConfig { get; set; }
+
+        /// <summary>Per-world faction content (engine gap-analysis §4.6). Null means no factions.
+        /// See wire-factions-live.</summary>
+        [Id(16)] public FactionConfig? FactionConfig { get; set; }
     }
 
     /// <summary>
@@ -112,6 +117,10 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world character-progression content (engine gap-analysis §4.4). Null means no
         /// progression. See wire-progression-live.</summary>
         [Id(10)] public ProgressionConfig? ProgressionConfig { get; set; }
+
+        /// <summary>Per-world faction content (engine gap-analysis §4.6). Null means no factions.
+        /// See wire-factions-live.</summary>
+        [Id(11)] public FactionConfig? FactionConfig { get; set; }
     }
 
     /// <summary>

@@ -8,9 +8,11 @@ using Aetherium.Server.Ai;
 using Aetherium.Server.Combat;
 using Aetherium.Server.Abilities;
 using Aetherium.Server.Progression;
+using Aetherium.Server.Factions;
 using Aetherium.Model.Combat;
 using Aetherium.Model.Abilities;
 using Aetherium.Model.Progression;
+using Aetherium.Model.Factions;
 using Aetherium.WorldGen;
 using Passes = Aetherium.WorldGen.Passes;
 using System;
@@ -268,6 +270,9 @@ namespace Aetherium.Server.MultiWorld
             // Likewise recompile progression (engine gap-analysis §4.4 — see wire-progression-live).
             ApplyProgressionConfig(_mapState.State?.ProgressionConfig);
 
+            // And factions (engine gap-analysis §4.6 — see wire-factions-live).
+            ApplyFactionConfig(_mapState.State?.FactionConfig);
+
             if (_mapState.State != null && _mapState.State.Recipe != null && _world == null)
             {
                 // Reactivation after silo restart. Prefer a persisted snapshot when
@@ -499,13 +504,14 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null)
         {
             var mapId = this.GetPrimaryKeyString();
 
             _deathPolicy = deathPolicy ?? DeathPolicy.Default;
             ApplyAbilityConfig(abilityConfig);
             ApplyProgressionConfig(progressionConfig);
+            ApplyFactionConfig(factionConfig);
 
             parameters ??= new Dictionary<string, object>();
 
@@ -607,6 +613,7 @@ namespace Aetherium.Server.MultiWorld
                 DeathPolicy = deathPolicy,
                 AbilityConfig = abilityConfig,
                 ProgressionConfig = progressionConfig,
+                FactionConfig = factionConfig,
             };
 
             await _mapState.WriteStateAsync();
@@ -732,6 +739,21 @@ namespace Aetherium.Server.MultiWorld
                 character.Set(new UnlockedSkills());
                 character.Set(new GrantedAbilities());
                 ApplyAttributeDerivations(character);
+            }
+
+            // Stamp a fresh reputation ledger seeded with each faction's starting standing (engine
+            // gap-analysis §4.6 — see wire-factions-live). A world declaring no factions leaves the
+            // character without a ledger, same posture as pools/progression.
+            if (_factionConfig is not null)
+            {
+                var ledger = new ReputationLedger();
+                foreach (var def in _factionConfig.Factions)
+                {
+                    var reputation = new Reputation(def.Id, def.StartingStanding);
+                    RankEvaluator.Apply(reputation, def.RankRules);
+                    ledger.Add(reputation);
+                }
+                character.Set(ledger);
             }
 
             _world.AddEntity(character);
@@ -1586,6 +1608,12 @@ namespace Aetherium.Server.MultiWorld
                     return new SpawnEntityResult { Success = false, ErrorMessage = "Could not create entity" };
                 }
 
+                // Preserve the request's creature-type string on the entity — several types map
+                // onto the same C# class above, and downstream consumers (first: the faction
+                // standing loop's kill:<creature-type> tags, wire-factions-live) need "wolf" vs
+                // "bandit" to survive past this switch.
+                entity.Set(new Aetherium.Components.CreatureTypeTag(request.CreatureType.ToLowerInvariant()));
+
                 // Set location and add to world
                 entity.Set(location);
                 _world.AddEntity(entity);
@@ -1894,6 +1922,27 @@ namespace Aetherium.Server.MultiWorld
             _levelCurvesByPool = compiler.CompileCurvesByPool(config?.Pools);
         }
 
+        // Per-world faction content (engine gap-analysis §4.6 — see wire-factions-live and
+        // docs/factions-reputation.md), compiled from the world's FactionConfig. _factionRegistry /
+        // _factionRelations are the runtime (compiled) forms; the raw config supplies rank rules,
+        // standing bands, and starting standings. All default to empty (no factions) until a config
+        // is applied — the engine ships no factions, they are entirely per-world data.
+        private FactionConfig? _factionConfig;
+        private FactionRegistry _factionRegistry = new FactionRegistry();
+        private FactionRelations _factionRelations = new FactionRelations();
+
+        /// <summary>Compiles a world's <see cref="FactionConfig"/> into this map's runtime faction
+        /// registry + relations and remembers the config (rank rules / bands / starting standings).
+        /// Called from InitializeAsync (fresh) and OnActivateAsync (rehydrate); null yields an empty
+        /// registry and no faction behavior.</summary>
+        private void ApplyFactionConfig(FactionConfig? config)
+        {
+            _factionConfig = config;
+            var compiler = new FactionCompiler();
+            _factionRegistry = compiler.CompileRegistry(config?.Factions);
+            _factionRelations = compiler.CompileRelations(config?.Relations);
+        }
+
         private ActionContext? TryBuildActionContext(string sessionId)
         {
             if (_world is null) return null;
@@ -2014,6 +2063,7 @@ namespace Aetherium.Server.MultiWorld
             {
                 _mapState.State.MonstersDefeated++;
                 AwardKillXp(ctx.Player, targetType);
+                ApplyFactionAction(ctx.Player, KillActionTagFor(target));
             }
 
             // Death loot: a slain monster drops a weapon where it fell, at the same moment it
@@ -2177,6 +2227,7 @@ namespace Aetherium.Server.MultiWorld
                         _mapState.State.MonstersDefeated++;
                         targetDefeated = true;
                         AwardKillXp(ctx.Player, target.GetType().Name);
+                        ApplyFactionAction(ctx.Player, KillActionTagFor(target));
                     }
 
                     await _mapState.WriteStateAsync();
@@ -2289,6 +2340,101 @@ namespace Aetherium.Server.MultiWorld
                 if (_levelCurvesByPool.TryGetValue(rule.PoolId, out var curve) && curve is not null)
                     pools.AddXp(rule.PoolId, rule.Amount, curve);
             }
+        }
+
+        /// <summary>The engine-emitted faction action tag for killing <paramref name="victim"/>:
+        /// <c>kill:&lt;creature-type&gt;</c>, preferring the spawn-time <see cref="Aetherium.Components.CreatureTypeTag"/>
+        /// (so "wolf" and "bandit" stay distinct despite sharing the Monster class) and falling back
+        /// to the lowercased C# type name for entities spawned outside SpawnEntityAsync.</summary>
+        private static string KillActionTagFor(Entity victim)
+        {
+            string creatureType = victim.Has<Aetherium.Components.CreatureTypeTag>()
+                ? victim.Get<Aetherium.Components.CreatureTypeTag>().Value
+                : victim.GetType().Name.ToLowerInvariant();
+            return $"kill:{creatureType}";
+        }
+
+        /// <summary>
+        /// The single standing-mutation chokepoint (engine gap-analysis §4.6 — see wire-factions-live
+        /// and docs/factions-reputation.md §3): applies <paramref name="actionTag"/> against every
+        /// configured faction's doctrine — each judges the act by its own values, unknown tags mean
+        /// no effect — then re-evaluates declarative rank grants for each changed standing. Kill-site
+        /// code is just the first caller; future quest/trade/trespass emitters call this with their
+        /// own tag families, and the ECA generalization replaces this method's inside, not its call
+        /// sites. No-op when the world declares no factions or the actor carries no ledger.
+        /// </summary>
+        private void ApplyFactionAction(Character actor, string actionTag)
+        {
+            if (_factionConfig is null || !actor.Has<ReputationLedger>())
+                return;
+
+            var ledger = actor.Get<ReputationLedger>();
+            foreach (var faction in _factionRegistry.All)
+            {
+                if (faction.Doctrine.DeltaFor(actionTag) == 0)
+                    continue;
+
+                var reputation = ledger.ApplyAction(faction, actionTag);
+                var def = _factionConfig.Factions.FirstOrDefault(f => f.Id == faction.Id);
+                RankEvaluator.Apply(reputation, def?.RankRules);
+            }
+        }
+
+        public Task<ReputationLedgerDto> GetReputationAsync(string sessionId)
+        {
+            var dto = new ReputationLedgerDto();
+            var player = GetPlayerCharacter(sessionId);
+            if (player is not null && player.Has<ReputationLedger>())
+            {
+                foreach (var kv in player.Get<ReputationLedger>().ByFaction)
+                {
+                    dto.Reputations.Add(new ReputationDto
+                    {
+                        FactionId = kv.Key,
+                        Standing = kv.Value.Standing,
+                        Band = BandResolver.Resolve(kv.Value.Standing, _factionConfig?.Bands),
+                        Ranks = new List<string>(kv.Value.Ranks),
+                    });
+                }
+            }
+            return Task.FromResult(dto);
+        }
+
+        public Task<FactionsStateDto> GetFactionsAsync()
+        {
+            var dto = new FactionsStateDto();
+            if (_factionConfig is not null)
+            {
+                foreach (var faction in _factionRegistry.All)
+                    dto.Factions.Add(new FactionInfoDto
+                    {
+                        Id = faction.Id,
+                        Name = faction.Name,
+                        Tags = new List<string>(faction.Tags),
+                    });
+
+                // Report relations from the source definitions (the compiled matrix is sparse and
+                // unenumerable by design); Mutual definitions expand to both directions.
+                foreach (var rel in _factionConfig.Relations)
+                {
+                    dto.Relations.Add(new FactionRelationDto
+                    {
+                        FromFactionId = rel.FromFactionId,
+                        ToFactionId = rel.ToFactionId,
+                        Disposition = rel.Disposition,
+                    });
+                    if (rel.Mutual)
+                        dto.Relations.Add(new FactionRelationDto
+                        {
+                            FromFactionId = rel.ToFactionId,
+                            ToFactionId = rel.FromFactionId,
+                            Disposition = rel.Disposition,
+                        });
+                }
+
+                dto.Bands.AddRange(_factionConfig.Bands);
+            }
+            return Task.FromResult(dto);
         }
 
         /// <summary>Applies the world's <see cref="AttributeDerivation"/>s to <paramref name="player"/>
@@ -2764,6 +2910,11 @@ namespace Aetherium.Server.MultiWorld
         /// skill catalog/curves and re-stamp progression components on reactivation. Null means the
         /// world specified no progression.</summary>
         [Id(13)] public Aetherium.Model.Progression.ProgressionConfig? ProgressionConfig { get; set; }
+
+        /// <summary>Per-world faction content captured at <c>InitializeAsync</c> time (engine
+        /// gap-analysis §4.6 — see wire-factions-live), so the grain can recompile its faction
+        /// registry/relations on reactivation. Null means the world specified no factions.</summary>
+        [Id(14)] public Aetherium.Model.Factions.FactionConfig? FactionConfig { get; set; }
     }
 }
 

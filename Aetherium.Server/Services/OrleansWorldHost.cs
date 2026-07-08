@@ -58,6 +58,7 @@ namespace Aetherium.Server.Services
                 DeathPolicy = template.DeathPolicy,
                 AbilityConfig = template.AbilityConfig,
                 ProgressionConfig = template.ProgressionConfig,
+                FactionConfig = template.FactionConfig,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };

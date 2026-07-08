@@ -691,7 +691,8 @@ namespace Aetherium.Server.Management
                     ClusterId = hubConfig?.ClusterId ?? request.ClusterId,
                     DeathPolicy = hubConfig?.DeathPolicy ?? request.DeathPolicy,
                     AbilityConfig = hubConfig?.AbilityConfig ?? request.AbilityConfig,
-                    ProgressionConfig = hubConfig?.ProgressionConfig ?? request.ProgressionConfig
+                    ProgressionConfig = hubConfig?.ProgressionConfig ?? request.ProgressionConfig,
+                    FactionConfig = hubConfig?.FactionConfig ?? request.FactionConfig
                 };
 
                 // Default to public world
@@ -724,7 +725,8 @@ namespace Aetherium.Server.Management
                     ClusterId = request.ClusterId,
                     DeathPolicy = request.DeathPolicy,
                     AbilityConfig = request.AbilityConfig,
-                    ProgressionConfig = request.ProgressionConfig
+                    ProgressionConfig = request.ProgressionConfig,
+                    FactionConfig = request.FactionConfig
                 };
 
                 // Ensure WorldId is set

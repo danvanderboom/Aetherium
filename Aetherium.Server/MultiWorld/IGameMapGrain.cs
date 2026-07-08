@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Aetherium.Model.Combat;
 using Aetherium.Model.Abilities;
 using Aetherium.Model.Progression;
+using Aetherium.Model.Factions;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -22,8 +23,10 @@ namespace Aetherium.Server.MultiWorld
         /// §4.3); null means the map has no abilities — see openspec/changes/wire-abilities-live.
         /// <paramref name="progressionConfig"/> is the owning world's character-progression content
         /// (engine gap-analysis §4.4); null means no progression — see wire-progression-live.
+        /// <paramref name="factionConfig"/> is the owning world's faction content (engine
+        /// gap-analysis §4.6); null means no factions — see wire-factions-live.
         /// </summary>
-        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null);
+        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null);
 
         /// <summary>
         /// Gets the current world state for this map.
@@ -124,6 +127,15 @@ namespace Aetherium.Server.MultiWorld
         /// (xp/level), attributes, unlocked skills, and granted abilities. Empty when the world has no
         /// progression.</summary>
         Task<ProgressionStateDto> GetProgressionAsync(string sessionId);
+
+        /// <summary>The session player's reputation ledger (engine gap-analysis §4.6 — see
+        /// wire-factions-live): per-faction standing, current standing band, and earned ranks. Empty
+        /// when the world has no factions.</summary>
+        Task<ReputationLedgerDto> GetReputationAsync(string sessionId);
+
+        /// <summary>The world's faction landscape (engine gap-analysis §4.6): factions, directed
+        /// relations, and standing bands. Empty when the world has no factions.</summary>
+        Task<FactionsStateDto> GetFactionsAsync();
 
         /// <summary>
         /// Removes a player's Character from <c>_world</c> on disconnect or explicit

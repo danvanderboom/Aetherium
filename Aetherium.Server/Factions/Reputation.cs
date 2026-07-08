@@ -30,6 +30,10 @@ namespace Aetherium.Server.Factions
 
         public IReadOnlyDictionary<string, Reputation> ByFaction => _byFaction;
 
+        /// <summary>Seeds a pre-built reputation (used at join to stamp a faction's configured
+        /// starting standing — see wire-factions-live), replacing any existing entry for its faction.</summary>
+        public void Add(Reputation reputation) => _byFaction[reputation.FactionId] = reputation;
+
         public Reputation GetOrCreate(string factionId)
         {
             if (!_byFaction.TryGetValue(factionId, out var reputation))

@@ -26,6 +26,7 @@ The console/terminal client is the reference renderer — ASCII, with dynamic li
 ### Subsystems
 - **[Agent system](agents/README.md)** — LLM/heuristic agents, profiles, and the shared tool API · **[Tool catalog](agents/TOOLS.md)** · **[Tool profiles](agents/TOOL_PROFILES.md)**
 - **[Narrative systems](narrative-systems.md)** — procedural quests, consequence engine, emergent storytelling
+- **[Factions & reputation](factions-reputation.md)** — design vision: doctrine tags, standing bands, maturity ladder, ECA graduation path
 - **[Multi-world ecosystems](multiworld-ecosystems.md)** — clusters, portals, cross-world economy, meta-progression, hub worlds
 - **[Instances](instances.md)** — dungeon instances, lockouts, party/raid grains
 - **[Procedural audio](PROCEDURAL_AUDIO_IMPLEMENTATION.md)** — biome audio profiles and the audio generation pass
