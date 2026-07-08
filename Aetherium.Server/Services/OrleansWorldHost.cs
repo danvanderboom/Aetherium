@@ -56,6 +56,7 @@ namespace Aetherium.Server.Services
                 NarrativeId = template.NarrativeId,
                 ClusterId = template.ClusterId,
                 DeathPolicy = template.DeathPolicy,
+                AbilityConfig = template.AbilityConfig,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };

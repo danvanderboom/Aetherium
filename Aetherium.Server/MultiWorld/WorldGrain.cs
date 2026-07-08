@@ -83,6 +83,7 @@ namespace Aetherium.Server.MultiWorld
                 ClusterId = config.ClusterId
             };
             _worldState.State.DeathPolicy = config.DeathPolicy;
+            _worldState.State.AbilityConfig = config.AbilityConfig;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -164,7 +165,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -345,6 +346,10 @@ namespace Aetherium.Server.MultiWorld
         /// InitializeAsync and applied to every map this world creates (initial and later). Null
         /// means every map falls back to <see cref="Aetherium.Model.Combat.DeathPolicy.Default"/>.</summary>
         public Aetherium.Model.Combat.DeathPolicy? DeathPolicy { get; set; }
+
+        /// <summary>Per-world ability content (engine gap-analysis §4.3), set once at InitializeAsync
+        /// and applied to every map this world creates (initial and later). Null means no abilities.</summary>
+        public Aetherium.Model.Abilities.AbilityConfig? AbilityConfig { get; set; }
     }
 }
 

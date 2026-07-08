@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Orleans;
 using Aetherium.Model.Combat;
+using Aetherium.Model.Abilities;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -28,6 +29,11 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11). Null means every map
         /// on this world falls back to <see cref="DeathPolicy.Default"/> — see wire-death-respawn-live.</summary>
         [Id(13)] public DeathPolicy? DeathPolicy { get; set; }
+
+        /// <summary>Per-world ability content (engine gap-analysis §4.3): abilities available on this
+        /// world's maps and the resource pools its characters start with. Null means no abilities. See
+        /// wire-abilities-live.</summary>
+        [Id(14)] public AbilityConfig? AbilityConfig { get; set; }
     }
 
     /// <summary>
@@ -92,6 +98,11 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11). Null means every map
         /// on this world falls back to <see cref="DeathPolicy.Default"/> — see wire-death-respawn-live.</summary>
         [Id(8)] public DeathPolicy? DeathPolicy { get; set; }
+
+        /// <summary>Per-world ability content (engine gap-analysis §4.3): abilities available on this
+        /// world's maps and the resource pools its characters start with. Null means no abilities. See
+        /// wire-abilities-live.</summary>
+        [Id(9)] public AbilityConfig? AbilityConfig { get; set; }
     }
 
     /// <summary>

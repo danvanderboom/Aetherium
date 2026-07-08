@@ -91,5 +91,8 @@ namespace Aetherium.Server.Abilities
         public void Add(ResourcePool pool) => _pools[pool.Tag] = pool;
 
         public bool TryGet(string tag, out ResourcePool? pool) => _pools.TryGetValue(tag, out pool);
+
+        /// <summary>Every pool this actor carries — used by per-tick regen upkeep.</summary>
+        public System.Collections.Generic.IReadOnlyCollection<ResourcePool> All => _pools.Values;
     }
 }

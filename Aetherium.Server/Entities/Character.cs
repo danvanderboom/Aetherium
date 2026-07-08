@@ -20,7 +20,15 @@ namespace Aetherium
             Set(new HasHeading());
             Set(new Perception());
             Set(new Memory());
-            
+
+            // Continuous action pipeline (engine gap-analysis §4.1): a Character accrues AP each world
+            // tick and spends it to act. The default (Speed == MaxBudget == cost) affords one action per
+            // eligible tick, matching pre-pipeline immediacy; abilities gate their cast on this budget
+            // (see GameMapGrain.UseAbilityAsync, wire-abilities-live). Monster overrides this in its own
+            // constructor. Resource pools are per-world data and are stamped at JoinPlayerAsync, not here,
+            // so the engine never bakes in a genre-specific pool (mana/stamina/…).
+            Set(new ActionSpeed(speed: 1.0, maxBudget: 1.0));
+
             // Characters emit high heat (visible in infrared)
             Set(new HeatSignature(0.9, TimeSpan.FromSeconds(10)));
         }

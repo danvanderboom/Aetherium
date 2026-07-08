@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Aetherium.Model.Combat;
+using Aetherium.Model.Abilities;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -16,8 +17,10 @@ namespace Aetherium.Server.MultiWorld
         /// Initializes the map with a generated world. <paramref name="deathPolicy"/> is the
         /// owning world's death/respawn rules (engine gap-analysis §4.11); null falls back to
         /// <see cref="DeathPolicy.Default"/> — see openspec/changes/wire-death-respawn-live.
+        /// <paramref name="abilityConfig"/> is the owning world's ability content (engine gap-analysis
+        /// §4.3); null means the map has no abilities — see openspec/changes/wire-abilities-live.
         /// </summary>
-        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null);
+        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null);
 
         /// <summary>
         /// Gets the current world state for this map.
@@ -92,6 +95,21 @@ namespace Aetherium.Server.MultiWorld
         /// see openspec/changes/wire-death-respawn-live): the world's configured policy, or
         /// <see cref="DeathPolicy.Default"/> if none was specified.</summary>
         Task<DeathPolicy> GetDeathPolicyAsync();
+
+        /// <summary>Casts the session's player ability from this map's per-world compiled catalog
+        /// (engine gap-analysis §4.3 — see openspec/changes/wire-abilities-live). Gated by actionable
+        /// state, cooldown, resource affordability, single-target reach (when <paramref name="targetEntityId"/>
+        /// is supplied), and the caster's action budget; on success applies the ability's effects and
+        /// fans out any resulting delta.</summary>
+        Task<AbilityResultDto> UseAbilityAsync(string sessionId, string abilityId, string? targetEntityId);
+
+        /// <summary>The session player's live resource pools (engine gap-analysis §4.3): current/max per
+        /// pool. Empty when the player carries none.</summary>
+        Task<ResourcePoolsDto> GetResourcePoolsAsync(string sessionId);
+
+        /// <summary>The session player's ability cooldowns (engine gap-analysis §4.3): remaining ticks
+        /// keyed by ability id. Empty when nothing is on cooldown.</summary>
+        Task<Dictionary<string, int>> GetAbilityCooldownsAsync(string sessionId);
 
         /// <summary>
         /// Removes a player's Character from <c>_world</c> on disconnect or explicit

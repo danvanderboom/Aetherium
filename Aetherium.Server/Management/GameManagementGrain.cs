@@ -689,7 +689,8 @@ namespace Aetherium.Server.Management
                     MaxPlayers = hubConfig?.MaxPlayers ?? request.MaxPlayers,
                     NarrativeId = hubConfig?.NarrativeId ?? request.NarrativeId,
                     ClusterId = hubConfig?.ClusterId ?? request.ClusterId,
-                    DeathPolicy = hubConfig?.DeathPolicy ?? request.DeathPolicy
+                    DeathPolicy = hubConfig?.DeathPolicy ?? request.DeathPolicy,
+                    AbilityConfig = hubConfig?.AbilityConfig ?? request.AbilityConfig
                 };
 
                 // Default to public world
@@ -720,7 +721,8 @@ namespace Aetherium.Server.Management
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = "system",
                     ClusterId = request.ClusterId,
-                    DeathPolicy = request.DeathPolicy
+                    DeathPolicy = request.DeathPolicy,
+                    AbilityConfig = request.AbilityConfig
                 };
 
                 // Ensure WorldId is set
