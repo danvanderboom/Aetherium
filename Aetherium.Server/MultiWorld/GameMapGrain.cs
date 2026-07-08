@@ -889,6 +889,11 @@ namespace Aetherium.Server.MultiWorld
                 _corpseExpirySystem.Tick(_world, _deathPolicy);
             }
 
+            // Player death lifecycle (engine gap-analysis §4.11, Phase 2 — see
+            // wire-death-respawn-live): advance every Downed player's countdown and any
+            // post-respawn invulnerability window.
+            await TickDownedAndInvulnerablePlayersAsync();
+
             // Heat trail cleanup. Capture which cells had trails before cleanup, run
             // cleanup, then diff to find cells that just lost their last trail. Emit
             // HeatExpiredDelta only for those — don't spam expiries every tick for
@@ -975,7 +980,11 @@ namespace Aetherium.Server.MultiWorld
                 {
                     if (_world.Entities.TryGetValue(playerId, out var pe)
                         && pe is Character pc
-                        && pc.Has<Aetherium.Components.WorldLocation>())
+                        && pc.Has<Aetherium.Components.WorldLocation>()
+                        // A downed/permadead player has already been dealt with; a freshly-
+                        // respawned one is briefly untargetable (engine gap-analysis §4.11 —
+                        // see wire-death-respawn-live).
+                        && !pc.Has<Downed>() && !pc.Has<Corpse>() && !pc.Has<RespawnInvulnerable>())
                         players.Add(pc);
                 }
             }
@@ -985,6 +994,7 @@ namespace Aetherium.Server.MultiWorld
             // reentrant player turn.
             var moves = new List<EntityMovedDelta>();
             var combatDeltas = new List<MapDelta>();
+            var playerEvents = new List<(string SessionId, string EventName, Aetherium.Model.PlayerVitalsDto Vitals)>();
             foreach (var monster in monsters)
             {
                 // A monster killed by a player's attack (engine gap-analysis §4.2/§4.11) is no
@@ -1018,7 +1028,22 @@ namespace Aetherium.Server.MultiWorld
 
                 if (tree.Blackboard.TryGet<AttackOutcome>(MonsterBehaviors.AttackOutcomeKey, out var attack))
                 {
-                    combatDeltas.Add(IntFieldDelta(attack.TargetEntityId, "Health", "Level", attack.RemainingHealth));
+                    // A lethal hit against a player (engine gap-analysis §4.11 — see
+                    // wire-death-respawn-live) routes through the active DeathPolicy instead of
+                    // just reporting HP=0: instant respawn, entering Downed, or (permadeath, no
+                    // down state) an instant Corpse transition. Non-lethal hits, and any hit
+                    // against a monster, keep reporting a plain health delta as before.
+                    if (attack.RemainingHealth <= 0
+                        && _mapState.State is not null && _mapState.State.PlayerIds.Contains(attack.TargetEntityId)
+                        && _world.Entities.TryGetValue(attack.TargetEntityId, out var victimEntity)
+                        && victimEntity is Character victim)
+                    {
+                        ResolvePlayerLethalHit(victim, moves, combatDeltas, playerEvents);
+                    }
+                    else
+                    {
+                        combatDeltas.Add(IntFieldDelta(attack.TargetEntityId, "Health", "Level", attack.RemainingHealth));
+                    }
                 }
                 else if (tree.Blackboard.TryGet<WanderOutcome>(MonsterBehaviors.MoveOutcomeKey, out var move))
                 {
@@ -1038,6 +1063,207 @@ namespace Aetherium.Server.MultiWorld
                 await FanOutAsync(move);
             foreach (var delta in combatDeltas)
                 await FanOutAsync(delta);
+            foreach (var evt in playerEvents)
+                await SendPlayerEventAsync(evt.SessionId, evt.EventName, evt.Vitals);
+        }
+
+        /// <summary>
+        /// Applies the active <see cref="DeathPolicy"/>'s outcome to a player reduced to 0 HP by a
+        /// monster's attack (engine gap-analysis §4.11, Phase 2 — see wire-death-respawn-live):
+        /// instant respawn, entering <see cref="Downed"/>, or (permadeath, no down state) an
+        /// instant <see cref="Corpse"/> transition. Mutates world state synchronously and appends
+        /// to the caller's delta/event lists — <see cref="StepNpcsAsync"/> and
+        /// <see cref="TickDownedAndInvulnerablePlayersAsync"/> both fan them out after their
+        /// synchronous sweep, the same pattern every other outcome they collect already uses.
+        /// </summary>
+        private void ResolvePlayerLethalHit(Character player, List<EntityMovedDelta> moves, List<MapDelta> combatDeltas,
+            List<(string SessionId, string EventName, Aetherium.Model.PlayerVitalsDto Vitals)> playerEvents)
+        {
+            switch (PlayerDeathResolver.ResolveLethalHitOutcome(_deathPolicy))
+            {
+                case PlayerDeathOutcome.InstantRespawn:
+                    RespawnPlayer(player, moves, combatDeltas);
+                    playerEvents.Add((player.EntityId, "ReceiveRespawn", BuildVitalsDto(player)));
+                    break;
+
+                case PlayerDeathOutcome.InstantPermadeath:
+                    player.Set(new Corpse());
+                    combatDeltas.Add(IntFieldDelta(player.EntityId, "Health", "Level", 0));
+                    playerEvents.Add((player.EntityId, "ReceiveDied", BuildVitalsDto(player)));
+                    break;
+
+                case PlayerDeathOutcome.EnterDowned:
+                default:
+                    player.Set(new Downed(_deathPolicy.ReviveWindowTicks));
+                    combatDeltas.Add(IntFieldDelta(player.EntityId, "Health", "Level", 0));
+                    playerEvents.Add((player.EntityId, "ReceiveDowned", BuildVitalsDto(player)));
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Each world tick, advances every player's <see cref="Downed"/> countdown and
+        /// <see cref="RespawnInvulnerable"/> window (engine gap-analysis §4.11, Phase 2 — see
+        /// wire-death-respawn-live). A Downed countdown reaching zero resolves per the active
+        /// <see cref="DeathPolicy"/>: respawn, or (permadeath) become a <see cref="Corpse"/>. The
+        /// invulnerability countdown is silent (no delta — it's a defensive flag, not visible
+        /// state); a Downed expiry emits the same delta shapes <see cref="ResolvePlayerLethalHit"/>
+        /// does, plus the matching player-scoped event.
+        /// </summary>
+        private async Task TickDownedAndInvulnerablePlayersAsync()
+        {
+            if (_world is null) return;
+
+            var downedPlayers = _world.Entities.Values.OfType<Character>().Where(c => c.Has<Downed>()).ToList();
+            var invulnerablePlayers = _world.Entities.Values.OfType<Character>().Where(c => c.Has<RespawnInvulnerable>()).ToList();
+            if (downedPlayers.Count == 0 && invulnerablePlayers.Count == 0)
+                return;
+
+            var moves = new List<EntityMovedDelta>();
+            var combatDeltas = new List<MapDelta>();
+            var playerEvents = new List<(string SessionId, string EventName, Aetherium.Model.PlayerVitalsDto Vitals)>();
+
+            foreach (var player in invulnerablePlayers)
+            {
+                var invulnerable = player.Get<RespawnInvulnerable>();
+                invulnerable.TicksRemaining--;
+                if (invulnerable.TicksRemaining <= 0)
+                    player.Clear<RespawnInvulnerable>();
+            }
+
+            foreach (var player in downedPlayers)
+            {
+                var downed = player.Get<Downed>();
+                downed.TicksRemaining--;
+                if (downed.TicksRemaining > 0)
+                    continue;
+
+                if (PlayerDeathResolver.ResolveDownedOutcome(_deathPolicy) == DownedExpiryOutcome.Respawn)
+                {
+                    RespawnPlayer(player, moves, combatDeltas);
+                    playerEvents.Add((player.EntityId, "ReceiveRespawn", BuildVitalsDto(player)));
+                }
+                else
+                {
+                    player.Clear<Downed>();
+                    player.Set(new Corpse());
+                    playerEvents.Add((player.EntityId, "ReceiveDied", BuildVitalsDto(player)));
+                }
+            }
+
+            foreach (var move in moves)
+                await FanOutAsync(move);
+            foreach (var delta in combatDeltas)
+                await FanOutAsync(delta);
+            foreach (var evt in playerEvents)
+                await SendPlayerEventAsync(evt.SessionId, evt.EventName, evt.Vitals);
+        }
+
+        /// <summary>
+        /// Resets a player back to playable state in place: full Health, teleported per the
+        /// active <see cref="DeathPolicy"/>'s <c>RespawnLocation</c>, <see cref="Downed"/> cleared,
+        /// a fresh <see cref="RespawnInvulnerable"/> window applied. Reuses the player's existing
+        /// entity id (== SessionId — see wire-death-respawn-live design.md D3) rather than
+        /// allocating a new one, since the session has no channel to learn about an entity-id
+        /// change; appends the resulting deltas to the caller's lists rather than fanning them out
+        /// itself, so both call sites (a lethal hit's instant-respawn branch, and a Downed
+        /// countdown's expiry) share one synchronous, awaitless mutation.
+        /// </summary>
+        private void RespawnPlayer(Character player, List<EntityMovedDelta> moves, List<MapDelta> combatDeltas)
+        {
+            player.Clear<Downed>();
+
+            if (player.Has<Aetherium.Components.Health>())
+            {
+                var health = player.Get<Aetherium.Components.Health>();
+                health.Level = health.MaxLevel;
+                combatDeltas.Add(IntFieldDelta(player.EntityId, "Health", "Level", health.MaxLevel));
+            }
+
+            var oldLoc = player.Get<Aetherium.Components.WorldLocation>();
+            var newLoc = ResolveRespawnLocation(player) ?? oldLoc;
+            if (newLoc is not null)
+            {
+                // Reconcile spawn bookkeeping so a later LeavePlayerAsync frees the cell the
+                // player actually ends up standing on, not a stale pre-respawn location.
+                if (_playerSpawns.Remove(player.EntityId, out var previousSpawn))
+                    _spawnsInUse.Remove(previousSpawn);
+                _spawnsInUse.Add(newLoc);
+                _playerSpawns[player.EntityId] = newLoc;
+
+                if (oldLoc is null || newLoc != oldLoc)
+                {
+                    player.Set(new Aetherium.Components.WorldLocation(newLoc.X, newLoc.Y, newLoc.Z));
+                    if (oldLoc is not null)
+                    {
+                        moves.Add(new EntityMovedDelta
+                        {
+                            EntityId = player.EntityId,
+                            OldX = oldLoc.X, OldY = oldLoc.Y, OldZ = oldLoc.Z,
+                            NewX = newLoc.X, NewY = newLoc.Y, NewZ = newLoc.Z,
+                        });
+                    }
+                }
+            }
+
+            if (_deathPolicy.RespawnInvulnerabilityTicks > 0)
+                player.Set(new RespawnInvulnerable(_deathPolicy.RespawnInvulnerabilityTicks));
+            else
+                player.Clear<RespawnInvulnerable>();
+        }
+
+        /// <summary>
+        /// Resolves a respawn destination per the active <see cref="DeathPolicy"/>'s
+        /// <c>RespawnLocation</c> mode (engine gap-analysis §4.11 — see wire-death-respawn-live).
+        /// <c>DeathLocation</c>/<c>EntryLocation</c>/<c>FixedCoordinates</c>/
+        /// <c>OffsetFromCoordinates</c> resolve directly; every other mode
+        /// (<c>NamedLocation</c>/<c>OffsetFromNamedLocation</c>/<c>LastSafeLocation</c>/
+        /// <c>PartyLeader</c>, and <c>WorldSpawn</c> itself) falls back to re-running the map's
+        /// normal spawn selection — the first four need a location-tag registry or party system
+        /// that doesn't exist yet (see tasks.md L.2/L.4). Always returns a freshly-constructed
+        /// <see cref="Aetherium.Components.WorldLocation"/> (never a live component reference), so
+        /// it's always safe for the caller to store or mutate independently.
+        /// </summary>
+        private Aetherium.Components.WorldLocation? ResolveRespawnLocation(Character player)
+        {
+            var locationPolicy = _deathPolicy.RespawnLocation ?? DeathPolicy.Default.RespawnLocation;
+            var current = player.Get<Aetherium.Components.WorldLocation>();
+
+            Aetherium.Components.WorldLocation? candidate = locationPolicy.Mode switch
+            {
+                RespawnLocationMode.DeathLocation => current,
+                RespawnLocationMode.EntryLocation => _playerSpawns.TryGetValue(player.EntityId, out var entry) ? entry : null,
+                RespawnLocationMode.FixedCoordinates => new Aetherium.Components.WorldLocation(locationPolicy.X, locationPolicy.Y, locationPolicy.Z),
+                RespawnLocationMode.OffsetFromCoordinates => new Aetherium.Components.WorldLocation(
+                    locationPolicy.X + locationPolicy.OffsetX, locationPolicy.Y + locationPolicy.OffsetY, locationPolicy.Z + locationPolicy.OffsetZ),
+                _ => null,
+            };
+
+            // A candidate the player already occupies (DeathLocation, or EntryLocation/coordinates
+            // that happen to match) must be accepted without an occupancy check — IsOpenForOccupancy
+            // would otherwise reject it solely because the player's own Character entity is there.
+            if (candidate is not null && candidate != current && _world is not null && !_world.IsOpenForOccupancy(candidate))
+                candidate = null;
+
+            candidate ??= SelectUnusedSpawn();
+
+            return candidate is null ? null : new Aetherium.Components.WorldLocation(candidate.X, candidate.Y, candidate.Z);
+        }
+
+        /// <summary>Builds the client-facing snapshot of a player's life-state (engine gap-analysis
+        /// §4.11 — see wire-death-respawn-live), sent via <see cref="SendPlayerEventAsync"/>.</summary>
+        private static Aetherium.Model.PlayerVitalsDto BuildVitalsDto(Character player)
+        {
+            var health = player.Has<Aetherium.Components.Health>() ? player.Get<Aetherium.Components.Health>() : null;
+            var downed = player.Has<Downed>() ? player.Get<Downed>() : null;
+            return new Aetherium.Model.PlayerVitalsDto
+            {
+                Health = health?.Level ?? 0,
+                MaxHealth = health?.MaxLevel ?? 0,
+                IsDowned = downed is not null,
+                DownedTicksRemaining = downed?.TicksRemaining ?? 0,
+                IsInvulnerable = player.Has<RespawnInvulnerable>(),
+            };
         }
 
         /// <summary>
@@ -1364,6 +1590,14 @@ namespace Aetherium.Server.MultiWorld
                 : null;
         }
 
+        /// <summary>True when a player entity can act — not <see cref="Downed"/>, not a
+        /// <see cref="Corpse"/> (engine gap-analysis §4.11, Phase 2 — see
+        /// wire-death-respawn-live). Checked at the top of every player command; a downed or
+        /// permadead player is frozen until it respawns.</summary>
+        private static bool IsActionable(Character player) => !player.Has<Downed>() && !player.Has<Corpse>();
+
+        private const string DownedFailureReason = "You are downed and cannot act.";
+
         /// <summary>
         /// Routes a MapDelta through the host-side session manager. The manager
         /// applies the delta to every session bound to this map, then pushes a
@@ -1423,11 +1657,34 @@ namespace Aetherium.Server.MultiWorld
             }
         }
 
+        /// <summary>
+        /// Sends a player-lifecycle signal (engine gap-analysis §4.11, Phase 2 — see
+        /// wire-death-respawn-live) — "ReceiveDowned"/"ReceiveRespawn"/"ReceiveDied" — directly to
+        /// one session's client. Not a <see cref="MapDelta"/>: this describes what's happening to
+        /// the player, not a change to world state, so it bypasses persistence/mirror
+        /// reconciliation entirely (unlike <see cref="FanOutAsync"/>/<see cref="SendToActorAsync"/>).
+        /// </summary>
+        private async Task SendPlayerEventAsync(string sessionId, string methodName, Aetherium.Model.PlayerVitalsDto vitals)
+        {
+            var mgr = GetSessionManager();
+            if (mgr is null) return;
+
+            try
+            {
+                await mgr.NotifyPlayerEventAsync(sessionId, methodName, vitals);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameMapGrain] Player event '{methodName}' failed for {sessionId}: {ex.Message}");
+            }
+        }
+
         public async Task<MoveResult> MoveAsync(string sessionId, Aetherium.Model.RelativeDirection direction, int distance)
         {
             if (_world is null || _mapState.State is null) return MoveResult.Fail("Map not initialized");
             var player = GetPlayerCharacter(sessionId);
             if (player is null) return MoveResult.Fail("Player not on map");
+            if (!IsActionable(player)) return MoveResult.Fail(DownedFailureReason);
 
             var current = player.Get<Aetherium.Components.WorldLocation>();
             if (current is null) return MoveResult.Fail("Player has no location");
@@ -1468,6 +1725,7 @@ namespace Aetherium.Server.MultiWorld
             if (_world is null) return RotateResult.Fail("Map not initialized");
             var player = GetPlayerCharacter(sessionId);
             if (player is null) return RotateResult.Fail("Player not on map");
+            if (!IsActionable(player)) return RotateResult.Fail(DownedFailureReason);
 
             var heading = player.Get<Aetherium.Components.HasHeading>();
             if (heading is null) return RotateResult.Fail("Player has no heading component");
@@ -1492,6 +1750,7 @@ namespace Aetherium.Server.MultiWorld
             if (_world is null) return ChangeLevelResult.Fail("Map not initialized");
             var player = GetPlayerCharacter(sessionId);
             if (player is null) return ChangeLevelResult.Fail("Player not on map");
+            if (!IsActionable(player)) return ChangeLevelResult.Fail(DownedFailureReason);
 
             var current = player.Get<Aetherium.Components.WorldLocation>();
             if (current is null) return ChangeLevelResult.Fail("Player has no location");
@@ -1557,6 +1816,7 @@ namespace Aetherium.Server.MultiWorld
         {
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null) return Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return Fail(DownedFailureReason);
 
             // Capture target metadata BEFORE the interaction removes the entity from
             // _world. Needed to build the post-success ItemTransferredDelta.
@@ -1586,6 +1846,7 @@ namespace Aetherium.Server.MultiWorld
         {
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null) return Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return Fail(DownedFailureReason);
 
             var result = _interactionSystem.TryDrop(ctx, itemEntityId);
             if (!result.Success)
@@ -1622,6 +1883,8 @@ namespace Aetherium.Server.MultiWorld
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null)
                 return Aetherium.Model.AttackResultDto.Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player))
+                return Aetherium.Model.AttackResultDto.Fail(DownedFailureReason);
 
             if (string.IsNullOrEmpty(targetEntityId))
                 return Aetherium.Model.AttackResultDto.Fail("No target");
@@ -1719,6 +1982,7 @@ namespace Aetherium.Server.MultiWorld
         {
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null) return Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return Fail(DownedFailureReason);
 
             var result = wantOpen
                 ? _interactionSystem.TryOpen(ctx, targetEntityId)
@@ -1750,6 +2014,7 @@ namespace Aetherium.Server.MultiWorld
             // See openspec/changes/extend-delta-vocabulary-for-use-disambiguation.
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null) return Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return Fail(DownedFailureReason);
 
             // Resolve item (must be in inventory). Target is optional for some
             // modes (consume, place) but required for others (unlock, lockpick,

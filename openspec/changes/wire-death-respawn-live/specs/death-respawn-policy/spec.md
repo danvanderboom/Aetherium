@@ -44,3 +44,42 @@ A world's `DeathPolicy` SHALL be specifiable at world-creation time (via `WorldC
 #### Scenario: A CreateWorldRequest's death policy reaches the created map
 - **WHEN** `GameManagementGrain.CreateWorldAsync` is called with a `CreateWorldRequest.DeathPolicy` set
 - **THEN** the created world's map(s) report that policy as active
+
+### Requirement: Player Death Outcomes
+A player reduced to `0` HP by a monster's attack SHALL have the active `DeathPolicy`'s outcome applied, resolved as `Permadeath × DownStateEnabled`: `(false, false)` respawns the player immediately; `(true, false)` transitions the player to a permanent `Corpse` state immediately; either combination with `DownStateEnabled = true` first places the player in a `Downed` state for `ReviveWindowTicks`, after which the same `Permadeath` flag decides between respawning and becoming a `Corpse`. A respawn SHALL restore the player's `Health` to its maximum, reuse the player's existing entity id, resolve the destination per `RespawnLocation`, and — when `RespawnInvulnerabilityTicks` is greater than zero — leave the player untargetable by monsters for that many ticks.
+
+**Verified by:** `Aetherium.Test.Combat.PlayerDeathResolverTests` (pure outcome-table coverage), `Aetherium.Test.Combat.PlayerDeathAndRespawnTests.InstantRespawn_NoDownState_NoPermadeath_PlayerRespawnsImmediately_AndCanActRightAway`, `.DownThenRespawn_Default_PlayerIsFrozenDuringTheDownWindow_ThenRespawns`, `.InstantPermadeath_NoDownState_Permadeath_PlayerNeverRespawns`, `.DownThenPermadeath_PlayerFrozenDuringDownWindow_ThenStaysFrozenAsCorpse`, `.RespawnInvulnerability_ProtectsAFreshRespawn_FromImmediateRedowning`, `.RespawnLocation_FixedCoordinates_TeleportsToTheConfiguredLocation`
+
+#### Scenario: No down state, no permadeath — instant respawn
+- **WHEN** a player's Health reaches `0` under a policy with `Permadeath = false` and `DownStateEnabled = false`
+- **THEN** the same tick restores the player's Health to maximum and resolves their respawn location — no `Downed` state is ever observed
+
+#### Scenario: No down state, permadeath — instant Corpse
+- **WHEN** a player's Health reaches `0` under a policy with `Permadeath = true` and `DownStateEnabled = false`
+- **THEN** the player immediately becomes a `Corpse` and never respawns
+
+#### Scenario: Down state enabled — frozen for the revive window, then resolved by Permadeath
+- **WHEN** a player's Health reaches `0` under a policy with `DownStateEnabled = true`
+- **THEN** the player enters `Downed` for `ReviveWindowTicks`, rejecting all commands throughout; once the countdown elapses, the player respawns if `Permadeath = false` or becomes a `Corpse` if `Permadeath = true`
+
+#### Scenario: Respawn invulnerability protects against immediate re-downing
+- **WHEN** a player respawns under a policy with `RespawnInvulnerabilityTicks` greater than zero, and a monster remains adjacent
+- **THEN** the player's Health is not reduced by that monster until the invulnerability window elapses
+
+### Requirement: Downed Action Gating
+Every player command (`MoveAsync`, `AttackAsync`, `RotateAsync`, `ChangeLevelAsync`, `PickupAsync`, `DropAsync`, `UseAsync`, `OpenAsync`, `CloseAsync`) SHALL reject a player carrying `Downed` or `Corpse` with a clear failure reason, without mutating world state.
+
+**Verified by:** `Aetherium.Test.Combat.PlayerDeathAndRespawnTests.DownThenRespawn_Default_PlayerIsFrozenDuringTheDownWindow_ThenRespawns`, `.InstantPermadeath_NoDownState_Permadeath_PlayerNeverRespawns`, `.DownThenPermadeath_PlayerFrozenDuringDownWindow_ThenStaysFrozenAsCorpse`
+
+#### Scenario: A downed player's move is rejected
+- **WHEN** `MoveAsync` is called for a player carrying `Downed`
+- **THEN** the call fails with a "you are downed" reason and the player's location is unchanged
+
+### Requirement: Player Vitals Wire Surface
+The engine SHALL provide a player-scoped signal path, independent of `PerceptionDto`, that notifies a player's own session of `Downed`/respawn/permadeath transitions via a `PlayerVitalsDto` payload (`Health`, `MaxHealth`, `IsDowned`, `DownedTicksRemaining`, `IsInvulnerable`) delivered through named hub events (`ReceiveDowned`, `ReceiveRespawn`, `ReceiveDied`).
+
+**Verified by:** `Aetherium.Test.Combat.PlayerVitalsWireSurfaceTests.DownedTransition_DispatchesReceiveDowned_WithMatchingVitals_ToOnlyThatPlayersConnection`, `.RespawnTransition_DispatchesReceiveRespawn_WithFullHealthVitals`
+
+#### Scenario: A death/respawn transition notifies only the affected player
+- **WHEN** a player's lethal hit or Downed-countdown expiry resolves
+- **THEN** exactly that player's session receives the corresponding `ReceiveDowned`/`ReceiveRespawn`/`ReceiveDied` event with a `PlayerVitalsDto` payload — no other session is notified, and no `MapDelta`/perception push is triggered by this signal itself
