@@ -174,6 +174,51 @@ namespace Aetherium.Test.Combat
                 "A monster that attacks does not also move that tick.");
         }
 
+        /// <summary>Verifies "Live NPC Tick Delegates to Behavior Tree" (target scoping) in
+        /// specs/npc-behavior-trees/spec.md (openspec/changes/wire-npc-behavior-trees-live).</summary>
+        [Test]
+        public async Task Tick_TwoAdjacentMonsters_NoPlayerNearby_DoNotAttackEachOther()
+        {
+            var worldId = $"world-{Guid.NewGuid()}";
+            var mapId = $"{worldId}-map-1";
+            var worldGrain = _cluster.GrainFactory.GetGrain<IWorldGrain>(worldId);
+            await worldGrain.InitializeAsync(new WorldConfig
+            {
+                WorldId = worldId,
+                Name = "Combat Test World",
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 }
+            });
+
+            var map = _cluster.GrainFactory.GetGrain<IGameMapGrain>(mapId);
+            await map.InitializeAsync(worldId, "floor-1",
+                new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                "maze", new Dictionary<string, object>());
+
+            // Find two horizontally-adjacent passable cells and spawn a monster on each. With no
+            // player joined on this map, the only possible attack target for either monster would
+            // be the other monster — the behavior tree's target scoping (MonsterBehaviors.TargetsKey,
+            // populated from GameMapGrain's joined-player list) must keep them from doing so.
+            string? m1 = null, m2 = null;
+            for (int x = 2; x <= 30 && m1 is null; x++)
+            {
+                for (int y = 2; y <= 30 && m1 is null; y++)
+                {
+                    var s1 = await map.SpawnEntityAsync(new SpawnEntityRequest { CreatureType = "monster", X = x, Y = y, Z = 0 });
+                    if (!s1.Success) continue;
+                    var s2 = await map.SpawnEntityAsync(new SpawnEntityRequest { CreatureType = "monster", X = x + 1, Y = y, Z = 0 });
+                    if (s2.Success) { m1 = s1.EntityId; m2 = s2.EntityId; }
+                }
+            }
+            Assert.That(m1, Is.Not.Null, "Expected two adjacent passable cells to place monsters on this map seed.");
+
+            for (int i = 0; i < 3; i++)
+                await map.TickAsync(TimeSpan.FromSeconds(1));
+
+            var after = await map.GetWorldSnapshotAsync();
+            Assert.That(HealthOf(after, m1!), Is.EqualTo(30), "Monsters must never attack each other — only joined players are valid targets.");
+            Assert.That(HealthOf(after, m2!), Is.EqualTo(30), "Monsters must never attack each other — only joined players are valid targets.");
+        }
+
         [Test]
         public async Task Attack_KillingMonster_DropsLoot_AndRecordsStats()
         {

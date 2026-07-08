@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Entities;
+using Aetherium.Server.Ai;
 using Aetherium.WorldGen;
 using Passes = Aetherium.WorldGen.Passes;
 using System;
@@ -41,6 +42,12 @@ namespace Aetherium.Server.MultiWorld
         // Counts map ticks so NPC movement can run at a sub-multiple of the tick
         // rate (SimulationOptions.NpcMoveIntervalTicks) without a wall-clock timer.
         private long _tickCounter;
+
+        // One BehaviorTree instance per live monster, keyed by EntityId, so each NPC's
+        // blackboard/composite-node running-state persists across ticks (the "Per-NPC
+        // Behavior Tree Instance" requirement in specs/npc-behavior-trees/spec.md).
+        // Pruned in StepNpcsAsync whenever a monster leaves _world.Entities.
+        private readonly Dictionary<string, BehaviorTree> _monsterTrees = new();
 
         // Highest WorldSnapshot.SnapshotVersion this binary knows how to hydrate.
         // Bumping requires a deliberate schema migration; cold-start refuses to
@@ -883,14 +890,16 @@ namespace Aetherium.Server.MultiWorld
         }
 
         /// <summary>
-        /// Advances every monster on this map by one wandering step, when NPC
-        /// behavior is enabled and this tick falls on the configured interval. The
-        /// world mutations are applied synchronously (no awaits between them) so a
-        /// reentrant player move cannot interleave mid-sweep; the resulting
-        /// <see cref="EntityMovedDelta"/>s are broadcast afterward. A monster that
-        /// is boxed in or blocked by a wall/another character simply stays put this
-        /// tick. Each landed move also lays a heat trail via the world-event
-        /// subscriber, exactly as a player move does.
+        /// Advances every monster on this map by one behavior-tree tick (engine gap-analysis
+        /// §4.5 Phase 2 — see openspec/changes/add-npc-behavior-trees), when NPC behavior is
+        /// enabled and this tick falls on the configured interval. Each monster owns its own
+        /// <see cref="BehaviorTree"/> instance (cached in <see cref="_monsterTrees"/>) built from
+        /// <see cref="MonsterBehaviors.BuildWanderAndMeleeTree"/> — attack an adjacent player if
+        /// one is in reach, else wander — reproducing the decision this method made inline before
+        /// the tree took over. World mutations happen synchronously (no awaits between them) so a
+        /// reentrant player move cannot interleave mid-sweep; the resulting deltas are broadcast
+        /// afterward. Each landed move also lays a heat trail via the world-event subscriber,
+        /// exactly as a player move does.
         /// </summary>
         private async Task StepNpcsAsync()
         {
@@ -907,13 +916,25 @@ namespace Aetherium.Server.MultiWorld
             // Snapshot the monster set first — TryMoveSteps mutates the location
             // index we would otherwise be enumerating.
             var monsters = _world.Entities.Values.OfType<Aetherium.Monster>().ToList();
+
+            // A monster that died/was removed since the last tick no longer needs a tree —
+            // drop it so _monsterTrees doesn't grow unbounded over a map's lifetime.
+            if (_monsterTrees.Count > 0)
+            {
+                var liveIds = monsters.Select(m => m.EntityId).ToHashSet();
+                foreach (var staleId in _monsterTrees.Keys.Where(id => !liveIds.Contains(id)).ToList())
+                    _monsterTrees.Remove(staleId);
+            }
+
             if (monsters.Count == 0)
                 return;
 
             // Snapshot the player characters too — retaliation targets them. Players are
             // exactly the entities whose EntityId is a joined playerId (monsters are never
-            // in PlayerIds), so this is unambiguous even though Monster : Character.
-            var players = new List<Character>();
+            // in PlayerIds), so this is unambiguous even though Monster : Character. Scoping
+            // the tree's target list to this list (rather than every Health-bearing entity)
+            // keeps monsters from attacking each other.
+            var players = new List<Entity>();
             if (_mapState.State is not null)
             {
                 foreach (var playerId in _mapState.State.PlayerIds)
@@ -932,37 +953,31 @@ namespace Aetherium.Server.MultiWorld
             var combatDeltas = new List<MapDelta>();
             foreach (var monster in monsters)
             {
-                var loc = monster.Get<Aetherium.Components.WorldLocation>();
-                if (loc is null) continue;
-
-                // Aggro/retaliation: if a player stands within reach, the monster attacks
-                // instead of wandering. Damage is applied but the player is NOT removed on
-                // a lethal hit (removeOnDeath: false) — a downed player's entity survives at
-                // 0 HP so its session and the map's spawn bookkeeping stay consistent.
-                var victim = FindAdjacentPlayer(loc, players);
-                if (victim is not null)
+                if (!_monsterTrees.TryGetValue(monster.EntityId, out var tree))
                 {
-                    var atk = _combatSystem.TryAttack(_world, monster, victim.EntityId, removeOnDeath: false);
-                    if (atk.Success)
-                        combatDeltas.Add(IntFieldDelta(victim.EntityId, "Health", "Level", atk.RemainingHealth));
-                    continue; // a monster that attacks does not also move this tick
+                    tree = MonsterBehaviors.BuildWanderAndMeleeTree(_combatSystem);
+                    _monsterTrees[monster.EntityId] = tree;
                 }
 
-                var direction = monster.NextWanderDirection();
-                if (direction is null) continue; // boxed in on all sides
+                tree.Blackboard.Set<IReadOnlyList<Entity>>(MonsterBehaviors.TargetsKey, players);
+                tree.Blackboard.Clear(MonsterBehaviors.AttackOutcomeKey);
+                tree.Blackboard.Clear(MonsterBehaviors.MoveOutcomeKey);
 
-                var oldX = loc.X; var oldY = loc.Y; var oldZ = loc.Z;
-                var outcome = _world.TryMoveSteps(monster, direction.Value, 1);
-                if (!outcome.Success || outcome.FinalLocation is null)
-                    continue; // wall or occupied cell — no move this tick
+                tree.Tick(_world, monster);
 
-                var final = outcome.FinalLocation;
-                moves.Add(new EntityMovedDelta
+                if (tree.Blackboard.TryGet<AttackOutcome>(MonsterBehaviors.AttackOutcomeKey, out var attack))
                 {
-                    EntityId = monster.EntityId,
-                    OldX = oldX, OldY = oldY, OldZ = oldZ,
-                    NewX = final.X, NewY = final.Y, NewZ = final.Z,
-                });
+                    combatDeltas.Add(IntFieldDelta(attack.TargetEntityId, "Health", "Level", attack.RemainingHealth));
+                }
+                else if (tree.Blackboard.TryGet<WanderOutcome>(MonsterBehaviors.MoveOutcomeKey, out var move))
+                {
+                    moves.Add(new EntityMovedDelta
+                    {
+                        EntityId = monster.EntityId,
+                        OldX = move.From.X, OldY = move.From.Y, OldZ = move.From.Z,
+                        NewX = move.To.X, NewY = move.To.Y, NewZ = move.To.Z,
+                    });
+                }
             }
 
             // Phase 2 (async): broadcast. FanOutAsync persists each delta and routes
@@ -972,23 +987,6 @@ namespace Aetherium.Server.MultiWorld
                 await FanOutAsync(move);
             foreach (var delta in combatDeltas)
                 await FanOutAsync(delta);
-        }
-
-        /// <summary>
-        /// The first joined player within melee reach (Manhattan distance ≤ 1, matching
-        /// <see cref="CombatSystem"/>) of <paramref name="from"/>, or null if none is adjacent.
-        /// </summary>
-        private static Character? FindAdjacentPlayer(Aetherium.Components.WorldLocation from, List<Character> players)
-        {
-            foreach (var player in players)
-            {
-                var ploc = player.Get<Aetherium.Components.WorldLocation>();
-                if (ploc is null) continue;
-                var distance = Math.Abs(ploc.X - from.X) + Math.Abs(ploc.Y - from.Y) + Math.Abs(ploc.Z - from.Z);
-                if (distance <= 1)
-                    return player;
-            }
-            return null;
         }
 
         /// <summary>
