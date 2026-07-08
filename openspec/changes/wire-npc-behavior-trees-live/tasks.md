@@ -7,11 +7,11 @@
 - [x] 1.5 Remove `GameMapGrain.FindAdjacentPlayer` (superseded by the tree's own target scoping)
 - [x] 1.6 Integration test: two adjacent monsters with no player nearby never attack each other
 - [x] 1.7 Cross-link the updated/added requirement(s) with `**Verified by:**` lines
-- [ ] 1.8 Full regression suite green (existing `EndToEndSharedMutationTests`, `GameMapGrainCombatTests`, `NpcBehaviorAndPerceptionTests` must be unaffected)
+- [x] 1.8 Full regression suite green (existing `EndToEndSharedMutationTests`, `GameMapGrainCombatTests`, `NpcBehaviorAndPerceptionTests` must be unaffected) — confirmed at commit `301254e` (1178 passed, 0 failed)
 
 ## 2. Still open (tracked here, not resolved by this change)
 
-- [ ] 2.1 Switch monster attacks from `CombatSystem.TryAttack` to `DamagePipeline` (`add-npc-behavior-trees` task 2.3) — blocked on the Dying/Corpse client-visibility and delta-vocabulary decisions owned by the combat-model wiring slice
+- [x] 2.1 Switch monster attacks from `CombatSystem.TryAttack` to `DamagePipeline` (`add-npc-behavior-trees` task 2.3) — **partially resolved** by `wire-combat-pipeline-live`: player→monster attacks now route through `DamagePipeline`. Monster→player retaliation (`MonsterBehaviors.BuildWanderAndMeleeTree`'s attack node, still called from here) deliberately stays on `CombatSystem.TryAttack` — a downed player entering the Dying/Corpse lifecycle needs its own design pass tied to `add-death-respawn-policy` (see `wire-combat-pipeline-live/design.md`).
 - [ ] 2.2 Distinct trees per creature type (`Snake`/`Zombie`) instead of `Monster`'s one generic tree (`add-npc-behavior-trees` task 2.4)
 - [ ] 2.3 Populate `Blackboard` from real Perception data (`add-npc-behavior-trees` task 2.5)
 - [ ] 2.4 Wire `ThreatTable.GetTopThreat()` into target selection (`add-npc-behavior-trees` task 2.6)

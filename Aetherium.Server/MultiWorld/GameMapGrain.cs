@@ -5,6 +5,7 @@ using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Entities;
 using Aetherium.Server.Ai;
+using Aetherium.Server.Combat;
 using Aetherium.WorldGen;
 using Passes = Aetherium.WorldGen.Passes;
 using System;
@@ -865,6 +866,19 @@ namespace Aetherium.Server.MultiWorld
             _tickCounter++;
             await StepNpcsAsync();
 
+            // Death lifecycle bookkeeping (engine gap-analysis §4.2/§4.11): advance every Dying
+            // entity's countdown to Corpse, then age/expire corpses per DeathPolicy. Both are
+            // silent, canonical-state-only ticks — no delta is emitted for a Dying→Corpse
+            // transition or a corpse's removal, since nothing renders that distinction yet (a
+            // future content-atlas/UI slice would add it). DeathPolicy.Default's
+            // CorpseRetentionTicks is int.MaxValue, so CorpseExpirySystem is a no-op today —
+            // wired for correctness/completeness, ready for a future per-world death policy.
+            if (_world is not null)
+            {
+                _deathSystem.Tick(_world);
+                _corpseExpirySystem.Tick(_world, _deathPolicy);
+            }
+
             // Heat trail cleanup. Capture which cells had trails before cleanup, run
             // cleanup, then diff to find cells that just lost their last trail. Emit
             // HeatExpiredDelta only for those — don't spam expiries every tick for
@@ -963,6 +977,13 @@ namespace Aetherium.Server.MultiWorld
             var combatDeltas = new List<MapDelta>();
             foreach (var monster in monsters)
             {
+                // A monster killed by a player's attack (engine gap-analysis §4.2/§4.11) is no
+                // longer removed from _world — it persists as Dying, then Corpse, for a future
+                // loot/harvest/revive affordance. It must not keep acting: skip its tree tick (and
+                // don't spend its action budget) while in either state.
+                if (monster.Has<Dying>() || monster.Has<Corpse>())
+                    continue;
+
                 // Continuous action pipeline (engine gap-analysis §4.1): a monster acts only when
                 // it has accrued enough AP this tick. TrySpend refills its budget and, if the cost
                 // is covered, deducts it and returns true; otherwise the monster keeps accruing and
@@ -1496,6 +1517,19 @@ namespace Aetherium.Server.MultiWorld
         private readonly InteractionSystem _interactionSystem = new InteractionSystem();
         private readonly CombatSystem _combatSystem = new CombatSystem();
 
+        // Deep combat model (engine gap-analysis §4.2/§4.11), wired for the player-attacks-monster
+        // path only (AttackAsync) — see wire-combat-pipeline-live. AlwaysHitResolver reproduces the
+        // pre-pipeline always-hits MVP exactly; DeathPolicy.Default reproduces the pre-policy
+        // defaults (down state, 3-tick revive window, corpses retained forever). Monster-attacks-
+        // player retaliation in StepNpcsAsync deliberately stays on the old CombatSystem — a downed
+        // player entering the Dying/Corpse creature-death lifecycle needs its own design pass tied
+        // to the (still Phase-1-only) add-death-respawn-policy schema.
+        private readonly DamagePipeline _damagePipeline = new DamagePipeline();
+        private readonly IHitResolver _hitResolver = new AlwaysHitResolver();
+        private readonly DeathPolicy _deathPolicy = DeathPolicy.Default;
+        private readonly DeathSystem _deathSystem = new DeathSystem();
+        private readonly CorpseExpirySystem _corpseExpirySystem = new CorpseExpirySystem();
+
         private ActionContext? TryBuildActionContext(string sessionId)
         {
             if (_world is null) return null;
@@ -1556,38 +1590,68 @@ namespace Aetherium.Server.MultiWorld
             return Ok();
         }
 
+        /// <summary>
+        /// Resolves a player's attack through <see cref="DamagePipeline"/> (engine gap-analysis
+        /// §4.2, Phase 2 — see openspec/changes/wire-combat-pipeline-live), replacing the old
+        /// instant-delete-on-kill <see cref="CombatSystem.TryAttack"/> path. Reach/existence/self-
+        /// attack checks stay here (the pipeline is deliberately reach-agnostic); damage amount is
+        /// still <see cref="CombatSystem.ComputeAttackDamage"/> (base <c>AttackPower</c> + best
+        /// weapon bonus) so the numbers are unchanged, only how a lethal hit is handled changes: the
+        /// target enters <see cref="Dying"/> (not removed) and is never deleted here — <see
+        /// cref="DeathSystem"/>/<see cref="CorpseExpirySystem"/>, ticked from <see cref="TickAsync"/>,
+        /// own its eventual Corpse conversion and (per <see cref="DeathPolicy"/>) removal. Clients
+        /// see this as an ordinary health-changed delta, the same as any non-lethal hit — no
+        /// EntityRemovedDelta is emitted for a killed monster anymore, since it is still present
+        /// (as Dying, then Corpse) for a future loot/harvest/revive affordance.
+        /// </summary>
         public async Task<Aetherium.Model.AttackResultDto> AttackAsync(string sessionId, string targetEntityId)
         {
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null)
                 return Aetherium.Model.AttackResultDto.Fail("Map not initialized or player not on map");
 
-            // Capture the target's location and kind BEFORE resolving — a lethal hit removes it
-            // from _world, and only slain monsters drop loot.
-            int lx = 0, ly = 0, lz = 0;
-            bool targetWasMonster = false;
-            if (_world!.Entities.TryGetValue(targetEntityId, out var preTarget))
-            {
-                targetWasMonster = preTarget is Aetherium.Monster;
-                var tl = preTarget.Get<Aetherium.Components.WorldLocation>();
-                if (tl is not null) { lx = tl.X; ly = tl.Y; lz = tl.Z; }
-            }
+            if (string.IsNullOrEmpty(targetEntityId))
+                return Aetherium.Model.AttackResultDto.Fail("No target");
+            if (targetEntityId == ctx.Player.EntityId)
+                return Aetherium.Model.AttackResultDto.Fail("Cannot attack yourself");
+            if (!_world!.Entities.TryGetValue(targetEntityId, out var target) || target is null)
+                return Aetherium.Model.AttackResultDto.Fail("Target not found");
+            if (!target.Has<Aetherium.Components.WorldLocation>())
+                return Aetherium.Model.AttackResultDto.Fail("Attacker or target has no location");
 
-            var result = _combatSystem.TryAttack(_world!, ctx.Player, targetEntityId);
-            if (!result.Success)
-                return new Aetherium.Model.AttackResultDto { Success = false, Reason = result.Reason };
+            var attackerLoc = ctx.ViewLocation;
+            var targetLoc = target.Get<Aetherium.Components.WorldLocation>();
+            int distance = Math.Abs(targetLoc.X - attackerLoc.X)
+                         + Math.Abs(targetLoc.Y - attackerLoc.Y)
+                         + Math.Abs(targetLoc.Z - attackerLoc.Z);
+            if (distance > 1)
+                return Aetherium.Model.AttackResultDto.Fail("Target is not in reach");
+
+            bool targetWasMonster = target is Aetherium.Monster;
+            var (lx, ly, lz) = (targetLoc.X, targetLoc.Y, targetLoc.Z);
+            var targetType = target.GetType().Name;
+
+            int damage = CombatSystem.ComputeAttackDamage(ctx.Player);
+            var packet = DamagePacket.Single("physical", damage, ctx.Player.EntityId);
+            var result = _damagePipeline.Resolve(ctx.Player, target, packet, _hitResolver, _deathPolicy.ResolveDyingTicks());
+            if (!result.Hit)
+                return new Aetherium.Model.AttackResultDto { Success = false, Reason = result.Reason ?? "Miss" };
+
+            int remainingHealth = target.Has<Aetherium.Components.Health>() ? target.Get<Aetherium.Components.Health>().Level : 0;
+            int roundedDamage = (int)Math.Round(result.Damage);
 
             // Combat analytics (persisted with the map): total damage, and kills on defeat.
-            _mapState.State.TotalDamageDealt += result.Damage;
-            if (result.TargetDefeated && targetWasMonster)
+            _mapState.State.TotalDamageDealt += roundedDamage;
+            if (result.TargetEnteredDying && targetWasMonster)
                 _mapState.State.MonstersDefeated++;
 
-            // Death loot: a slain monster drops a weapon where it fell, so the kill loop
-            // pays off (kill → pick up sword → hit harder). Deterministic (always drops)
-            // so it stays testable. Spawn into canonical _world before persisting.
+            // Death loot: a slain monster drops a weapon where it fell, at the same moment it
+            // enters Dying (not later, on its eventual Corpse conversion) — preserves the
+            // "kill → pick up sword → hit harder" timing from before this pipeline swap.
+            // Deterministic (always drops) so it stays testable.
             string? lootId = null;
             string? lootType = null;
-            if (result.TargetDefeated && targetWasMonster)
+            if (result.TargetEnteredDying && targetWasMonster)
             {
                 var loot = new Aetherium.Entities.SwordItem();
                 loot.Set(new Aetherium.Components.WorldLocation(lx, ly, lz));
@@ -1598,34 +1662,22 @@ namespace Aetherium.Server.MultiWorld
 
             await _mapState.WriteStateAsync();
 
-            if (result.TargetDefeated)
-            {
-                await FanOutAsync(new EntityRemovedDelta
-                {
-                    MapId = _mapState.State.MapId,
-                    EntityId = targetEntityId,
-                    LastX = lx, LastY = ly, LastZ = lz,
-                });
+            await FanOutAsync(IntFieldDelta(targetEntityId, "Health", "Level", remainingHealth));
 
-                if (lootId is not null)
-                {
-                    var placement = EntityPlacement.FromLocation(lootId, lootType!,
-                        new Aetherium.Components.WorldLocation(lx, ly, lz));
-                    await FanOutAsync(new EntityPlacedDelta { Placement = placement });
-                }
-            }
-            else
+            if (lootId is not null)
             {
-                await FanOutAsync(IntFieldDelta(targetEntityId, "Health", "Level", result.RemainingHealth));
+                var placement = EntityPlacement.FromLocation(lootId, lootType!,
+                    new Aetherium.Components.WorldLocation(lx, ly, lz));
+                await FanOutAsync(new EntityPlacedDelta { Placement = placement });
             }
 
             return new Aetherium.Model.AttackResultDto
             {
                 Success = true,
-                Damage = result.Damage,
-                RemainingHealth = result.RemainingHealth,
-                TargetDefeated = result.TargetDefeated,
-                TargetType = result.TargetType,
+                Damage = roundedDamage,
+                RemainingHealth = remainingHealth,
+                TargetDefeated = result.TargetEnteredDying,
+                TargetType = targetType,
                 TargetEntityId = targetEntityId,
                 DroppedLootEntityId = lootId,
                 DroppedLootType = lootType,

@@ -133,9 +133,58 @@ namespace Aetherium.Test.Combat
             Assert.That(r3.RemainingHealth, Is.EqualTo(0));
             Assert.That(r3.TargetDefeated, Is.True, "Third hit should defeat the monster.");
 
-            // The monster is gone from canonical state: attacking it again can't find it.
+            // The monster is Dying (not removed from canonical state — see DamagePipeline), so a
+            // further attack is rejected rather than finding no target.
             var r4 = await map.AttackAsync(player, monsterId);
-            Assert.That(r4.Success, Is.False, "A defeated target should no longer exist in the world.");
+            Assert.That(r4.Success, Is.False, "A dying/dead target must reject further attacks.");
+        }
+
+        /// <summary>Verifies "Player Attacks Route Through DamagePipeline" (Dying/Corpse persistence)
+        /// in specs/combat/spec.md (openspec/changes/wire-combat-pipeline-live).</summary>
+        [Test]
+        public async Task Attack_KillingMonster_MonsterPersistsAsDying_NotRemovedFromWorld()
+        {
+            var (map, player, monsterId) = await InitMapWithAdjacentMonsterAsync();
+
+            await map.AttackAsync(player, monsterId);
+            await map.AttackAsync(player, monsterId);
+            var kill = await map.AttackAsync(player, monsterId);
+            Assert.That(kill.TargetDefeated, Is.True);
+
+            // Unlike the pre-pipeline instant-delete behavior, the monster is still present in
+            // canonical state — at 0 HP, transitioned to Dying rather than removed.
+            var snap = await map.GetWorldSnapshotAsync();
+            Assert.That(HealthOf(snap, monsterId), Is.EqualTo(0),
+                "A killed monster persists in the world at 0 HP (Dying), not removed.");
+        }
+
+        /// <summary>Verifies "Live NPC Tick Skips Dying/Corpse Monsters" in specs/combat/spec.md
+        /// (openspec/changes/wire-combat-pipeline-live).</summary>
+        [Test]
+        public async Task Tick_KilledMonster_NoLongerActs()
+        {
+            var (map, player, monsterId) = await InitMapWithAdjacentMonsterAsync();
+
+            await map.AttackAsync(player, monsterId);
+            await map.AttackAsync(player, monsterId);
+            await map.AttackAsync(player, monsterId); // 10 → 0, enters Dying
+
+            var before = await map.GetWorldSnapshotAsync();
+            var monsterBefore = before.Entities.First(e => e.EntityId == monsterId);
+            var (mx, my, mz) = (monsterBefore.X, monsterBefore.Y, monsterBefore.Z);
+
+            // A live (non-Dying) monster adjacent to the player would retaliate on this tick
+            // (see Tick_MonsterAdjacentToPlayer_Retaliates_DamagingButNotRemovingPlayer). A Dying
+            // one must not: no movement, and the player takes no damage.
+            var playerHealthBefore = HealthOf(before, player);
+            await map.TickAsync(TimeSpan.FromSeconds(1));
+            var after = await map.GetWorldSnapshotAsync();
+
+            var monsterAfter = after.Entities.First(e => e.EntityId == monsterId);
+            Assert.That((monsterAfter.X, monsterAfter.Y, monsterAfter.Z), Is.EqualTo((mx, my, mz)),
+                "A Dying monster must not wander.");
+            Assert.That(HealthOf(after, player), Is.EqualTo(playerHealthBefore),
+                "A Dying monster must not retaliate.");
         }
 
         private static int HealthOf(WorldSnapshot snap, string entityId)
