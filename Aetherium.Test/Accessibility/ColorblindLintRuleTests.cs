@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Aetherium.Server.Accessibility;
+using Aetherium.Model.Accessibility;
 
 namespace Aetherium.Test.Accessibility
 {

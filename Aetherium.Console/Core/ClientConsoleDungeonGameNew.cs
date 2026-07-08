@@ -12,6 +12,8 @@ using Aetherium.Rendering.Widgets;
 using Aetherium.Rendering.Themes;
 using Aetherium.Audio;
 using Aetherium.Model;
+using Aetherium.Input;
+using Aetherium.Model.Accessibility;
 
 namespace Aetherium.Core
 {
@@ -20,6 +22,16 @@ namespace Aetherium.Core
     /// </summary>
     public class ClientConsoleDungeonGameNew
     {
+        // Accessibility (§4.13): the stable, input-device-agnostic action ids a keypress may
+        // resolve to. ConsoleActionIntentBinding does the actual key->id mapping; this catalog
+        // is only consulted to validate the resolved id is a real, registered intent.
+        private static readonly ActionIntentCatalog s_actionIntents = DefaultActionIntents.Build();
+
+        /// <summary>The ActionIntent id the most recent keypress resolved to, if any (null for
+        /// debug/meta keys outside the seed catalog). Exposed for a future accessibility
+        /// companion/remapping consumer; observed but not yet acted on by anything in-tree.</summary>
+        public string? LastActionIntentId { get; private set; }
+
         private readonly GameClient gameClient;
         private readonly IGameRenderer renderer;
         private readonly WidgetManager widgetManager;
@@ -223,6 +235,10 @@ namespace Aetherium.Core
 
             try
             {
+                var intentId = ConsoleActionIntentBinding.Resolve(keyInfo.Key);
+                if (intentId != null && s_actionIntents.TryGet(intentId, out _))
+                    LastActionIntentId = intentId;
+
                 switch (keyInfo.Key)
                 {
                     // Movement

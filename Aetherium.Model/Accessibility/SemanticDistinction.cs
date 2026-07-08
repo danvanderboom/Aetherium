@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Aetherium.Server.Accessibility
+namespace Aetherium.Model.Accessibility
 {
     public enum AccessibilityChannel
     {

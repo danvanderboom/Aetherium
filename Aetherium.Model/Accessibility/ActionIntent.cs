@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Aetherium.Server.Accessibility
+namespace Aetherium.Model.Accessibility
 {
     /// <summary>
     /// An abstract, input-device-agnostic game action (engine gap-analysis §4.13): "every game
