@@ -30,6 +30,8 @@ The console/terminal client is the reference renderer — ASCII, with dynamic li
 - **[Party & shared play](party-shared-play.md)** — design vision: credit sharing, pings as perception, shared senses, LLM companions
 - **[Economy simulation](economy-simulation.md)** — design vision: goods/flows/markets/transport layers, functional currency, LLM merchants
 - **[Live event orchestrator](live-events.md)** — design vision: pressure signals, intensity-budget direction, persistent outcomes, the LLM game-master
+- **[Gameplay telemetry](gameplay-telemetry.md)** — design vision: event records at chokepoints, rollups/heatmaps/funnels, synthetic playtesting, the LLM analyst
+- **[Localization](localization.md)** — design vision: TextRef ids, per-locale catalogs and grammars, native procedural prose, LLM locale packs
 - **[Multi-world ecosystems](multiworld-ecosystems.md)** — clusters, portals, cross-world economy, meta-progression, hub worlds
 - **[Instances](instances.md)** — dungeon instances, lockouts, party/raid grains
 - **[Procedural audio](PROCEDURAL_AUDIO_IMPLEMENTATION.md)** — biome audio profiles and the audio generation pass
