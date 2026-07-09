@@ -252,24 +252,34 @@ namespace Aetherium.Views
             }
         }
 
+        /// <summary>
+        /// A colored key's glyph+color, keyed off <see cref="ItemDto.KeyId"/>. Color alone isn't
+        /// colorblind-safe for which key this is (SemanticDistinction "item-key-color" — see
+        /// wire-accessibility-live design.md), so every key color also gets a distinct glyph: its
+        /// own first letter. Pure so it's unit-testable without a live console.
+        /// </summary>
+        public static (string Icon, ConsoleColor Color) ResolveKeyItemGlyph(string keyId)
+        {
+            var color = keyId.ToLowerInvariant() switch
+            {
+                "red" => ConsoleColor.Red,
+                "blue" => ConsoleColor.Blue,
+                "green" => ConsoleColor.Green,
+                "yellow" => ConsoleColor.Yellow,
+                _ => ConsoleColor.White
+            };
+            var icon = keyId.Length > 0 ? keyId.Substring(0, 1).ToUpperInvariant() : "?";
+            return (icon, color);
+        }
+
         private void DrawItem(ItemDto item, ConsoleColor? gridColor = null, double lightLevel = 1.0)
         {
-            // Map key ID to color for keys
             ConsoleColor fgColor = ConsoleColor.White;
+            var icon = item.Icon;
             if (!string.IsNullOrEmpty(item.KeyId))
-            {
-                fgColor = item.KeyId.ToLowerInvariant() switch
-                {
-                    "red" => ConsoleColor.Red,
-                    "blue" => ConsoleColor.Blue,
-                    "green" => ConsoleColor.Green,
-                    "yellow" => ConsoleColor.Yellow,
-                    _ => ConsoleColor.White
-                };
-            }
+                (icon, fgColor) = ResolveKeyItemGlyph(item.KeyId);
 
             var bgColor = gridColor ?? ConsoleColor.Black;
-            var icon = item.Icon;
             if (string.IsNullOrEmpty(icon))
                 icon = "?";
             if (icon.Length > symbolWidth)

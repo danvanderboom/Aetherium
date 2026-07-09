@@ -55,6 +55,10 @@ namespace Aetherium.Server.Services
                 MaxPlayers = template.MaxPlayers,
                 NarrativeId = template.NarrativeId,
                 ClusterId = template.ClusterId,
+                DeathPolicy = template.DeathPolicy,
+                AbilityConfig = template.AbilityConfig,
+                ProgressionConfig = template.ProgressionConfig,
+                FactionConfig = template.FactionConfig,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };

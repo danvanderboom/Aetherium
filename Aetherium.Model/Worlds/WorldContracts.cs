@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Orleans;
+using Aetherium.Model.Combat;
+using Aetherium.Model.Abilities;
+using Aetherium.Model.Progression;
+using Aetherium.Model.Factions;
 
 namespace Aetherium.Model.Worlds
 {
@@ -78,6 +82,25 @@ namespace Aetherium.Model.Worlds
         [Id(4)] public int MaxPlayers { get; set; } = 100;
         [Id(5)] public string? NarrativeId { get; set; }
         [Id(6)] public string? ClusterId { get; set; }
+
+        /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11). Null means every map
+        /// on this world falls back to <see cref="DeathPolicy.Default"/> — see wire-death-respawn-live.</summary>
+        [Id(7)] public DeathPolicy? DeathPolicy { get; set; }
+
+        /// <summary>Per-world ability content (engine gap-analysis §4.3): the abilities available on
+        /// this world's maps and the resource pools its characters start with. Null means no abilities
+        /// — the engine ships none. See wire-abilities-live.</summary>
+        [Id(8)] public AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content (engine gap-analysis §4.4): XP pools,
+        /// skills, starting attributes, XP-award and attribute-derivation rules. Null means no
+        /// progression — the engine ships none. See wire-progression-live.</summary>
+        [Id(9)] public ProgressionConfig? ProgressionConfig { get; set; }
+
+        /// <summary>Per-world faction content (engine gap-analysis §4.6): factions with doctrines
+        /// and rank rules, inter-faction relations, standing bands. Null means no factions — the
+        /// engine ships none. See wire-factions-live and docs/factions-reputation.md.</summary>
+        [Id(10)] public FactionConfig? FactionConfig { get; set; }
     }
 
     /// <summary>

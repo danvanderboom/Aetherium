@@ -4,6 +4,15 @@ using Microsoft.Extensions.Logging;
 using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Entities;
+using Aetherium.Server.Ai;
+using Aetherium.Server.Combat;
+using Aetherium.Server.Abilities;
+using Aetherium.Server.Progression;
+using Aetherium.Server.Factions;
+using Aetherium.Model.Combat;
+using Aetherium.Model.Abilities;
+using Aetherium.Model.Progression;
+using Aetherium.Model.Factions;
 using Aetherium.WorldGen;
 using Passes = Aetherium.WorldGen.Passes;
 using System;
@@ -41,6 +50,19 @@ namespace Aetherium.Server.MultiWorld
         // Counts map ticks so NPC movement can run at a sub-multiple of the tick
         // rate (SimulationOptions.NpcMoveIntervalTicks) without a wall-clock timer.
         private long _tickCounter;
+
+        // One BehaviorTree instance per live monster, keyed by EntityId, so each NPC's
+        // blackboard/composite-node running-state persists across ticks (the "Per-NPC
+        // Behavior Tree Instance" requirement in specs/npc-behavior-trees/spec.md).
+        // Pruned in StepNpcsAsync whenever a monster leaves _world.Entities.
+        private readonly Dictionary<string, BehaviorTree> _monsterTrees = new();
+
+        // AP a monster spends per behavior-tree tick in the continuous action pipeline
+        // (engine gap-analysis §4.1). A default Monster carries Speed == MaxBudget == this,
+        // so it affords an action every eligible tick (parity with pre-pipeline behavior);
+        // a creature with a lower Speed acts on a sub-cadence. See StepNpcsAsync and
+        // openspec/changes/wire-npc-action-budget-live.
+        private const double NpcActionCost = 1.0;
 
         // Highest WorldSnapshot.SnapshotVersion this binary knows how to hydrate.
         // Bumping requires a deliberate schema migration; cold-start refuses to
@@ -234,6 +256,23 @@ namespace Aetherium.Server.MultiWorld
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
+            // Rehydrate the death policy from persisted state on reactivation — InitializeAsync
+            // (which sets it initially) is not called again after a silo restart. A brand-new grain
+            // has no MapState.DeathPolicy yet, so this leaves the field-initializer Default in place.
+            if (_mapState.State?.DeathPolicy is not null)
+                _deathPolicy = _mapState.State.DeathPolicy;
+
+            // Recompile the ability catalog + re-stamp resource-pool definitions from persisted config
+            // (engine gap-analysis §4.3 — see wire-abilities-live), so abilities survive reactivation
+            // without re-running InitializeAsync. Null config yields an empty catalog.
+            ApplyAbilityConfig(_mapState.State?.AbilityConfig);
+
+            // Likewise recompile progression (engine gap-analysis §4.4 — see wire-progression-live).
+            ApplyProgressionConfig(_mapState.State?.ProgressionConfig);
+
+            // And factions (engine gap-analysis §4.6 — see wire-factions-live).
+            ApplyFactionConfig(_mapState.State?.FactionConfig);
+
             if (_mapState.State != null && _mapState.State.Recipe != null && _world == null)
             {
                 // Reactivation after silo restart. Prefer a persisted snapshot when
@@ -465,10 +504,15 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null)
         {
             var mapId = this.GetPrimaryKeyString();
-            
+
+            _deathPolicy = deathPolicy ?? DeathPolicy.Default;
+            ApplyAbilityConfig(abilityConfig);
+            ApplyProgressionConfig(progressionConfig);
+            ApplyFactionConfig(factionConfig);
+
             parameters ??= new Dictionary<string, object>();
 
             var seed = parameters.TryGetValue("seed", out var seedObj) && seedObj is int seedInt
@@ -566,6 +610,10 @@ namespace Aetherium.Server.MultiWorld
                 PlayerIds = new HashSet<string>(),
                 CreatedAt = DateTime.UtcNow,
                 Recipe = recipe,
+                DeathPolicy = deathPolicy,
+                AbilityConfig = abilityConfig,
+                ProgressionConfig = progressionConfig,
+                FactionConfig = factionConfig,
             };
 
             await _mapState.WriteStateAsync();
@@ -669,6 +717,45 @@ namespace Aetherium.Server.MultiWorld
             character.Set(new Aetherium.Components.WorldLocation(spawn.X, spawn.Y, spawn.Z));
             character.Set(new Aetherium.Components.Inventory());
             character.Set(new Aetherium.Components.HasHeading { Heading = 0 });
+
+            // Stamp the world's configured resource pools onto the joining character (engine
+            // gap-analysis §4.3 — see wire-abilities-live). Fresh instances per character so each
+            // owns its own mutable pool state. A world that declares no pools leaves the character
+            // with none — the engine never invents a genre-specific pool.
+            if (_characterResourcePools.Count > 0)
+                character.Set(CreateAbilityCompiler().BuildResourcePools(_characterResourcePools));
+
+            // Stamp the world's progression components (engine gap-analysis §4.4 — see
+            // wire-progression-live): fresh XP pools, attributes, role affinity, unlocked-skills and
+            // granted-abilities sets, then apply any attribute→stat derivations from the starting
+            // attributes. A world declaring no progression leaves the character with none, keeping
+            // Character genre-neutral (same posture as resource pools).
+            if (_progressionConfig is not null)
+            {
+                var pc = new ProgressionCompiler();
+                character.Set(pc.BuildProgressPools(_progressionConfig.Pools));
+                character.Set(pc.BuildAttributes(_progressionConfig.StartingAttributes));
+                character.Set(pc.BuildRoleAffinity(_progressionConfig.StartingRoleAffinity));
+                character.Set(new UnlockedSkills());
+                character.Set(new GrantedAbilities());
+                ApplyAttributeDerivations(character);
+            }
+
+            // Stamp a fresh reputation ledger seeded with each faction's starting standing (engine
+            // gap-analysis §4.6 — see wire-factions-live). A world declaring no factions leaves the
+            // character without a ledger, same posture as pools/progression.
+            if (_factionConfig is not null)
+            {
+                var ledger = new ReputationLedger();
+                foreach (var def in _factionConfig.Factions)
+                {
+                    var reputation = new Reputation(def.Id, def.StartingStanding);
+                    RankEvaluator.Apply(reputation, def.RankRules);
+                    ledger.Add(reputation);
+                }
+                character.Set(ledger);
+            }
+
             _world.AddEntity(character);
 
             // Fan out an EntityAddedDelta so other sessions in the map group see the
@@ -851,6 +938,29 @@ namespace Aetherium.Server.MultiWorld
             _tickCounter++;
             await StepNpcsAsync();
 
+            // Death lifecycle bookkeeping (engine gap-analysis §4.2/§4.11): advance every Dying
+            // entity's countdown to Corpse, then age/expire corpses per DeathPolicy. Both are
+            // silent, canonical-state-only ticks — no delta is emitted for a Dying→Corpse
+            // transition or a corpse's removal, since nothing renders that distinction yet (a
+            // future content-atlas/UI slice would add it). DeathPolicy.Default's
+            // CorpseRetentionTicks is int.MaxValue, so CorpseExpirySystem is a no-op today —
+            // wired for correctness/completeness, ready for a future per-world death policy.
+            if (_world is not null)
+            {
+                _deathSystem.Tick(_world);
+                _corpseExpirySystem.Tick(_world, _deathPolicy);
+
+                // Ability upkeep (engine gap-analysis §4.3 — see wire-abilities-live): count down
+                // every actor's ability cooldowns and regenerate their resource pools. Silent,
+                // canonical-state-only — the read accessors expose the new values on demand.
+                TickAbilityUpkeep();
+            }
+
+            // Player death lifecycle (engine gap-analysis §4.11, Phase 2 — see
+            // wire-death-respawn-live): advance every Downed player's countdown and any
+            // post-respawn invulnerability window.
+            await TickDownedAndInvulnerablePlayersAsync();
+
             // Heat trail cleanup. Capture which cells had trails before cleanup, run
             // cleanup, then diff to find cells that just lost their last trail. Emit
             // HeatExpiredDelta only for those — don't spam expiries every tick for
@@ -883,14 +993,19 @@ namespace Aetherium.Server.MultiWorld
         }
 
         /// <summary>
-        /// Advances every monster on this map by one wandering step, when NPC
-        /// behavior is enabled and this tick falls on the configured interval. The
-        /// world mutations are applied synchronously (no awaits between them) so a
-        /// reentrant player move cannot interleave mid-sweep; the resulting
-        /// <see cref="EntityMovedDelta"/>s are broadcast afterward. A monster that
-        /// is boxed in or blocked by a wall/another character simply stays put this
-        /// tick. Each landed move also lays a heat trail via the world-event
-        /// subscriber, exactly as a player move does.
+        /// Advances every monster on this map by one behavior-tree tick (engine gap-analysis
+        /// §4.5 Phase 2 — see openspec/changes/add-npc-behavior-trees), when NPC behavior is
+        /// enabled and this tick falls on the configured interval. Each monster owns its own
+        /// <see cref="BehaviorTree"/> instance (cached in <see cref="_monsterTrees"/>) built from
+        /// <see cref="MonsterBehaviors.BuildWanderAndMeleeTree"/> — attack an adjacent player if
+        /// one is in reach, else wander — reproducing the decision this method made inline before
+        /// the tree took over. Each monster's tree tick is gated on its <see cref="ActionSpeed"/>
+        /// budget (engine gap-analysis §4.1): it acts only on ticks where it can afford
+        /// <see cref="NpcActionCost"/>, so speed differentiates action cadence with no global turn
+        /// order. World mutations happen synchronously (no awaits between them) so a reentrant
+        /// player move cannot interleave mid-sweep; the resulting deltas are broadcast afterward.
+        /// Each landed move also lays a heat trail via the world-event subscriber, exactly as a
+        /// player move does.
         /// </summary>
         private async Task StepNpcsAsync()
         {
@@ -907,20 +1022,36 @@ namespace Aetherium.Server.MultiWorld
             // Snapshot the monster set first — TryMoveSteps mutates the location
             // index we would otherwise be enumerating.
             var monsters = _world.Entities.Values.OfType<Aetherium.Monster>().ToList();
+
+            // A monster that died/was removed since the last tick no longer needs a tree —
+            // drop it so _monsterTrees doesn't grow unbounded over a map's lifetime.
+            if (_monsterTrees.Count > 0)
+            {
+                var liveIds = monsters.Select(m => m.EntityId).ToHashSet();
+                foreach (var staleId in _monsterTrees.Keys.Where(id => !liveIds.Contains(id)).ToList())
+                    _monsterTrees.Remove(staleId);
+            }
+
             if (monsters.Count == 0)
                 return;
 
             // Snapshot the player characters too — retaliation targets them. Players are
             // exactly the entities whose EntityId is a joined playerId (monsters are never
-            // in PlayerIds), so this is unambiguous even though Monster : Character.
-            var players = new List<Character>();
+            // in PlayerIds), so this is unambiguous even though Monster : Character. Scoping
+            // the tree's target list to this list (rather than every Health-bearing entity)
+            // keeps monsters from attacking each other.
+            var players = new List<Entity>();
             if (_mapState.State is not null)
             {
                 foreach (var playerId in _mapState.State.PlayerIds)
                 {
                     if (_world.Entities.TryGetValue(playerId, out var pe)
                         && pe is Character pc
-                        && pc.Has<Aetherium.Components.WorldLocation>())
+                        && pc.Has<Aetherium.Components.WorldLocation>()
+                        // A downed/permadead player has already been dealt with; a freshly-
+                        // respawned one is briefly untargetable (engine gap-analysis §4.11 —
+                        // see wire-death-respawn-live).
+                        && !pc.Has<Downed>() && !pc.Has<Corpse>() && !pc.Has<RespawnInvulnerable>())
                         players.Add(pc);
                 }
             }
@@ -930,39 +1061,66 @@ namespace Aetherium.Server.MultiWorld
             // reentrant player turn.
             var moves = new List<EntityMovedDelta>();
             var combatDeltas = new List<MapDelta>();
+            var playerEvents = new List<(string SessionId, string EventName, Aetherium.Model.PlayerVitalsDto Vitals)>();
             foreach (var monster in monsters)
             {
-                var loc = monster.Get<Aetherium.Components.WorldLocation>();
-                if (loc is null) continue;
+                // A monster killed by a player's attack (engine gap-analysis §4.2/§4.11) is no
+                // longer removed from _world — it persists as Dying, then Corpse, for a future
+                // loot/harvest/revive affordance. It must not keep acting: skip its tree tick (and
+                // don't spend its action budget) while in either state.
+                if (monster.Has<Dying>() || monster.Has<Corpse>())
+                    continue;
 
-                // Aggro/retaliation: if a player stands within reach, the monster attacks
-                // instead of wandering. Damage is applied but the player is NOT removed on
-                // a lethal hit (removeOnDeath: false) — a downed player's entity survives at
-                // 0 HP so its session and the map's spawn bookkeeping stay consistent.
-                var victim = FindAdjacentPlayer(loc, players);
-                if (victim is not null)
+                // Continuous action pipeline (engine gap-analysis §4.1): a monster acts only when
+                // it has accrued enough AP this tick. TrySpend refills its budget and, if the cost
+                // is covered, deducts it and returns true; otherwise the monster keeps accruing and
+                // skips this tick. A default Monster (Speed == MaxBudget == NpcActionCost) affords
+                // every eligible tick — parity with pre-pipeline behavior — while a slower creature
+                // acts on a sub-cadence. Monsters without an ActionSpeed (none today) always act.
+                if (monster.Has<Aetherium.Components.ActionSpeed>()
+                    && !monster.Get<Aetherium.Components.ActionSpeed>().TrySpend(NpcActionCost))
+                    continue;
+
+                if (!_monsterTrees.TryGetValue(monster.EntityId, out var tree))
                 {
-                    var atk = _combatSystem.TryAttack(_world, monster, victim.EntityId, removeOnDeath: false);
-                    if (atk.Success)
-                        combatDeltas.Add(IntFieldDelta(victim.EntityId, "Health", "Level", atk.RemainingHealth));
-                    continue; // a monster that attacks does not also move this tick
+                    tree = MonsterBehaviors.BuildWanderAndMeleeTree(_combatSystem);
+                    _monsterTrees[monster.EntityId] = tree;
                 }
 
-                var direction = monster.NextWanderDirection();
-                if (direction is null) continue; // boxed in on all sides
+                tree.Blackboard.Set<IReadOnlyList<Entity>>(MonsterBehaviors.TargetsKey, players);
+                tree.Blackboard.Clear(MonsterBehaviors.AttackOutcomeKey);
+                tree.Blackboard.Clear(MonsterBehaviors.MoveOutcomeKey);
 
-                var oldX = loc.X; var oldY = loc.Y; var oldZ = loc.Z;
-                var outcome = _world.TryMoveSteps(monster, direction.Value, 1);
-                if (!outcome.Success || outcome.FinalLocation is null)
-                    continue; // wall or occupied cell — no move this tick
+                tree.Tick(_world, monster);
 
-                var final = outcome.FinalLocation;
-                moves.Add(new EntityMovedDelta
+                if (tree.Blackboard.TryGet<AttackOutcome>(MonsterBehaviors.AttackOutcomeKey, out var attack))
                 {
-                    EntityId = monster.EntityId,
-                    OldX = oldX, OldY = oldY, OldZ = oldZ,
-                    NewX = final.X, NewY = final.Y, NewZ = final.Z,
-                });
+                    // A lethal hit against a player (engine gap-analysis §4.11 — see
+                    // wire-death-respawn-live) routes through the active DeathPolicy instead of
+                    // just reporting HP=0: instant respawn, entering Downed, or (permadeath, no
+                    // down state) an instant Corpse transition. Non-lethal hits, and any hit
+                    // against a monster, keep reporting a plain health delta as before.
+                    if (attack.RemainingHealth <= 0
+                        && _mapState.State is not null && _mapState.State.PlayerIds.Contains(attack.TargetEntityId)
+                        && _world.Entities.TryGetValue(attack.TargetEntityId, out var victimEntity)
+                        && victimEntity is Character victim)
+                    {
+                        ResolvePlayerLethalHit(victim, moves, combatDeltas, playerEvents);
+                    }
+                    else
+                    {
+                        combatDeltas.Add(IntFieldDelta(attack.TargetEntityId, "Health", "Level", attack.RemainingHealth));
+                    }
+                }
+                else if (tree.Blackboard.TryGet<WanderOutcome>(MonsterBehaviors.MoveOutcomeKey, out var move))
+                {
+                    moves.Add(new EntityMovedDelta
+                    {
+                        EntityId = monster.EntityId,
+                        OldX = move.From.X, OldY = move.From.Y, OldZ = move.From.Z,
+                        NewX = move.To.X, NewY = move.To.Y, NewZ = move.To.Z,
+                    });
+                }
             }
 
             // Phase 2 (async): broadcast. FanOutAsync persists each delta and routes
@@ -972,23 +1130,207 @@ namespace Aetherium.Server.MultiWorld
                 await FanOutAsync(move);
             foreach (var delta in combatDeltas)
                 await FanOutAsync(delta);
+            foreach (var evt in playerEvents)
+                await SendPlayerEventAsync(evt.SessionId, evt.EventName, evt.Vitals);
         }
 
         /// <summary>
-        /// The first joined player within melee reach (Manhattan distance ≤ 1, matching
-        /// <see cref="CombatSystem"/>) of <paramref name="from"/>, or null if none is adjacent.
+        /// Applies the active <see cref="DeathPolicy"/>'s outcome to a player reduced to 0 HP by a
+        /// monster's attack (engine gap-analysis §4.11, Phase 2 — see wire-death-respawn-live):
+        /// instant respawn, entering <see cref="Downed"/>, or (permadeath, no down state) an
+        /// instant <see cref="Corpse"/> transition. Mutates world state synchronously and appends
+        /// to the caller's delta/event lists — <see cref="StepNpcsAsync"/> and
+        /// <see cref="TickDownedAndInvulnerablePlayersAsync"/> both fan them out after their
+        /// synchronous sweep, the same pattern every other outcome they collect already uses.
         /// </summary>
-        private static Character? FindAdjacentPlayer(Aetherium.Components.WorldLocation from, List<Character> players)
+        private void ResolvePlayerLethalHit(Character player, List<EntityMovedDelta> moves, List<MapDelta> combatDeltas,
+            List<(string SessionId, string EventName, Aetherium.Model.PlayerVitalsDto Vitals)> playerEvents)
         {
-            foreach (var player in players)
+            switch (PlayerDeathResolver.ResolveLethalHitOutcome(_deathPolicy))
             {
-                var ploc = player.Get<Aetherium.Components.WorldLocation>();
-                if (ploc is null) continue;
-                var distance = Math.Abs(ploc.X - from.X) + Math.Abs(ploc.Y - from.Y) + Math.Abs(ploc.Z - from.Z);
-                if (distance <= 1)
-                    return player;
+                case PlayerDeathOutcome.InstantRespawn:
+                    RespawnPlayer(player, moves, combatDeltas);
+                    playerEvents.Add((player.EntityId, "ReceiveRespawn", BuildVitalsDto(player)));
+                    break;
+
+                case PlayerDeathOutcome.InstantPermadeath:
+                    player.Set(new Corpse());
+                    combatDeltas.Add(IntFieldDelta(player.EntityId, "Health", "Level", 0));
+                    playerEvents.Add((player.EntityId, "ReceiveDied", BuildVitalsDto(player)));
+                    break;
+
+                case PlayerDeathOutcome.EnterDowned:
+                default:
+                    player.Set(new Downed(_deathPolicy.ReviveWindowTicks));
+                    combatDeltas.Add(IntFieldDelta(player.EntityId, "Health", "Level", 0));
+                    playerEvents.Add((player.EntityId, "ReceiveDowned", BuildVitalsDto(player)));
+                    break;
             }
-            return null;
+        }
+
+        /// <summary>
+        /// Each world tick, advances every player's <see cref="Downed"/> countdown and
+        /// <see cref="RespawnInvulnerable"/> window (engine gap-analysis §4.11, Phase 2 — see
+        /// wire-death-respawn-live). A Downed countdown reaching zero resolves per the active
+        /// <see cref="DeathPolicy"/>: respawn, or (permadeath) become a <see cref="Corpse"/>. The
+        /// invulnerability countdown is silent (no delta — it's a defensive flag, not visible
+        /// state); a Downed expiry emits the same delta shapes <see cref="ResolvePlayerLethalHit"/>
+        /// does, plus the matching player-scoped event.
+        /// </summary>
+        private async Task TickDownedAndInvulnerablePlayersAsync()
+        {
+            if (_world is null) return;
+
+            var downedPlayers = _world.Entities.Values.OfType<Character>().Where(c => c.Has<Downed>()).ToList();
+            var invulnerablePlayers = _world.Entities.Values.OfType<Character>().Where(c => c.Has<RespawnInvulnerable>()).ToList();
+            if (downedPlayers.Count == 0 && invulnerablePlayers.Count == 0)
+                return;
+
+            var moves = new List<EntityMovedDelta>();
+            var combatDeltas = new List<MapDelta>();
+            var playerEvents = new List<(string SessionId, string EventName, Aetherium.Model.PlayerVitalsDto Vitals)>();
+
+            foreach (var player in invulnerablePlayers)
+            {
+                var invulnerable = player.Get<RespawnInvulnerable>();
+                invulnerable.TicksRemaining--;
+                if (invulnerable.TicksRemaining <= 0)
+                    player.Clear<RespawnInvulnerable>();
+            }
+
+            foreach (var player in downedPlayers)
+            {
+                var downed = player.Get<Downed>();
+                downed.TicksRemaining--;
+                if (downed.TicksRemaining > 0)
+                    continue;
+
+                if (PlayerDeathResolver.ResolveDownedOutcome(_deathPolicy) == DownedExpiryOutcome.Respawn)
+                {
+                    RespawnPlayer(player, moves, combatDeltas);
+                    playerEvents.Add((player.EntityId, "ReceiveRespawn", BuildVitalsDto(player)));
+                }
+                else
+                {
+                    player.Clear<Downed>();
+                    player.Set(new Corpse());
+                    playerEvents.Add((player.EntityId, "ReceiveDied", BuildVitalsDto(player)));
+                }
+            }
+
+            foreach (var move in moves)
+                await FanOutAsync(move);
+            foreach (var delta in combatDeltas)
+                await FanOutAsync(delta);
+            foreach (var evt in playerEvents)
+                await SendPlayerEventAsync(evt.SessionId, evt.EventName, evt.Vitals);
+        }
+
+        /// <summary>
+        /// Resets a player back to playable state in place: full Health, teleported per the
+        /// active <see cref="DeathPolicy"/>'s <c>RespawnLocation</c>, <see cref="Downed"/> cleared,
+        /// a fresh <see cref="RespawnInvulnerable"/> window applied. Reuses the player's existing
+        /// entity id (== SessionId — see wire-death-respawn-live design.md D3) rather than
+        /// allocating a new one, since the session has no channel to learn about an entity-id
+        /// change; appends the resulting deltas to the caller's lists rather than fanning them out
+        /// itself, so both call sites (a lethal hit's instant-respawn branch, and a Downed
+        /// countdown's expiry) share one synchronous, awaitless mutation.
+        /// </summary>
+        private void RespawnPlayer(Character player, List<EntityMovedDelta> moves, List<MapDelta> combatDeltas)
+        {
+            player.Clear<Downed>();
+
+            if (player.Has<Aetherium.Components.Health>())
+            {
+                var health = player.Get<Aetherium.Components.Health>();
+                health.Level = health.MaxLevel;
+                combatDeltas.Add(IntFieldDelta(player.EntityId, "Health", "Level", health.MaxLevel));
+            }
+
+            var oldLoc = player.Get<Aetherium.Components.WorldLocation>();
+            var newLoc = ResolveRespawnLocation(player) ?? oldLoc;
+            if (newLoc is not null)
+            {
+                // Reconcile spawn bookkeeping so a later LeavePlayerAsync frees the cell the
+                // player actually ends up standing on, not a stale pre-respawn location.
+                if (_playerSpawns.Remove(player.EntityId, out var previousSpawn))
+                    _spawnsInUse.Remove(previousSpawn);
+                _spawnsInUse.Add(newLoc);
+                _playerSpawns[player.EntityId] = newLoc;
+
+                if (oldLoc is null || newLoc != oldLoc)
+                {
+                    player.Set(new Aetherium.Components.WorldLocation(newLoc.X, newLoc.Y, newLoc.Z));
+                    if (oldLoc is not null)
+                    {
+                        moves.Add(new EntityMovedDelta
+                        {
+                            EntityId = player.EntityId,
+                            OldX = oldLoc.X, OldY = oldLoc.Y, OldZ = oldLoc.Z,
+                            NewX = newLoc.X, NewY = newLoc.Y, NewZ = newLoc.Z,
+                        });
+                    }
+                }
+            }
+
+            if (_deathPolicy.RespawnInvulnerabilityTicks > 0)
+                player.Set(new RespawnInvulnerable(_deathPolicy.RespawnInvulnerabilityTicks));
+            else
+                player.Clear<RespawnInvulnerable>();
+        }
+
+        /// <summary>
+        /// Resolves a respawn destination per the active <see cref="DeathPolicy"/>'s
+        /// <c>RespawnLocation</c> mode (engine gap-analysis §4.11 — see wire-death-respawn-live).
+        /// <c>DeathLocation</c>/<c>EntryLocation</c>/<c>FixedCoordinates</c>/
+        /// <c>OffsetFromCoordinates</c> resolve directly; every other mode
+        /// (<c>NamedLocation</c>/<c>OffsetFromNamedLocation</c>/<c>LastSafeLocation</c>/
+        /// <c>PartyLeader</c>, and <c>WorldSpawn</c> itself) falls back to re-running the map's
+        /// normal spawn selection — the first four need a location-tag registry or party system
+        /// that doesn't exist yet (see tasks.md L.2/L.4). Always returns a freshly-constructed
+        /// <see cref="Aetherium.Components.WorldLocation"/> (never a live component reference), so
+        /// it's always safe for the caller to store or mutate independently.
+        /// </summary>
+        private Aetherium.Components.WorldLocation? ResolveRespawnLocation(Character player)
+        {
+            var locationPolicy = _deathPolicy.RespawnLocation ?? DeathPolicy.Default.RespawnLocation;
+            var current = player.Get<Aetherium.Components.WorldLocation>();
+
+            Aetherium.Components.WorldLocation? candidate = locationPolicy.Mode switch
+            {
+                RespawnLocationMode.DeathLocation => current,
+                RespawnLocationMode.EntryLocation => _playerSpawns.TryGetValue(player.EntityId, out var entry) ? entry : null,
+                RespawnLocationMode.FixedCoordinates => new Aetherium.Components.WorldLocation(locationPolicy.X, locationPolicy.Y, locationPolicy.Z),
+                RespawnLocationMode.OffsetFromCoordinates => new Aetherium.Components.WorldLocation(
+                    locationPolicy.X + locationPolicy.OffsetX, locationPolicy.Y + locationPolicy.OffsetY, locationPolicy.Z + locationPolicy.OffsetZ),
+                _ => null,
+            };
+
+            // A candidate the player already occupies (DeathLocation, or EntryLocation/coordinates
+            // that happen to match) must be accepted without an occupancy check — IsOpenForOccupancy
+            // would otherwise reject it solely because the player's own Character entity is there.
+            if (candidate is not null && candidate != current && _world is not null && !_world.IsOpenForOccupancy(candidate))
+                candidate = null;
+
+            candidate ??= SelectUnusedSpawn();
+
+            return candidate is null ? null : new Aetherium.Components.WorldLocation(candidate.X, candidate.Y, candidate.Z);
+        }
+
+        /// <summary>Builds the client-facing snapshot of a player's life-state (engine gap-analysis
+        /// §4.11 — see wire-death-respawn-live), sent via <see cref="SendPlayerEventAsync"/>.</summary>
+        private static Aetherium.Model.PlayerVitalsDto BuildVitalsDto(Character player)
+        {
+            var health = player.Has<Aetherium.Components.Health>() ? player.Get<Aetherium.Components.Health>() : null;
+            var downed = player.Has<Downed>() ? player.Get<Downed>() : null;
+            return new Aetherium.Model.PlayerVitalsDto
+            {
+                Health = health?.Level ?? 0,
+                MaxHealth = health?.MaxLevel ?? 0,
+                IsDowned = downed is not null,
+                DownedTicksRemaining = downed?.TicksRemaining ?? 0,
+                IsInvulnerable = player.Has<RespawnInvulnerable>(),
+            };
         }
 
         /// <summary>
@@ -1266,6 +1608,12 @@ namespace Aetherium.Server.MultiWorld
                     return new SpawnEntityResult { Success = false, ErrorMessage = "Could not create entity" };
                 }
 
+                // Preserve the request's creature-type string on the entity — several types map
+                // onto the same C# class above, and downstream consumers (first: the faction
+                // standing loop's kill:<creature-type> tags, wire-factions-live) need "wolf" vs
+                // "bandit" to survive past this switch.
+                entity.Set(new Aetherium.Components.CreatureTypeTag(request.CreatureType.ToLowerInvariant()));
+
                 // Set location and add to world
                 entity.Set(location);
                 _world.AddEntity(entity);
@@ -1314,6 +1662,14 @@ namespace Aetherium.Server.MultiWorld
                 ? entity as Character
                 : null;
         }
+
+        /// <summary>True when a player entity can act — not <see cref="Downed"/>, not a
+        /// <see cref="Corpse"/> (engine gap-analysis §4.11, Phase 2 — see
+        /// wire-death-respawn-live). Checked at the top of every player command; a downed or
+        /// permadead player is frozen until it respawns.</summary>
+        private static bool IsActionable(Character player) => !player.Has<Downed>() && !player.Has<Corpse>();
+
+        private const string DownedFailureReason = "You are downed and cannot act.";
 
         /// <summary>
         /// Routes a MapDelta through the host-side session manager. The manager
@@ -1374,11 +1730,34 @@ namespace Aetherium.Server.MultiWorld
             }
         }
 
+        /// <summary>
+        /// Sends a player-lifecycle signal (engine gap-analysis §4.11, Phase 2 — see
+        /// wire-death-respawn-live) — "ReceiveDowned"/"ReceiveRespawn"/"ReceiveDied" — directly to
+        /// one session's client. Not a <see cref="MapDelta"/>: this describes what's happening to
+        /// the player, not a change to world state, so it bypasses persistence/mirror
+        /// reconciliation entirely (unlike <see cref="FanOutAsync"/>/<see cref="SendToActorAsync"/>).
+        /// </summary>
+        private async Task SendPlayerEventAsync(string sessionId, string methodName, Aetherium.Model.PlayerVitalsDto vitals)
+        {
+            var mgr = GetSessionManager();
+            if (mgr is null) return;
+
+            try
+            {
+                await mgr.NotifyPlayerEventAsync(sessionId, methodName, vitals);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameMapGrain] Player event '{methodName}' failed for {sessionId}: {ex.Message}");
+            }
+        }
+
         public async Task<MoveResult> MoveAsync(string sessionId, Aetherium.Model.RelativeDirection direction, int distance)
         {
             if (_world is null || _mapState.State is null) return MoveResult.Fail("Map not initialized");
             var player = GetPlayerCharacter(sessionId);
             if (player is null) return MoveResult.Fail("Player not on map");
+            if (!IsActionable(player)) return MoveResult.Fail(DownedFailureReason);
 
             var current = player.Get<Aetherium.Components.WorldLocation>();
             if (current is null) return MoveResult.Fail("Player has no location");
@@ -1419,6 +1798,7 @@ namespace Aetherium.Server.MultiWorld
             if (_world is null) return RotateResult.Fail("Map not initialized");
             var player = GetPlayerCharacter(sessionId);
             if (player is null) return RotateResult.Fail("Player not on map");
+            if (!IsActionable(player)) return RotateResult.Fail(DownedFailureReason);
 
             var heading = player.Get<Aetherium.Components.HasHeading>();
             if (heading is null) return RotateResult.Fail("Player has no heading component");
@@ -1443,6 +1823,7 @@ namespace Aetherium.Server.MultiWorld
             if (_world is null) return ChangeLevelResult.Fail("Map not initialized");
             var player = GetPlayerCharacter(sessionId);
             if (player is null) return ChangeLevelResult.Fail("Player not on map");
+            if (!IsActionable(player)) return ChangeLevelResult.Fail(DownedFailureReason);
 
             var current = player.Get<Aetherium.Components.WorldLocation>();
             if (current is null) return ChangeLevelResult.Fail("Player has no location");
@@ -1478,6 +1859,90 @@ namespace Aetherium.Server.MultiWorld
         private readonly InteractionSystem _interactionSystem = new InteractionSystem();
         private readonly CombatSystem _combatSystem = new CombatSystem();
 
+        // Deep combat model (engine gap-analysis §4.2/§4.11), wired for the player-attacks-monster
+        // path only (AttackAsync) — see wire-combat-pipeline-live. AlwaysHitResolver reproduces the
+        // pre-pipeline always-hits MVP exactly. Monster-attacks-player retaliation in StepNpcsAsync
+        // deliberately stays on the old CombatSystem — a downed player entering the Dying/Corpse
+        // creature-death lifecycle needs its own design pass, see wire-death-respawn-live.
+        private readonly DamagePipeline _damagePipeline = new DamagePipeline();
+        private readonly IHitResolver _hitResolver = new AlwaysHitResolver();
+
+        // Per-world death/respawn rules (engine gap-analysis §4.11 — see wire-death-respawn-live),
+        // sourced from InitializeAsync's deathPolicy argument (persisted on MapState so it survives
+        // reactivation) rather than hardcoded, so different worlds can pick different death models
+        // as data. Defaults to DeathPolicy.Default until InitializeAsync/OnActivateAsync sets it.
+        private DeathPolicy _deathPolicy = DeathPolicy.Default;
+        private readonly DeathSystem _deathSystem = new DeathSystem();
+        private readonly CorpseExpirySystem _corpseExpirySystem = new CorpseExpirySystem();
+
+        // Per-world ability content (engine gap-analysis §4.3 — see wire-abilities-live), compiled from
+        // the world's AbilityConfig. The catalog is the runtime (compiled) form of the config's
+        // AbilityDefinitions; _characterResourcePools are the pool definitions stamped onto each joining
+        // character. Both default to empty (no abilities) until InitializeAsync/OnActivateAsync applies a
+        // config — the engine ships no abilities, they are entirely per-world data.
+        private AbilityCatalog _abilityCatalog = new AbilityCatalog();
+        private IReadOnlyList<ResourcePoolDefinition> _characterResourcePools = Array.Empty<ResourcePoolDefinition>();
+
+        /// <summary>Flat action-point cost of any ability cast this slice (mirrors <c>NpcActionCost</c>).
+        /// Per-ability AP cost co-designs with phased charge/cast/recover timing — a later slice.</summary>
+        private const double AbilityActionCost = 1.0;
+
+        private AbilityCompiler CreateAbilityCompiler() => new AbilityCompiler(_damagePipeline, _hitResolver);
+
+        /// <summary>Compiles a world's <see cref="AbilityConfig"/> into this map's runtime catalog and
+        /// remembers its character resource-pool definitions. Called from InitializeAsync (fresh) and
+        /// OnActivateAsync (rehydrate); null yields an empty catalog and no pools.</summary>
+        private void ApplyAbilityConfig(AbilityConfig? config)
+        {
+            _abilityCatalog = CreateAbilityCompiler().CompileCatalog(config?.Abilities);
+            _characterResourcePools = config?.CharacterResourcePools is { } pools
+                ? pools
+                : Array.Empty<ResourcePoolDefinition>();
+        }
+
+        // Per-world progression content (engine gap-analysis §4.4 — see wire-progression-live),
+        // compiled from the world's ProgressionConfig. _skillCatalog + _levelCurvesByPool are the
+        // runtime (compiled) forms; the raw config drives XP-award rules, attribute derivations, and
+        // the optional skill-gated-casting flag. All default to empty (no progression) until a config
+        // is applied — the engine ships no progression content, it is entirely per-world data.
+        private ProgressionConfig? _progressionConfig;
+        private SkillCatalog _skillCatalog = new SkillCatalog();
+        private IReadOnlyDictionary<string, ILevelCurve> _levelCurvesByPool = new Dictionary<string, ILevelCurve>();
+        private readonly SkillUnlockService _skillUnlockService = new SkillUnlockService();
+
+        /// <summary>Compiles a world's <see cref="ProgressionConfig"/> into this map's runtime skill
+        /// catalog + per-pool level curves and remembers the config (for award rules / derivations /
+        /// the cast-gate flag). Called from InitializeAsync (fresh) and OnActivateAsync (rehydrate);
+        /// null yields an empty catalog and no progression behavior.</summary>
+        private void ApplyProgressionConfig(ProgressionConfig? config)
+        {
+            _progressionConfig = config;
+            var compiler = new ProgressionCompiler();
+            _skillCatalog = compiler.CompileSkillCatalog(config?.Skills);
+            _levelCurvesByPool = compiler.CompileCurvesByPool(config?.Pools);
+        }
+
+        // Per-world faction content (engine gap-analysis §4.6 — see wire-factions-live and
+        // docs/factions-reputation.md), compiled from the world's FactionConfig. _factionRegistry /
+        // _factionRelations are the runtime (compiled) forms; the raw config supplies rank rules,
+        // standing bands, and starting standings. All default to empty (no factions) until a config
+        // is applied — the engine ships no factions, they are entirely per-world data.
+        private FactionConfig? _factionConfig;
+        private FactionRegistry _factionRegistry = new FactionRegistry();
+        private FactionRelations _factionRelations = new FactionRelations();
+
+        /// <summary>Compiles a world's <see cref="FactionConfig"/> into this map's runtime faction
+        /// registry + relations and remembers the config (rank rules / bands / starting standings).
+        /// Called from InitializeAsync (fresh) and OnActivateAsync (rehydrate); null yields an empty
+        /// registry and no faction behavior.</summary>
+        private void ApplyFactionConfig(FactionConfig? config)
+        {
+            _factionConfig = config;
+            var compiler = new FactionCompiler();
+            _factionRegistry = compiler.CompileRegistry(config?.Factions);
+            _factionRelations = compiler.CompileRelations(config?.Relations);
+        }
+
         private ActionContext? TryBuildActionContext(string sessionId)
         {
             if (_world is null) return null;
@@ -1492,6 +1957,7 @@ namespace Aetherium.Server.MultiWorld
         {
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null) return Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return Fail(DownedFailureReason);
 
             // Capture target metadata BEFORE the interaction removes the entity from
             // _world. Needed to build the post-success ItemTransferredDelta.
@@ -1521,6 +1987,7 @@ namespace Aetherium.Server.MultiWorld
         {
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null) return Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return Fail(DownedFailureReason);
 
             var result = _interactionSystem.TryDrop(ctx, itemEntityId);
             if (!result.Success)
@@ -1538,76 +2005,97 @@ namespace Aetherium.Server.MultiWorld
             return Ok();
         }
 
+        /// <summary>
+        /// Resolves a player's attack through <see cref="DamagePipeline"/> (engine gap-analysis
+        /// §4.2, Phase 2 — see openspec/changes/wire-combat-pipeline-live), replacing the old
+        /// instant-delete-on-kill <see cref="CombatSystem.TryAttack"/> path. Reach/existence/self-
+        /// attack checks stay here (the pipeline is deliberately reach-agnostic); damage amount is
+        /// still <see cref="CombatSystem.ComputeAttackDamage"/> (base <c>AttackPower</c> + best
+        /// weapon bonus) so the numbers are unchanged, only how a lethal hit is handled changes: the
+        /// target enters <see cref="Dying"/> (not removed) and is never deleted here — <see
+        /// cref="DeathSystem"/>/<see cref="CorpseExpirySystem"/>, ticked from <see cref="TickAsync"/>,
+        /// own its eventual Corpse conversion and (per <see cref="DeathPolicy"/>) removal. Clients
+        /// see this as an ordinary health-changed delta, the same as any non-lethal hit — no
+        /// EntityRemovedDelta is emitted for a killed monster anymore, since it is still present
+        /// (as Dying, then Corpse) for a future loot/harvest/revive affordance.
+        /// </summary>
         public async Task<Aetherium.Model.AttackResultDto> AttackAsync(string sessionId, string targetEntityId)
         {
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null)
                 return Aetherium.Model.AttackResultDto.Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player))
+                return Aetherium.Model.AttackResultDto.Fail(DownedFailureReason);
 
-            // Capture the target's location and kind BEFORE resolving — a lethal hit removes it
-            // from _world, and only slain monsters drop loot.
-            int lx = 0, ly = 0, lz = 0;
-            bool targetWasMonster = false;
-            if (_world!.Entities.TryGetValue(targetEntityId, out var preTarget))
-            {
-                targetWasMonster = preTarget is Aetherium.Monster;
-                var tl = preTarget.Get<Aetherium.Components.WorldLocation>();
-                if (tl is not null) { lx = tl.X; ly = tl.Y; lz = tl.Z; }
-            }
+            if (string.IsNullOrEmpty(targetEntityId))
+                return Aetherium.Model.AttackResultDto.Fail("No target");
+            if (targetEntityId == ctx.Player.EntityId)
+                return Aetherium.Model.AttackResultDto.Fail("Cannot attack yourself");
+            if (!_world!.Entities.TryGetValue(targetEntityId, out var target) || target is null)
+                return Aetherium.Model.AttackResultDto.Fail("Target not found");
+            if (!target.Has<Aetherium.Components.WorldLocation>())
+                return Aetherium.Model.AttackResultDto.Fail("Attacker or target has no location");
 
-            var result = _combatSystem.TryAttack(_world!, ctx.Player, targetEntityId);
-            if (!result.Success)
-                return new Aetherium.Model.AttackResultDto { Success = false, Reason = result.Reason };
+            var attackerLoc = ctx.ViewLocation;
+            var targetLoc = target.Get<Aetherium.Components.WorldLocation>();
+            int distance = Math.Abs(targetLoc.X - attackerLoc.X)
+                         + Math.Abs(targetLoc.Y - attackerLoc.Y)
+                         + Math.Abs(targetLoc.Z - attackerLoc.Z);
+            if (distance > 1)
+                return Aetherium.Model.AttackResultDto.Fail("Target is not in reach");
+
+            bool targetWasMonster = target is Aetherium.Monster;
+            var (lx, ly, lz) = (targetLoc.X, targetLoc.Y, targetLoc.Z);
+            var targetType = target.GetType().Name;
+
+            int damage = CombatSystem.ComputeAttackDamage(ctx.Player);
+            var packet = DamagePacket.Single("physical", damage, ctx.Player.EntityId);
+            var result = _damagePipeline.Resolve(ctx.Player, target, packet, _hitResolver, _deathPolicy.ResolveDyingTicks());
+            if (!result.Hit)
+                return new Aetherium.Model.AttackResultDto { Success = false, Reason = result.Reason ?? "Miss" };
+
+            int remainingHealth = target.Has<Aetherium.Components.Health>() ? target.Get<Aetherium.Components.Health>().Level : 0;
+            int roundedDamage = (int)Math.Round(result.Damage);
 
             // Combat analytics (persisted with the map): total damage, and kills on defeat.
-            _mapState.State.TotalDamageDealt += result.Damage;
-            if (result.TargetDefeated && targetWasMonster)
+            _mapState.State.TotalDamageDealt += roundedDamage;
+            if (result.TargetEnteredDying && targetWasMonster)
+            {
                 _mapState.State.MonstersDefeated++;
+                AwardKillXp(ctx.Player, targetType);
+                ApplyFactionAction(ctx.Player, KillActionTagFor(target));
+            }
 
-            // Death loot: a slain monster drops a weapon where it fell, so the kill loop
-            // pays off (kill → pick up sword → hit harder). Deterministic (always drops)
-            // so it stays testable. Spawn into canonical _world before persisting.
+            // Death loot: a slain monster drops a weapon where it fell, at the same moment it
+            // enters Dying (not later, on its eventual Corpse conversion) — preserves the
+            // "kill → pick up sword → hit harder" timing from before this pipeline swap.
+            // Deterministic (always drops) so it stays testable.
             string? lootId = null;
             string? lootType = null;
-            if (result.TargetDefeated && targetWasMonster)
+            if (result.TargetEnteredDying && targetWasMonster)
             {
-                var loot = new Aetherium.Entities.SwordItem();
-                loot.Set(new Aetherium.Components.WorldLocation(lx, ly, lz));
-                _world!.AddEntity(loot);
-                lootId = loot.EntityId;
+                lootId = SpawnMonsterLoot(lx, ly, lz);
                 lootType = nameof(Aetherium.Entities.SwordItem);
             }
 
             await _mapState.WriteStateAsync();
 
-            if (result.TargetDefeated)
-            {
-                await FanOutAsync(new EntityRemovedDelta
-                {
-                    MapId = _mapState.State.MapId,
-                    EntityId = targetEntityId,
-                    LastX = lx, LastY = ly, LastZ = lz,
-                });
+            await FanOutAsync(IntFieldDelta(targetEntityId, "Health", "Level", remainingHealth));
 
-                if (lootId is not null)
-                {
-                    var placement = EntityPlacement.FromLocation(lootId, lootType!,
-                        new Aetherium.Components.WorldLocation(lx, ly, lz));
-                    await FanOutAsync(new EntityPlacedDelta { Placement = placement });
-                }
-            }
-            else
+            if (lootId is not null)
             {
-                await FanOutAsync(IntFieldDelta(targetEntityId, "Health", "Level", result.RemainingHealth));
+                var placement = EntityPlacement.FromLocation(lootId, lootType!,
+                    new Aetherium.Components.WorldLocation(lx, ly, lz));
+                await FanOutAsync(new EntityPlacedDelta { Placement = placement });
             }
 
             return new Aetherium.Model.AttackResultDto
             {
                 Success = true,
-                Damage = result.Damage,
-                RemainingHealth = result.RemainingHealth,
-                TargetDefeated = result.TargetDefeated,
-                TargetType = result.TargetType,
+                Damage = roundedDamage,
+                RemainingHealth = remainingHealth,
+                TargetDefeated = result.TargetEnteredDying,
+                TargetType = targetType,
                 TargetEntityId = targetEntityId,
                 DroppedLootEntityId = lootId,
                 DroppedLootType = lootType,
@@ -1624,6 +2112,445 @@ namespace Aetherium.Server.MultiWorld
             });
         }
 
+        public Task<DeathPolicy> GetDeathPolicyAsync() => Task.FromResult(_deathPolicy);
+
+        /// <summary>
+        /// Casts a player's ability (engine gap-analysis §4.3, Phase 2 — see wire-abilities-live)
+        /// from the map's per-world compiled <see cref="AbilityCatalog"/>. Gated in order by:
+        /// actionable (not Downed/Corpse), catalog membership, per-caster cooldown, resource
+        /// affordability, single-target reach (when targeted), and the caster's <see cref="ActionSpeed"/>
+        /// budget — nothing is committed until every gate passes. On success it applies the ability's
+        /// effects (which reuse the live <see cref="DamagePipeline"/>/<see cref="StatusEffects"/>/pool
+        /// systems), then derives world deltas by diffing the target's Health/Dying state around the
+        /// effects — so a damaging cast that defeats a monster drops loot and records analytics
+        /// identically to a melee <see cref="AttackAsync"/>. Cast execution is instant this slice; the
+        /// definition's charge/cast/recover fields are unconsumed until phased casting ships.
+        /// </summary>
+        public async Task<AbilityResultDto> UseAbilityAsync(string sessionId, string abilityId, string? targetEntityId)
+        {
+            var ctx = TryBuildActionContext(sessionId);
+            if (ctx is null) return AbilityResultDto.Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return AbilityResultDto.Fail(DownedFailureReason);
+
+            if (string.IsNullOrEmpty(abilityId))
+                return AbilityResultDto.Fail("No ability specified");
+            if (!_abilityCatalog.TryGet(abilityId, out var ability) || ability is null)
+                return AbilityResultDto.Fail("Unknown ability");
+
+            // Skill-gated casting (engine gap-analysis §4.4 — see wire-progression-live): enforced
+            // only when the world opts in via RequireSkillToCastAbilities. When false (the default)
+            // catalog membership remains the sole ability gate, preserving pre-progression behavior.
+            if (_progressionConfig?.RequireSkillToCastAbilities == true
+                && (!ctx.Player.Has<GrantedAbilities>() || !ctx.Player.Get<GrantedAbilities>().Has(abilityId)))
+                return AbilityResultDto.Fail("Ability not yet learned");
+
+            // Cooldown gate.
+            if (ctx.Player.Has<AbilityCooldowns>() && ctx.Player.Get<AbilityCooldowns>().IsOnCooldown(abilityId))
+                return AbilityResultDto.Fail("Ability is on cooldown");
+
+            // Resource gate (check only — committed after every gate passes).
+            ResourcePool? pool = null;
+            if (!string.IsNullOrEmpty(ability.ResourcePoolTag) && ability.ResourceCost > 0)
+            {
+                if (!ctx.Player.Has<ResourcePools>()
+                    || !ctx.Player.Get<ResourcePools>().TryGet(ability.ResourcePoolTag!, out pool)
+                    || pool is null)
+                    return AbilityResultDto.Fail("Required resource pool is unavailable");
+                if (!pool.CanAfford(ability.ResourceCost))
+                    return AbilityResultDto.Fail("Insufficient resource");
+            }
+
+            // Target resolution + reach gate (single-entity target only this slice).
+            Entity? target = null;
+            int tx = 0, ty = 0, tz = 0;
+            bool targetWasMonster = false;
+            if (!string.IsNullOrEmpty(targetEntityId))
+            {
+                if (!_world!.Entities.TryGetValue(targetEntityId!, out target) || target is null)
+                    return AbilityResultDto.Fail("Target not found");
+                if (!target.Has<Aetherium.Components.WorldLocation>())
+                    return AbilityResultDto.Fail("Target has no location");
+                var tl = target.Get<Aetherium.Components.WorldLocation>();
+                tx = tl.X; ty = tl.Y; tz = tl.Z;
+                int distance = Math.Abs(tl.X - ctx.ViewLocation.X)
+                             + Math.Abs(tl.Y - ctx.ViewLocation.Y)
+                             + Math.Abs(tl.Z - ctx.ViewLocation.Z);
+                if (distance > (int)Math.Ceiling(ability.Range))
+                    return AbilityResultDto.Fail("Target is out of range");
+                targetWasMonster = target is Aetherium.Monster;
+            }
+
+            // Action-budget gate (commits AP). Flat cost this slice.
+            if (ctx.Player.Has<Aetherium.Components.ActionSpeed>()
+                && !ctx.Player.Get<Aetherium.Components.ActionSpeed>().TrySpend(AbilityActionCost))
+                return AbilityResultDto.Fail("Not enough action budget");
+
+            // Commit resource cost now that the cast is going ahead.
+            pool?.TrySpend(ability.ResourceCost);
+
+            // Snapshot the target's vitals so post-effect deltas can be derived generically — effects
+            // are opaque (void), so the grain diffs Health/Dying around them rather than the effects
+            // reporting what they did.
+            int? preHealth = target is not null && target.Has<Aetherium.Components.Health>()
+                ? target.Get<Aetherium.Components.Health>().Level
+                : (int?)null;
+            bool preDying = target is not null && target.Has<Dying>();
+
+            // Apply the ability's effects in order.
+            var effectContext = new AbilityEffectContext(_world!, ctx.Player, target);
+            foreach (var effect in ability.Effects)
+                effect.Apply(effectContext);
+
+            // Put the ability on cooldown for the caster.
+            if (ability.Cooldown > 0)
+            {
+                if (!ctx.Player.Has<AbilityCooldowns>())
+                    ctx.Player.Set(new AbilityCooldowns());
+                ctx.Player.Get<AbilityCooldowns>().SetCooldown(abilityId, (int)Math.Ceiling(ability.Cooldown));
+            }
+
+            // Derive + fan out world deltas for a target whose Health changed.
+            double damageDealt = 0;
+            bool targetDefeated = false;
+            if (target is not null && preHealth is not null && target.Has<Aetherium.Components.Health>())
+            {
+                int postHealth = target.Get<Aetherium.Components.Health>().Level;
+                if (postHealth != preHealth.Value)
+                {
+                    damageDealt = preHealth.Value - postHealth;
+                    if (damageDealt > 0)
+                        _mapState.State.TotalDamageDealt += (long)Math.Round(damageDealt);
+
+                    bool enteredDying = !preDying && target.Has<Dying>();
+                    if (enteredDying && targetWasMonster)
+                    {
+                        _mapState.State.MonstersDefeated++;
+                        targetDefeated = true;
+                        AwardKillXp(ctx.Player, target.GetType().Name);
+                        ApplyFactionAction(ctx.Player, KillActionTagFor(target));
+                    }
+
+                    await _mapState.WriteStateAsync();
+                    await FanOutAsync(IntFieldDelta(targetEntityId!, "Health", "Level", postHealth));
+
+                    if (targetDefeated)
+                    {
+                        var lootId = SpawnMonsterLoot(tx, ty, tz);
+                        var placement = EntityPlacement.FromLocation(lootId, nameof(Aetherium.Entities.SwordItem),
+                            new Aetherium.Components.WorldLocation(tx, ty, tz));
+                        await FanOutAsync(new EntityPlacedDelta { Placement = placement });
+                    }
+                }
+            }
+
+            return new AbilityResultDto
+            {
+                Success = true,
+                AbilityId = abilityId,
+                TargetEntityId = targetEntityId,
+                TargetDefeated = targetDefeated,
+                DamageDealt = damageDealt,
+            };
+        }
+
+        /// <summary>Spawns a monster's death-drop (a <see cref="Aetherium.Entities.SwordItem"/>) at the
+        /// fall location and returns its entity id — the shared drop used by both a melee kill
+        /// (<see cref="AttackAsync"/>) and an ability kill so the two never diverge. Adds to
+        /// <c>_world</c> only; the caller fans out the placement delta.</summary>
+        private string SpawnMonsterLoot(int lx, int ly, int lz)
+        {
+            var loot = new Aetherium.Entities.SwordItem();
+            loot.Set(new Aetherium.Components.WorldLocation(lx, ly, lz));
+            _world!.AddEntity(loot);
+            return loot.EntityId;
+        }
+
+        /// <summary>Per-tick ability upkeep (engine gap-analysis §4.3 — see wire-abilities-live): counts
+        /// down every actor's <see cref="AbilityCooldowns"/> and regenerates every actor's
+        /// <see cref="ResourcePools"/>. A non-empty <see cref="ThreatTable"/> is the in-combat signal
+        /// that gates <c>OutOfCombat</c>-policy regen (the engine has no dedicated combat-state flag).</summary>
+        private void TickAbilityUpkeep()
+        {
+            if (_world is null) return;
+
+            foreach (var entity in _world.Entities.Values)
+            {
+                if (entity.Has<AbilityCooldowns>())
+                    entity.Get<AbilityCooldowns>().Tick();
+
+                if (entity.Has<ResourcePools>())
+                {
+                    bool inCombat = entity.Has<ThreatTable>()
+                        && entity.Get<ThreatTable>().ThreatByAttacker.Count > 0;
+                    foreach (var poolEntry in entity.Get<ResourcePools>().All)
+                        poolEntry.Regen(inCombat);
+                }
+            }
+        }
+
+        public Task<ResourcePoolsDto> GetResourcePoolsAsync(string sessionId)
+        {
+            var dto = new ResourcePoolsDto();
+            var player = GetPlayerCharacter(sessionId);
+            if (player is not null && player.Has<ResourcePools>())
+            {
+                foreach (var poolEntry in player.Get<ResourcePools>().All)
+                    dto.Pools.Add(new ResourcePoolDto
+                    {
+                        Tag = poolEntry.Tag,
+                        Current = poolEntry.Current,
+                        Max = poolEntry.Max,
+                        IsInverse = poolEntry.IsInverse,
+                    });
+            }
+            return Task.FromResult(dto);
+        }
+
+        public Task<Dictionary<string, int>> GetAbilityCooldownsAsync(string sessionId)
+        {
+            var result = new Dictionary<string, int>();
+            var player = GetPlayerCharacter(sessionId);
+            if (player is not null && player.Has<AbilityCooldowns>())
+                foreach (var kv in player.Get<AbilityCooldowns>().Snapshot)
+                    result[kv.Key] = kv.Value;
+            return Task.FromResult(result);
+        }
+
+        /// <summary>Awards XP to <paramref name="killer"/>'s progress pools for defeating an entity of
+        /// type <paramref name="defeatedType"/> (engine gap-analysis §4.4 — see wire-progression-live),
+        /// per the world's declarative <see cref="XpAwardRule"/>s. Called from the shared monster-defeat
+        /// branch of both <see cref="AttackAsync"/> and <see cref="UseAbilityAsync"/> so melee and
+        /// ability kills award identically. A rule targeting an undefined pool (no compiled curve) is
+        /// skipped. No-op when the world declares no progression.</summary>
+        private void AwardKillXp(Character killer, string defeatedType)
+        {
+            if (_progressionConfig is null || _progressionConfig.XpAwardRules.Count == 0)
+                return;
+            if (!killer.Has<ProgressPools>())
+                return;
+
+            var pools = killer.Get<ProgressPools>();
+            foreach (var rule in _progressionConfig.XpAwardRules)
+            {
+                if (rule.OnEvent != XpAwardEvent.MonsterDefeated)
+                    continue;
+                if (!string.IsNullOrEmpty(rule.EnemyTypeFilter)
+                    && !string.Equals(rule.EnemyTypeFilter, defeatedType, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (_levelCurvesByPool.TryGetValue(rule.PoolId, out var curve) && curve is not null)
+                    pools.AddXp(rule.PoolId, rule.Amount, curve);
+            }
+        }
+
+        /// <summary>The engine-emitted faction action tag for killing <paramref name="victim"/>:
+        /// <c>kill:&lt;creature-type&gt;</c>, preferring the spawn-time <see cref="Aetherium.Components.CreatureTypeTag"/>
+        /// (so "wolf" and "bandit" stay distinct despite sharing the Monster class) and falling back
+        /// to the lowercased C# type name for entities spawned outside SpawnEntityAsync.</summary>
+        private static string KillActionTagFor(Entity victim)
+        {
+            string creatureType = victim.Has<Aetherium.Components.CreatureTypeTag>()
+                ? victim.Get<Aetherium.Components.CreatureTypeTag>().Value
+                : victim.GetType().Name.ToLowerInvariant();
+            return $"kill:{creatureType}";
+        }
+
+        /// <summary>
+        /// The single standing-mutation chokepoint (engine gap-analysis §4.6 — see wire-factions-live
+        /// and docs/factions-reputation.md §3): applies <paramref name="actionTag"/> against every
+        /// configured faction's doctrine — each judges the act by its own values, unknown tags mean
+        /// no effect — then re-evaluates declarative rank grants for each changed standing. Kill-site
+        /// code is just the first caller; future quest/trade/trespass emitters call this with their
+        /// own tag families, and the ECA generalization replaces this method's inside, not its call
+        /// sites. No-op when the world declares no factions or the actor carries no ledger.
+        /// </summary>
+        private void ApplyFactionAction(Character actor, string actionTag)
+        {
+            if (_factionConfig is null || !actor.Has<ReputationLedger>())
+                return;
+
+            var ledger = actor.Get<ReputationLedger>();
+            foreach (var faction in _factionRegistry.All)
+            {
+                if (faction.Doctrine.DeltaFor(actionTag) == 0)
+                    continue;
+
+                var reputation = ledger.ApplyAction(faction, actionTag);
+                var def = _factionConfig.Factions.FirstOrDefault(f => f.Id == faction.Id);
+                RankEvaluator.Apply(reputation, def?.RankRules);
+            }
+        }
+
+        public Task<ReputationLedgerDto> GetReputationAsync(string sessionId)
+        {
+            var dto = new ReputationLedgerDto();
+            var player = GetPlayerCharacter(sessionId);
+            if (player is not null && player.Has<ReputationLedger>())
+            {
+                foreach (var kv in player.Get<ReputationLedger>().ByFaction)
+                {
+                    dto.Reputations.Add(new ReputationDto
+                    {
+                        FactionId = kv.Key,
+                        Standing = kv.Value.Standing,
+                        Band = BandResolver.Resolve(kv.Value.Standing, _factionConfig?.Bands),
+                        Ranks = new List<string>(kv.Value.Ranks),
+                    });
+                }
+            }
+            return Task.FromResult(dto);
+        }
+
+        public Task<FactionsStateDto> GetFactionsAsync()
+        {
+            var dto = new FactionsStateDto();
+            if (_factionConfig is not null)
+            {
+                foreach (var faction in _factionRegistry.All)
+                    dto.Factions.Add(new FactionInfoDto
+                    {
+                        Id = faction.Id,
+                        Name = faction.Name,
+                        Tags = new List<string>(faction.Tags),
+                    });
+
+                // Report relations from the source definitions (the compiled matrix is sparse and
+                // unenumerable by design); Mutual definitions expand to both directions.
+                foreach (var rel in _factionConfig.Relations)
+                {
+                    dto.Relations.Add(new FactionRelationDto
+                    {
+                        FromFactionId = rel.FromFactionId,
+                        ToFactionId = rel.ToFactionId,
+                        Disposition = rel.Disposition,
+                    });
+                    if (rel.Mutual)
+                        dto.Relations.Add(new FactionRelationDto
+                        {
+                            FromFactionId = rel.ToFactionId,
+                            ToFactionId = rel.FromFactionId,
+                            Disposition = rel.Disposition,
+                        });
+                }
+
+                dto.Bands.AddRange(_factionConfig.Bands);
+            }
+            return Task.FromResult(dto);
+        }
+
+        /// <summary>Applies the world's <see cref="AttributeDerivation"/>s to <paramref name="player"/>
+        /// (engine gap-analysis §4.4): writes each derived stat (<c>Base + PerPoint × attribute</c>)
+        /// onto its component. A rise in a derived max (e.g. vitality → max health) also raises the
+        /// current value by the same delta, so joining at higher vitality spawns at full derived
+        /// health and a mid-run vitality gain heals proportionally. Called at join and after any
+        /// attribute change; no-op when the world declares no derivations.</summary>
+        private void ApplyAttributeDerivations(Character player)
+        {
+            if (_progressionConfig is null || _progressionConfig.AttributeDerivations.Count == 0)
+                return;
+            if (!player.Has<Aetherium.Server.Progression.Attributes>())
+                return;
+
+            var attrs = player.Get<Aetherium.Server.Progression.Attributes>();
+            foreach (var d in _progressionConfig.AttributeDerivations)
+            {
+                double value = d.Base + d.PerPoint * attrs.Get(d.AttributeId, 0);
+                switch (d.DerivedStat)
+                {
+                    case DerivedStat.HealthMax when player.Has<Aetherium.Components.Health>():
+                        var health = player.Get<Aetherium.Components.Health>();
+                        int newMax = (int)Math.Round(value);
+                        int delta = newMax - health.MaxLevel;
+                        health.MaxLevel = newMax;
+                        if (delta > 0)
+                            health.Level += delta;
+                        health.Level = Math.Clamp(health.Level, 0, newMax);
+                        break;
+                    case DerivedStat.ActionSpeed when player.Has<Aetherium.Components.ActionSpeed>():
+                        player.Get<Aetherium.Components.ActionSpeed>().Speed = value;
+                        break;
+                }
+            }
+        }
+
+        /// <summary>Unlocks a skill for the session's player (engine gap-analysis §4.4 — see
+        /// wire-progression-live): gated by <see cref="SkillUnlockService"/> (prerequisites + optional
+        /// pool-level requirement), then applies the skill's effects — <c>ModifiesAttributeId</c>
+        /// adjusts an attribute (re-deriving dependent stats) and <c>UnlocksAbilityId</c> adds to the
+        /// player's granted abilities.</summary>
+        public Task<UnlockSkillResultDto> UnlockSkillAsync(string sessionId, string skillId)
+        {
+            var player = GetPlayerCharacter(sessionId);
+            if (player is null)
+                return Task.FromResult(UnlockSkillResultDto.Fail("Map not initialized or player not on map"));
+            if (!IsActionable(player))
+                return Task.FromResult(UnlockSkillResultDto.Fail(DownedFailureReason));
+            if (!player.Has<UnlockedSkills>())
+                return Task.FromResult(UnlockSkillResultDto.Fail("This world has no progression"));
+
+            var unlocked = player.Get<UnlockedSkills>();
+            var pools = player.Has<ProgressPools>() ? player.Get<ProgressPools>() : null;
+            var outcome = _skillUnlockService.TryUnlock(unlocked, _skillCatalog, skillId, pools);
+            if (outcome != SkillUnlockResult.Unlocked)
+                return Task.FromResult(new UnlockSkillResultDto
+                {
+                    Success = false,
+                    SkillId = skillId,
+                    Result = outcome.ToString(),
+                    Reason = outcome switch
+                    {
+                        SkillUnlockResult.AlreadyUnlocked => "Skill already unlocked",
+                        SkillUnlockResult.UnknownSkill => "Unknown skill",
+                        SkillUnlockResult.PrerequisitesNotMet => "Prerequisites not met",
+                        SkillUnlockResult.PoolLevelTooLow => "Required pool level not reached",
+                        _ => "Skill could not be unlocked",
+                    },
+                });
+
+            // Apply the unlocked skill's effects.
+            if (_skillCatalog.TryGet(skillId, out var skill) && skill is not null)
+            {
+                if (!string.IsNullOrEmpty(skill.ModifiesAttributeId)
+                    && player.Has<Aetherium.Server.Progression.Attributes>())
+                {
+                    var attrs = player.Get<Aetherium.Server.Progression.Attributes>();
+                    attrs.Set(skill.ModifiesAttributeId!, attrs.Get(skill.ModifiesAttributeId!) + skill.ModifierAmount);
+                    ApplyAttributeDerivations(player);
+                }
+                if (!string.IsNullOrEmpty(skill.UnlocksAbilityId) && player.Has<GrantedAbilities>())
+                    player.Get<GrantedAbilities>().Grant(skill.UnlocksAbilityId!);
+            }
+
+            return Task.FromResult(new UnlockSkillResultDto
+            {
+                Success = true,
+                SkillId = skillId,
+                Result = SkillUnlockResult.Unlocked.ToString(),
+            });
+        }
+
+        public Task<ProgressionStateDto> GetProgressionAsync(string sessionId)
+        {
+            var dto = new ProgressionStateDto();
+            var player = GetPlayerCharacter(sessionId);
+            if (player is not null)
+            {
+                if (player.Has<ProgressPools>())
+                    foreach (var kv in player.Get<ProgressPools>().Pools)
+                        dto.Pools.Add(new ProgressPoolDto { Id = kv.Key, Xp = kv.Value.Xp, Level = kv.Value.Level });
+
+                if (player.Has<Aetherium.Server.Progression.Attributes>())
+                    foreach (var kv in player.Get<Aetherium.Server.Progression.Attributes>().Values)
+                        dto.Attributes[kv.Key] = kv.Value;
+
+                if (player.Has<UnlockedSkills>())
+                    dto.UnlockedSkills.AddRange(player.Get<UnlockedSkills>().Ids);
+
+                if (player.Has<GrantedAbilities>())
+                    dto.GrantedAbilities.AddRange(player.Get<GrantedAbilities>().Ids);
+            }
+            return Task.FromResult(dto);
+        }
+
         public async Task<Aetherium.Model.InteractionResultDto> OpenAsync(string sessionId, string targetEntityId)
             => await ToggleDoorAsync(sessionId, targetEntityId, wantOpen: true);
 
@@ -1634,6 +2561,7 @@ namespace Aetherium.Server.MultiWorld
         {
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null) return Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return Fail(DownedFailureReason);
 
             var result = wantOpen
                 ? _interactionSystem.TryOpen(ctx, targetEntityId)
@@ -1665,6 +2593,7 @@ namespace Aetherium.Server.MultiWorld
             // See openspec/changes/extend-delta-vocabulary-for-use-disambiguation.
             var ctx = TryBuildActionContext(sessionId);
             if (ctx is null) return Fail("Map not initialized or player not on map");
+            if (!IsActionable(ctx.Player)) return Fail(DownedFailureReason);
 
             // Resolve item (must be in inventory). Target is optional for some
             // modes (consume, place) but required for others (unlock, lockpick,
@@ -1963,6 +2892,29 @@ namespace Aetherium.Server.MultiWorld
 
         /// <summary>Rolling combat analytics: total damage players have dealt on this map.</summary>
         [Id(10)] public long TotalDamageDealt { get; set; }
+
+        /// <summary>Per-world death/respawn rules captured at <c>InitializeAsync</c> time (engine
+        /// gap-analysis §4.11 — see wire-death-respawn-live), so the grain can rehydrate
+        /// <c>_deathPolicy</c> on reactivation without re-running InitializeAsync. Null means the
+        /// world specified none — the grain falls back to <c>DeathPolicy.Default</c>.</summary>
+        [Id(11)] public Aetherium.Model.Combat.DeathPolicy? DeathPolicy { get; set; }
+
+        /// <summary>Per-world ability content captured at <c>InitializeAsync</c> time (engine
+        /// gap-analysis §4.3 — see wire-abilities-live), so the grain can recompile its ability
+        /// catalog and re-stamp resource pools on reactivation without re-running InitializeAsync.
+        /// Null means the world specified no abilities.</summary>
+        [Id(12)] public Aetherium.Model.Abilities.AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content captured at <c>InitializeAsync</c> time
+        /// (engine gap-analysis §4.4 — see wire-progression-live), so the grain can recompile its
+        /// skill catalog/curves and re-stamp progression components on reactivation. Null means the
+        /// world specified no progression.</summary>
+        [Id(13)] public Aetherium.Model.Progression.ProgressionConfig? ProgressionConfig { get; set; }
+
+        /// <summary>Per-world faction content captured at <c>InitializeAsync</c> time (engine
+        /// gap-analysis §4.6 — see wire-factions-live), so the grain can recompile its faction
+        /// registry/relations on reactivation. Null means the world specified no factions.</summary>
+        [Id(14)] public Aetherium.Model.Factions.FactionConfig? FactionConfig { get; set; }
     }
 }
 

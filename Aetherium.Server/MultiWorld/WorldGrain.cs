@@ -82,6 +82,10 @@ namespace Aetherium.Server.MultiWorld
                 MapIds = new List<string>(),
                 ClusterId = config.ClusterId
             };
+            _worldState.State.DeathPolicy = config.DeathPolicy;
+            _worldState.State.AbilityConfig = config.AbilityConfig;
+            _worldState.State.ProgressionConfig = config.ProgressionConfig;
+            _worldState.State.FactionConfig = config.FactionConfig;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -163,7 +167,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -339,6 +343,23 @@ namespace Aetherium.Server.MultiWorld
     {
         public WorldInfo Info { get; set; } = new WorldInfo();
         public Dictionary<string, string> PlayerLocations { get; set; } = new Dictionary<string, string>(); // PlayerId -> MapId
+
+        /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11), set once at
+        /// InitializeAsync and applied to every map this world creates (initial and later). Null
+        /// means every map falls back to <see cref="Aetherium.Model.Combat.DeathPolicy.Default"/>.</summary>
+        public Aetherium.Model.Combat.DeathPolicy? DeathPolicy { get; set; }
+
+        /// <summary>Per-world ability content (engine gap-analysis §4.3), set once at InitializeAsync
+        /// and applied to every map this world creates (initial and later). Null means no abilities.</summary>
+        public Aetherium.Model.Abilities.AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content (engine gap-analysis §4.4), set once at
+        /// InitializeAsync and applied to every map this world creates. Null means no progression.</summary>
+        public Aetherium.Model.Progression.ProgressionConfig? ProgressionConfig { get; set; }
+
+        /// <summary>Per-world faction content (engine gap-analysis §4.6), set once at InitializeAsync
+        /// and applied to every map this world creates. Null means no factions.</summary>
+        public Aetherium.Model.Factions.FactionConfig? FactionConfig { get; set; }
     }
 }
 

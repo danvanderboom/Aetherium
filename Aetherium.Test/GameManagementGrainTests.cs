@@ -139,6 +139,35 @@ namespace Aetherium.Test
             Assert.That(worldId, Is.Not.Null.And.Not.Empty);
         }
 
+        /// <summary>Verifies "Per-World Death Policy" in
+        /// specs/death-respawn-policy/spec.md (openspec/changes/wire-death-respawn-live) — the
+        /// CreateWorldRequest-facing end of the plumbing (WorldGrainTests covers the WorldConfig
+        /// end directly).</summary>
+        [Test]
+        public async Task GameManagement_CreateWorldRequest_DeathPolicy_ReachesTheCreatedMap()
+        {
+            var managementGrain = _cluster.GrainFactory.GetGrain<IGameManagementGrain>("main");
+            var request = new CreateWorldRequest
+            {
+                Name = "Request Death Policy World",
+                GeneratorType = "maze",
+                Size = new WorldSize { Width = 50, Height = 50, Depth = 1 },
+                DeathPolicy = new Aetherium.Model.Combat.DeathPolicy
+                {
+                    Permadeath = true,
+                    ReviveWindowTicks = 42,
+                },
+            };
+
+            var worldId = await managementGrain.CreateWorldAsync(request);
+            var worldGrain = _cluster.GrainFactory.GetGrain<IWorldGrain>(worldId);
+            var mapIds = await worldGrain.GetMapIdsAsync();
+            var policy = await _cluster.GrainFactory.GetGrain<IGameMapGrain>(mapIds.First()).GetDeathPolicyAsync();
+
+            Assert.That(policy.Permadeath, Is.True);
+            Assert.That(policy.ReviveWindowTicks, Is.EqualTo(42));
+        }
+
         [Test]
         public async Task GameManagement_ShouldList_AllWorlds()
         {

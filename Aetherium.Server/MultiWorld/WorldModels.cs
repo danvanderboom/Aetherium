@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Orleans;
+using Aetherium.Model.Combat;
+using Aetherium.Model.Abilities;
+using Aetherium.Model.Progression;
+using Aetherium.Model.Factions;
 
 namespace Aetherium.Server.MultiWorld
 {
@@ -23,6 +27,23 @@ namespace Aetherium.Server.MultiWorld
         [Id(10)] public string NarrativeStateScope { get; set; } = "shared"; // "shared" or "per-world"
         [Id(11)] public int? NarrativeSeed { get; set; } // Optional seed for deterministic narrative generation
         [Id(12)] public string? ClusterId { get; set; } // Optional cluster ID for multi-world ecosystems
+
+        /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11). Null means every map
+        /// on this world falls back to <see cref="DeathPolicy.Default"/> — see wire-death-respawn-live.</summary>
+        [Id(13)] public DeathPolicy? DeathPolicy { get; set; }
+
+        /// <summary>Per-world ability content (engine gap-analysis §4.3): abilities available on this
+        /// world's maps and the resource pools its characters start with. Null means no abilities. See
+        /// wire-abilities-live.</summary>
+        [Id(14)] public AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content (engine gap-analysis §4.4). Null means no
+        /// progression. See wire-progression-live.</summary>
+        [Id(15)] public ProgressionConfig? ProgressionConfig { get; set; }
+
+        /// <summary>Per-world faction content (engine gap-analysis §4.6). Null means no factions.
+        /// See wire-factions-live.</summary>
+        [Id(16)] public FactionConfig? FactionConfig { get; set; }
     }
 
     /// <summary>
@@ -83,6 +104,23 @@ namespace Aetherium.Server.MultiWorld
         [Id(5)] public int MaxPlayers { get; set; } = 100;
         [Id(6)] public WorldSize? Size { get; set; }
         [Id(7)] public string? ClusterId { get; set; } // Optional cluster ID for multi-world ecosystems
+
+        /// <summary>Per-world death/respawn rules (engine gap-analysis §4.11). Null means every map
+        /// on this world falls back to <see cref="DeathPolicy.Default"/> — see wire-death-respawn-live.</summary>
+        [Id(8)] public DeathPolicy? DeathPolicy { get; set; }
+
+        /// <summary>Per-world ability content (engine gap-analysis §4.3): abilities available on this
+        /// world's maps and the resource pools its characters start with. Null means no abilities. See
+        /// wire-abilities-live.</summary>
+        [Id(9)] public AbilityConfig? AbilityConfig { get; set; }
+
+        /// <summary>Per-world character-progression content (engine gap-analysis §4.4). Null means no
+        /// progression. See wire-progression-live.</summary>
+        [Id(10)] public ProgressionConfig? ProgressionConfig { get; set; }
+
+        /// <summary>Per-world faction content (engine gap-analysis §4.6). Null means no factions.
+        /// See wire-factions-live.</summary>
+        [Id(11)] public FactionConfig? FactionConfig { get; set; }
     }
 
     /// <summary>

@@ -688,7 +688,11 @@ namespace Aetherium.Server.Management
                     GeneratorParameters = hubConfig?.GeneratorParameters ?? (request.GeneratorParameters ?? new Dictionary<string, object>()),
                     MaxPlayers = hubConfig?.MaxPlayers ?? request.MaxPlayers,
                     NarrativeId = hubConfig?.NarrativeId ?? request.NarrativeId,
-                    ClusterId = hubConfig?.ClusterId ?? request.ClusterId
+                    ClusterId = hubConfig?.ClusterId ?? request.ClusterId,
+                    DeathPolicy = hubConfig?.DeathPolicy ?? request.DeathPolicy,
+                    AbilityConfig = hubConfig?.AbilityConfig ?? request.AbilityConfig,
+                    ProgressionConfig = hubConfig?.ProgressionConfig ?? request.ProgressionConfig,
+                    FactionConfig = hubConfig?.FactionConfig ?? request.FactionConfig
                 };
 
                 // Default to public world
@@ -718,7 +722,11 @@ namespace Aetherium.Server.Management
                     Size = request.Size ?? new WorldSize { Width = 100, Height = 100, Depth = 1 },
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = "system",
-                    ClusterId = request.ClusterId
+                    ClusterId = request.ClusterId,
+                    DeathPolicy = request.DeathPolicy,
+                    AbilityConfig = request.AbilityConfig,
+                    ProgressionConfig = request.ProgressionConfig,
+                    FactionConfig = request.FactionConfig
                 };
 
                 // Ensure WorldId is set

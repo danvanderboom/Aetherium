@@ -133,9 +133,58 @@ namespace Aetherium.Test.Combat
             Assert.That(r3.RemainingHealth, Is.EqualTo(0));
             Assert.That(r3.TargetDefeated, Is.True, "Third hit should defeat the monster.");
 
-            // The monster is gone from canonical state: attacking it again can't find it.
+            // The monster is Dying (not removed from canonical state — see DamagePipeline), so a
+            // further attack is rejected rather than finding no target.
             var r4 = await map.AttackAsync(player, monsterId);
-            Assert.That(r4.Success, Is.False, "A defeated target should no longer exist in the world.");
+            Assert.That(r4.Success, Is.False, "A dying/dead target must reject further attacks.");
+        }
+
+        /// <summary>Verifies "Player Attacks Route Through DamagePipeline" (Dying/Corpse persistence)
+        /// in specs/combat/spec.md (openspec/changes/wire-combat-pipeline-live).</summary>
+        [Test]
+        public async Task Attack_KillingMonster_MonsterPersistsAsDying_NotRemovedFromWorld()
+        {
+            var (map, player, monsterId) = await InitMapWithAdjacentMonsterAsync();
+
+            await map.AttackAsync(player, monsterId);
+            await map.AttackAsync(player, monsterId);
+            var kill = await map.AttackAsync(player, monsterId);
+            Assert.That(kill.TargetDefeated, Is.True);
+
+            // Unlike the pre-pipeline instant-delete behavior, the monster is still present in
+            // canonical state — at 0 HP, transitioned to Dying rather than removed.
+            var snap = await map.GetWorldSnapshotAsync();
+            Assert.That(HealthOf(snap, monsterId), Is.EqualTo(0),
+                "A killed monster persists in the world at 0 HP (Dying), not removed.");
+        }
+
+        /// <summary>Verifies "Live NPC Tick Skips Dying/Corpse Monsters" in specs/combat/spec.md
+        /// (openspec/changes/wire-combat-pipeline-live).</summary>
+        [Test]
+        public async Task Tick_KilledMonster_NoLongerActs()
+        {
+            var (map, player, monsterId) = await InitMapWithAdjacentMonsterAsync();
+
+            await map.AttackAsync(player, monsterId);
+            await map.AttackAsync(player, monsterId);
+            await map.AttackAsync(player, monsterId); // 10 → 0, enters Dying
+
+            var before = await map.GetWorldSnapshotAsync();
+            var monsterBefore = before.Entities.First(e => e.EntityId == monsterId);
+            var (mx, my, mz) = (monsterBefore.X, monsterBefore.Y, monsterBefore.Z);
+
+            // A live (non-Dying) monster adjacent to the player would retaliate on this tick
+            // (see Tick_MonsterAdjacentToPlayer_Retaliates_DamagingButNotRemovingPlayer). A Dying
+            // one must not: no movement, and the player takes no damage.
+            var playerHealthBefore = HealthOf(before, player);
+            await map.TickAsync(TimeSpan.FromSeconds(1));
+            var after = await map.GetWorldSnapshotAsync();
+
+            var monsterAfter = after.Entities.First(e => e.EntityId == monsterId);
+            Assert.That((monsterAfter.X, monsterAfter.Y, monsterAfter.Z), Is.EqualTo((mx, my, mz)),
+                "A Dying monster must not wander.");
+            Assert.That(HealthOf(after, player), Is.EqualTo(playerHealthBefore),
+                "A Dying monster must not retaliate.");
         }
 
         private static int HealthOf(WorldSnapshot snap, string entityId)
@@ -172,6 +221,51 @@ namespace Aetherium.Test.Combat
             var monsterAfter = after.Entities.First(e => e.EntityId == monsterId);
             Assert.That((monsterAfter.X, monsterAfter.Y, monsterAfter.Z), Is.EqualTo((mx, my, mz)),
                 "A monster that attacks does not also move that tick.");
+        }
+
+        /// <summary>Verifies "Live NPC Tick Delegates to Behavior Tree" (target scoping) in
+        /// specs/npc-behavior-trees/spec.md (openspec/changes/wire-npc-behavior-trees-live).</summary>
+        [Test]
+        public async Task Tick_TwoAdjacentMonsters_NoPlayerNearby_DoNotAttackEachOther()
+        {
+            var worldId = $"world-{Guid.NewGuid()}";
+            var mapId = $"{worldId}-map-1";
+            var worldGrain = _cluster.GrainFactory.GetGrain<IWorldGrain>(worldId);
+            await worldGrain.InitializeAsync(new WorldConfig
+            {
+                WorldId = worldId,
+                Name = "Combat Test World",
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 }
+            });
+
+            var map = _cluster.GrainFactory.GetGrain<IGameMapGrain>(mapId);
+            await map.InitializeAsync(worldId, "floor-1",
+                new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                "maze", new Dictionary<string, object>());
+
+            // Find two horizontally-adjacent passable cells and spawn a monster on each. With no
+            // player joined on this map, the only possible attack target for either monster would
+            // be the other monster — the behavior tree's target scoping (MonsterBehaviors.TargetsKey,
+            // populated from GameMapGrain's joined-player list) must keep them from doing so.
+            string? m1 = null, m2 = null;
+            for (int x = 2; x <= 30 && m1 is null; x++)
+            {
+                for (int y = 2; y <= 30 && m1 is null; y++)
+                {
+                    var s1 = await map.SpawnEntityAsync(new SpawnEntityRequest { CreatureType = "monster", X = x, Y = y, Z = 0 });
+                    if (!s1.Success) continue;
+                    var s2 = await map.SpawnEntityAsync(new SpawnEntityRequest { CreatureType = "monster", X = x + 1, Y = y, Z = 0 });
+                    if (s2.Success) { m1 = s1.EntityId; m2 = s2.EntityId; }
+                }
+            }
+            Assert.That(m1, Is.Not.Null, "Expected two adjacent passable cells to place monsters on this map seed.");
+
+            for (int i = 0; i < 3; i++)
+                await map.TickAsync(TimeSpan.FromSeconds(1));
+
+            var after = await map.GetWorldSnapshotAsync();
+            Assert.That(HealthOf(after, m1!), Is.EqualTo(30), "Monsters must never attack each other — only joined players are valid targets.");
+            Assert.That(HealthOf(after, m2!), Is.EqualTo(30), "Monsters must never attack each other — only joined players are valid targets.");
         }
 
         [Test]

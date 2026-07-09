@@ -69,6 +69,31 @@ namespace Aetherium.Server
             }
         }
 
+        /// <summary>
+        /// Sends a named, player-scoped event directly to one session's client — not a
+        /// <see cref="MapDelta"/>, so it does not touch the session's world mirror or trigger a
+        /// perception push. Used for player-lifecycle signals (engine gap-analysis §4.11, Phase 2 —
+        /// see wire-death-respawn-live) such as <c>ReceiveDowned</c>/<c>ReceiveRespawn</c>/
+        /// <c>ReceiveDied</c>, which describe what's happening to the player rather than a change to
+        /// world state.
+        /// </summary>
+        public async Task NotifyPlayerEventAsync(string sessionId, string methodName, object payload)
+        {
+            if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(methodName)) return;
+
+            var session = sessions.Values.FirstOrDefault(s => s.SessionId == sessionId);
+            if (session is null || hubContext is null || string.IsNullOrEmpty(session.ConnectionId)) return;
+
+            try
+            {
+                await hubContext.Clients.Client(session.ConnectionId).SendAsync(methodName, payload);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameSessionManager] Player event '{methodName}' failed for {sessionId}: {ex.Message}");
+            }
+        }
+
         public async Task NotifyMapMutationAsync(string mapId, MapDelta delta)
         {
             if (string.IsNullOrEmpty(mapId) || delta is null) return;
