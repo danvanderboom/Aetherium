@@ -60,3 +60,13 @@ The original subsystem-audit improvement plan is complete (foundation, live-path
 ## Spec-driven development
 
 Requirements live in [openspec/specs/](openspec/specs/) (what IS built) and change proposals in [openspec/changes/](openspec/changes/) (what SHOULD change). See [openspec/AGENTS.md](openspec/AGENTS.md) for the workflow and [openspec/project.md](openspec/project.md) for project conventions.
+
+## License
+
+Aetherium is licensed under the [Apache License 2.0](LICENSE) — free for
+commercial and non-commercial use, with an explicit patent grant. See
+[NOTICE](NOTICE) for attribution details.
+
+Contributions are welcome under the same license; see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the workflow (commits require a
+[DCO](https://developercertificate.org/) sign-off: `git commit -s`).

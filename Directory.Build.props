@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <Authors>Dan Vanderboom</Authors>
+    <Copyright>Copyright 2026 Dan Vanderboom</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/danvanderboom/Aetherium</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/danvanderboom/Aetherium</RepositoryUrl>
+  </PropertyGroup>
+</Project>
