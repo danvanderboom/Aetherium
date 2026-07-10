@@ -126,6 +126,10 @@ namespace Aetherium.Model.Worlds
 
         /// <summary>Version of the game definition this world was created from, if any.</summary>
         [Id(13)] public string? GameDefinitionVersion { get; set; }
+
+        /// <summary>Per-world content vocabulary (add-content-definitions): creatures, items, and
+        /// spawn mix. Null preserves the legacy hardcoded population exactly.</summary>
+        [Id(14)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
     }
 
     /// <summary>

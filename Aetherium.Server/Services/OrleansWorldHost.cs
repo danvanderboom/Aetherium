@@ -61,6 +61,7 @@ namespace Aetherium.Server.Services
                 FactionConfig = template.FactionConfig,
                 GameDefinitionId = template.GameDefinitionId,
                 GameDefinitionVersion = template.GameDefinitionVersion,
+                ContentConfig = template.ContentConfig,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };

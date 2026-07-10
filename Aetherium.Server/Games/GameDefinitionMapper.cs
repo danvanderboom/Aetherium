@@ -30,6 +30,7 @@ namespace Aetherium.Server.Games
                 AbilityConfig = definition.Abilities,
                 ProgressionConfig = definition.Progression,
                 FactionConfig = definition.Factions,
+                ContentConfig = definition.Content,
                 GameDefinitionId = definition.Id,
                 GameDefinitionVersion = definition.Version,
             };

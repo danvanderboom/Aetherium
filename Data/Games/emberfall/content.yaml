@@ -1,0 +1,52 @@
+# Emberfall content section (binds to ContentConfig — add-content-definitions).
+# The bestiary the faction doctrines judge: town honors wolf kills, the cult avenges them.
+# Population passes decide where and how many; this decides what.
+creatures:
+  - id: wolf
+    name: Wolf
+    description: A grey-pelted pack hunter of the deep halls.
+    glyph: w
+    color: Gray
+    health: 20
+    attackPower: 4
+    speed: 1.25
+    behavior: wander-melee
+    lootItemId: wolf_pelt
+  - id: cult_acolyte
+    name: Cult Acolyte
+    description: A fang-scarred devotee of the wolf cult.
+    glyph: a
+    color: DarkMagenta
+    health: 35
+    attackPower: 7
+    speed: 0.8
+    behavior: wander-melee
+    lootItemId: ember_blade
+  # Not in the spawn table — townsfolk enter play only via explicit spawn requests
+  # (e.g. events/tools), but defining them makes the town's kill:townsfolk doctrine real.
+  - id: townsfolk
+    name: Townsfolk
+    description: An unarmed resident of Rivertown.
+    glyph: t
+    color: White
+    health: 10
+    attackPower: 1
+    speed: 1.0
+    behavior: wander-melee
+
+items:
+  - id: wolf_pelt
+    name: Wolf Pelt
+    icon: "%"
+    weight: 2
+  - id: ember_blade
+    name: Ember Blade
+    icon: "/"
+    weight: 3
+    weaponBonus: 7
+
+spawns:
+  - creatureId: wolf
+    weight: 3
+  - creatureId: cult_acolyte
+    weight: 1

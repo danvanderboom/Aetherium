@@ -150,6 +150,26 @@ namespace Aetherium.Test.Games
                 bands:
                   - { id: neutral, minStanding: -100 }
                   - { id: friendly, minStanding: 10 }
+                """),
+            ("content.yaml", """
+                creatures:
+                  - id: wolf
+                    name: Wolf
+                    glyph: w
+                    color: Gray
+                    health: 20
+                    attackPower: 4
+                    speed: 1.25
+                    behavior: wander-melee
+                    lootItemId: wolf_pelt
+                items:
+                  - id: wolf_pelt
+                    name: Wolf Pelt
+                    icon: "%"
+                    weight: 2
+                spawns:
+                  - creatureId: wolf
+                    weight: 1
                 """));
 
         private static void WriteNeonveil() => WriteBundle("neonveil",
@@ -188,6 +208,23 @@ namespace Aetherium.Test.Games
                         "kill:drone": 15
                   bands:
                     - { id: unknown, minStanding: -50 }
+                content:
+                  creatures:
+                    - id: drone
+                      name: Patrol Drone
+                      glyph: d
+                      color: Cyan
+                      health: 15
+                      attackPower: 3
+                      behavior: wander-melee
+                      lootItemId: scrap_core
+                  items:
+                    - id: scrap_core
+                      name: Scrap Core
+                      icon: "*"
+                  spawns:
+                    - creatureId: drone
+                      weight: 1
                 """));
 
         private static void WriteReloadable(string version, string abilityId) => WriteBundle("reloadable",
@@ -388,6 +425,82 @@ namespace Aetherium.Test.Games
             var ledgerB = await mapB.GetReputationAsync(playerB);
             Assert.That(ledgerB.Reputations.Single(r => r.FactionId == "town").Standing, Is.EqualTo(0),
                 "Standing earned in one instance must not leak into another instance of the same game.");
+        }
+
+        // --- Data-Driven Population / Loot (add-content-definitions) ---
+
+        [Test]
+        public async Task CreateInstance_PopulatesFromSpawnTable()
+        {
+            var result = await Management.CreateGameInstanceAsync("emberfall");
+            Assert.That(result.Success, Is.True, result.Error);
+            var map = await FirstMapOfAsync(result.WorldId!);
+
+            var snapshot = await map.GetWorldSnapshotAsync();
+            var creatures = snapshot.Entities.Where(p => p.Properties.ContainsKey("CreatureType")).ToList();
+
+            Assert.That(creatures, Is.Not.Empty, "The population passes must have placed monsters.");
+            Assert.That(creatures.Select(c => c.Properties["CreatureType"]), Is.All.EqualTo("wolf"),
+                "Every pass-placed monster must be re-materialized from the spawn table.");
+            Assert.That(creatures.Select(c => c.Properties["HealthLevel"]), Is.All.EqualTo("20"),
+                "Spawned creatures must carry the definition's stats, not Monster's hardcoded 30 HP.");
+        }
+
+        [Test]
+        public async Task ContentIsolation_EmberfallWolves_NeonveilDrones()
+        {
+            var emberfall = await Management.CreateGameInstanceAsync("emberfall");
+            var neonveil = await Management.CreateGameInstanceAsync("neonveil");
+            Assert.That(emberfall.Success && neonveil.Success, Is.True);
+
+            var emberfallTypes = (await (await FirstMapOfAsync(emberfall.WorldId!)).GetWorldSnapshotAsync())
+                .Entities.Where(p => p.Properties.ContainsKey("CreatureType"))
+                .Select(p => p.Properties["CreatureType"]).Distinct().ToList();
+            var neonveilTypes = (await (await FirstMapOfAsync(neonveil.WorldId!)).GetWorldSnapshotAsync())
+                .Entities.Where(p => p.Properties.ContainsKey("CreatureType"))
+                .Select(p => p.Properties["CreatureType"]).Distinct().ToList();
+
+            Assert.That(emberfallTypes, Is.EqualTo(new[] { "wolf" }),
+                "An Emberfall instance must contain only Emberfall's bestiary.");
+            Assert.That(neonveilTypes, Is.EqualTo(new[] { "drone" }),
+                "A Neonveil instance must contain only Neonveil's bestiary.");
+        }
+
+        [Test]
+        public async Task Kill_DropsDefinedLootItem()
+        {
+            var result = await Management.CreateGameInstanceAsync("emberfall");
+            Assert.That(result.Success, Is.True, result.Error);
+            var map = await FirstMapOfAsync(result.WorldId!);
+            var (player, spawn) = await JoinAsync(map);
+
+            var wolf = await SpawnAdjacentAsync(map, spawn, "wolf");
+            var cast = await map.UseAbilityAsync(player, "fireball", wolf);
+            Assert.That(cast.Success && cast.TargetDefeated, Is.True, cast.Reason);
+
+            var snapshot = await map.GetWorldSnapshotAsync();
+            Assert.That(snapshot.Entities.Any(p =>
+                    p.Properties.TryGetValue("CarriableLabel", out var label) && label == "Wolf Pelt"),
+                Is.True, "The wolf's definition loot (wolf_pelt) must drop where it fell.");
+            Assert.That(snapshot.Entities.Select(p => p.TypeName), Does.Not.Contain(nameof(Aetherium.Entities.SwordItem)),
+                "The legacy hardcoded SwordItem drop must not appear for a defined creature.");
+        }
+
+        [Test]
+        public async Task SpawnEntity_ResolvesDefinedCreature()
+        {
+            var result = await Management.CreateGameInstanceAsync("neonveil");
+            Assert.That(result.Success, Is.True, result.Error);
+            var map = await FirstMapOfAsync(result.WorldId!);
+            var (_, spawn) = await JoinAsync(map);
+
+            var droneId = await SpawnAdjacentAsync(map, spawn, "drone");
+
+            var snapshot = await map.GetWorldSnapshotAsync();
+            var drone = snapshot.Entities.Single(p => p.EntityId == droneId);
+            Assert.That(drone.Properties["CreatureType"], Is.EqualTo("drone"));
+            Assert.That(drone.Properties["HealthLevel"], Is.EqualTo("15"),
+                "A spawn request naming a defined creature must materialize its definition's stats.");
         }
 
         // --- Instance Config Immutability ---

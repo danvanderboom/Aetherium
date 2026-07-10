@@ -697,7 +697,8 @@ namespace Aetherium.Server.Management
                         ? new Aetherium.Model.Worlds.WorldDimensions { Width = size.Width, Height = size.Height, Depth = size.Depth }
                         : null,
                     GameDefinitionId = hubConfig?.GameDefinitionId ?? request.GameDefinitionId,
-                    GameDefinitionVersion = hubConfig?.GameDefinitionVersion ?? request.GameDefinitionVersion
+                    GameDefinitionVersion = hubConfig?.GameDefinitionVersion ?? request.GameDefinitionVersion,
+                    ContentConfig = hubConfig?.ContentConfig ?? request.ContentConfig
                 };
 
                 // Default to public world
@@ -733,7 +734,8 @@ namespace Aetherium.Server.Management
                     ProgressionConfig = request.ProgressionConfig,
                     FactionConfig = request.FactionConfig,
                     GameDefinitionId = request.GameDefinitionId,
-                    GameDefinitionVersion = request.GameDefinitionVersion
+                    GameDefinitionVersion = request.GameDefinitionVersion,
+                    ContentConfig = request.ContentConfig
                 };
 
                 // Ensure WorldId is set

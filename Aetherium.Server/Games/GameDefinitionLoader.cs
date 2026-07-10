@@ -43,6 +43,7 @@ namespace Aetherium.Server.Games
             ("abilities.yaml", "abilities"),
             ("progression.yaml", "progression"),
             ("factions.yaml", "factions"),
+            ("content.yaml", "content"),
         };
 
         private readonly IDeserializer _deserializer = new DeserializerBuilder()
@@ -109,6 +110,7 @@ namespace Aetherium.Server.Games
             "abilities" => definition.Abilities != null,
             "progression" => definition.Progression != null,
             "factions" => definition.Factions != null,
+            "content" => definition.Content != null,
             _ => false,
         };
 
@@ -127,6 +129,9 @@ namespace Aetherium.Server.Games
                     break;
                 case "factions":
                     definition.Factions = _deserializer.Deserialize<Aetherium.Model.Factions.FactionConfig>(yaml);
+                    break;
+                case "content":
+                    definition.Content = _deserializer.Deserialize<Aetherium.Model.Content.ContentConfig>(yaml);
                     break;
             }
         }

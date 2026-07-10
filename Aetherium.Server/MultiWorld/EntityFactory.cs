@@ -84,6 +84,39 @@ namespace Aetherium.Server.MultiWorld
                 placement.Properties["KeyId"] = key.KeyId;
             }
 
+            // Creature identity (add-content-definitions): several creature ids map onto the same
+            // C# class, so the tag is the only durable record of what this entity is. On rehydrate,
+            // GameMapGrain re-applies the tagged definition from the persisted ContentConfig.
+            if (entity.Components.TryGetValue(typeof(CreatureTypeTag), out var ctComp)
+                && ctComp is CreatureTypeTag creatureType
+                && !string.IsNullOrEmpty(creatureType.Value))
+            {
+                placement.Properties["CreatureType"] = creatureType.Value;
+            }
+
+            // Data-driven items (add-content-definitions) are plain Item instances whose identity
+            // lives entirely in these components — capture them so a dropped/placed defined item
+            // survives a snapshot round-trip with its label/effects intact.
+            if (entity.Components.TryGetValue(typeof(Carriable), out var carComp)
+                && carComp is Carriable carriable)
+            {
+                placement.Properties["CarriableLabel"] = carriable.Label;
+                placement.Properties["CarriableIcon"] = carriable.Icon;
+                placement.Properties["CarriableWeight"] = carriable.Weight.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (entity.Components.TryGetValue(typeof(Weapon), out var wpnComp)
+                && wpnComp is Weapon weapon)
+            {
+                placement.Properties["WeaponName"] = weapon.Name;
+                placement.Properties["WeaponAttackBonus"] = weapon.AttackBonus.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (entity.Components.TryGetValue(typeof(Consumable), out var consEffComp)
+                && consEffComp is Consumable consumableEffect)
+            {
+                placement.Properties["ConsumableEffectType"] = consumableEffect.EffectType.ToString();
+                placement.Properties["ConsumableEffectValue"] = consumableEffect.EffectValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
             // Portals carry their routing info
             if (entity.Components.TryGetValue(typeof(PortalComponent), out var portalComp)
                 && portalComp is PortalComponent portal)
@@ -183,6 +216,47 @@ namespace Aetherium.Server.MultiWorld
 
             // Symmetric restoration of mutable component fields captured by ExtractProperties.
             var inv = System.Globalization.CultureInfo.InvariantCulture;
+
+            // Creature identity (add-content-definitions). Set (not conditional on an existing
+            // component) — the tag class carries no engine wiring, and the re-skin on rehydrate
+            // keys off it.
+            if (placement.Properties.TryGetValue("CreatureType", out var creatureTypeValue)
+                && !string.IsNullOrEmpty(creatureTypeValue))
+            {
+                entity.Set(new CreatureTypeTag(creatureTypeValue));
+            }
+
+            // Data-driven item identity (add-content-definitions).
+            if (entity.Components.TryGetValue(typeof(Carriable), out var carComp)
+                && carComp is Carriable carriable)
+            {
+                if (placement.Properties.TryGetValue("CarriableLabel", out var label))
+                    carriable.Label = label;
+                if (placement.Properties.TryGetValue("CarriableIcon", out var icon))
+                    carriable.Icon = icon;
+                if (placement.Properties.TryGetValue("CarriableWeight", out var weightStr)
+                    && int.TryParse(weightStr, System.Globalization.NumberStyles.Integer, inv, out var weight))
+                    carriable.Weight = weight;
+            }
+            if (placement.Properties.TryGetValue("WeaponAttackBonus", out var bonusStr)
+                && int.TryParse(bonusStr, System.Globalization.NumberStyles.Integer, inv, out var bonus))
+            {
+                placement.Properties.TryGetValue("WeaponName", out var weaponName);
+                entity.Set(new Weapon(weaponName ?? "Weapon", bonus));
+            }
+            if (placement.Properties.TryGetValue("ConsumableEffectValue", out var effValStr)
+                && int.TryParse(effValStr, System.Globalization.NumberStyles.Integer, inv, out var effVal))
+            {
+                // Uses is restored below by the pre-existing ConsumableUses round-trip; ensure the
+                // component exists first for a plain Item that had one only via its definition.
+                if (!entity.Components.ContainsKey(typeof(Consumable)))
+                    entity.Set(new Consumable());
+                var consumable = (Consumable)entity.Components[typeof(Consumable)];
+                consumable.EffectValue = effVal;
+                if (placement.Properties.TryGetValue("ConsumableEffectType", out var effTypeStr)
+                    && Enum.TryParse<ConsumableEffectType>(effTypeStr, out var effType))
+                    consumable.EffectType = effType;
+            }
             if (entity.Components.TryGetValue(typeof(HasHeading), out var headingComp)
                 && headingComp is HasHeading hh
                 && placement.Properties.TryGetValue("Heading", out var hStr)

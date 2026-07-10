@@ -226,6 +226,65 @@ namespace Aetherium.Test.Games
         }
 
         [Test]
+        public void LoadBundle_ContentSection_BindsCreaturesItemsSpawns()
+        {
+            // Verifies "Content Config Data Model" (add-content-definitions): the content section
+            // binds creatures/items/spawns, from a conventional sibling file like every section.
+            var dir = WriteBundle("content",
+                ("game.yaml", Manifest),
+                ("content.yaml", """
+                    creatures:
+                      - id: wolf
+                        name: Wolf
+                        glyph: w
+                        color: Gray
+                        health: 20
+                        attackPower: 4
+                        speed: 1.25
+                        behavior: wander-melee
+                        lootItemId: wolf_pelt
+                    items:
+                      - id: wolf_pelt
+                        name: Wolf Pelt
+                        icon: "%"
+                        weight: 2
+                      - id: salve
+                        name: Healing Salve
+                        icon: "+"
+                        heal: { amount: 25, uses: 2 }
+                      - id: blade
+                        name: Blade
+                        icon: "/"
+                        weaponBonus: 7
+                    spawns:
+                      - creatureId: wolf
+                        weight: 3
+                    """));
+
+            var result = new GameDefinitionLoader().LoadBundle(dir);
+
+            Assert.That(result.Success, Is.True, string.Join("; ", result.Diagnostics));
+            var content = result.Definition!.Content;
+            Assert.That(content, Is.Not.Null);
+
+            var wolf = content!.Creatures.Single();
+            Assert.That(wolf.Id, Is.EqualTo("wolf"));
+            Assert.That((wolf.Glyph, wolf.Color, wolf.Health, wolf.AttackPower, wolf.Speed),
+                Is.EqualTo(("w", "Gray", 20, 4, 1.25)));
+            Assert.That(wolf.Behavior, Is.EqualTo("wander-melee"));
+            Assert.That(wolf.LootItemId, Is.EqualTo("wolf_pelt"));
+
+            Assert.That(content.Items.Select(i => i.Id), Is.EqualTo(new[] { "wolf_pelt", "salve", "blade" }));
+            var salve = content.Items.Single(i => i.Id == "salve");
+            Assert.That((salve.Heal!.Amount, salve.Heal.Uses), Is.EqualTo((25, 2)));
+            Assert.That(salve.WeaponBonus, Is.Null);
+            Assert.That(content.Items.Single(i => i.Id == "blade").WeaponBonus, Is.EqualTo(7));
+
+            var spawn = content.Spawns.Single();
+            Assert.That((spawn.CreatureId, spawn.Weight), Is.EqualTo(("wolf", 3)));
+        }
+
+        [Test]
         public void LoadDirectory_BadBundle_DoesNotBlockOthers()
         {
             WriteBundle("bad", ("game.yaml", "id: {{{"));

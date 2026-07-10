@@ -83,3 +83,41 @@ factions:
     - { id: flagged, minStanding: -1000 }
     - { id: unknown, minStanding: -50 }
     - { id: trusted, minStanding: 150 }
+
+content:
+  creatures:
+    - id: drone
+      name: Patrol Drone
+      description: A cheap Helix security drone on a fixed patrol loop.
+      glyph: d
+      color: Cyan
+      health: 15
+      attackPower: 3
+      speed: 1.5
+      behavior: wander-melee
+      lootItemId: scrap_core
+    - id: netwatch_agent
+      name: NetWatch Agent
+      description: A hardened corporate hunter-killer process.
+      glyph: N
+      color: Red
+      health: 45
+      attackPower: 9
+      speed: 0.75
+      behavior: wander-melee
+      lootItemId: repair_patch
+  items:
+    - id: scrap_core
+      name: Scrap Core
+      icon: "*"
+      weight: 1
+    - id: repair_patch
+      name: Repair Patch
+      icon: "+"
+      weight: 1
+      heal: { amount: 30, uses: 1 }
+  spawns:
+    - creatureId: drone
+      weight: 4
+    - creatureId: netwatch_agent
+      weight: 1

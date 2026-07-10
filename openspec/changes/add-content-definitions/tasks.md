@@ -2,52 +2,52 @@
 
 ## 1. Model tier
 
-- [ ] 1.1 `Aetherium.Model/Content/ContentConfig.cs`: `ContentConfig`, `CreatureDefinition`,
+- [x] 1.1 `Aetherium.Model/Content/ContentConfig.cs`: `ContentConfig`, `CreatureDefinition`,
       `ItemDefinition` (+ `HealEffectDefinition`), `SpawnTableEntry` — `[GenerateSerializer]`.
-- [ ] 1.2 Add `Content` to `GameDefinition`; `ContentConfig` to `WorldTemplate`, `WorldConfig`,
+- [x] 1.2 Add `Content` to `GameDefinition`; `ContentConfig` to `WorldTemplate`, `WorldConfig`,
       `CreateWorldRequest` (nullable, additive serializer ids).
 
 ## 2. Loader / validator / mapper
 
-- [ ] 2.1 `GameDefinitionLoader`: `content.yaml` conventional sibling (+ inline `content:`),
+- [x] 2.1 `GameDefinitionLoader`: `content.yaml` conventional sibling (+ inline `content:`),
       duplicate-declaration rejection, same strict parsing.
-- [ ] 2.2 `GameDefinitionValidator`: content id uniqueness, spawn→creature, loot→item,
+- [x] 2.2 `GameDefinitionValidator`: content id uniqueness, spawn→creature, loot→item,
       behavior-preset, color-parse, positivity checks; doctrine `kill:` warning.
-- [ ] 2.3 `GameDefinitionMapper`: carry `Content` onto `CreateWorldRequest`.
+- [x] 2.3 `GameDefinitionMapper`: carry `Content` onto `CreateWorldRequest`.
 
 ## 3. Runtime compile + grain wiring
 
-- [ ] 3.1 `Aetherium.Server/Content/ContentCompiler.cs`: config → `ContentCatalog`
+- [x] 3.1 `Aetherium.Server/Content/ContentCompiler.cs`: config → `ContentCatalog`
       (creatures/items by id, cumulative-weight spawn draw, per-world atlas, behavior preset
       registry with `wander-melee`).
-- [ ] 3.2 `GameMapGrain`: thread `contentConfig` through `InitializeAsync` → `MapState`;
+- [x] 3.2 `GameMapGrain`: thread `contentConfig` through `InitializeAsync` → `MapState`;
       `ApplyContentConfig` on init + reactivation; post-generation deterministic re-skin;
       per-creature `TileType` registration.
-- [ ] 3.3 `SpawnEntityAsync`: catalog-first resolution, legacy switch fallback.
-- [ ] 3.4 `SpawnMonsterLoot(victim, …)`: definition loot → materialized item; null → nothing;
+- [x] 3.3 `SpawnEntityAsync`: catalog-first resolution, legacy switch fallback.
+- [x] 3.4 `SpawnMonsterLoot(victim, …)`: definition loot → materialized item; null → nothing;
       unresolved → legacy `SwordItem`.
-- [ ] 3.5 `StepNpcsAsync`: behavior preset lookup per creature (only `wander-melee` exists).
-- [ ] 3.6 `EntityFactory`: `CreatureType` property round-trip; hydration re-skin hook.
-- [ ] 3.7 Thread through `WorldGrain`, `GameManagementGrain` (both paths), `OrleansWorldHost`.
+- [x] 3.5 `StepNpcsAsync`: behavior preset lookup per creature (only `wander-melee` exists).
+- [x] 3.6 `EntityFactory`: `CreatureType` property round-trip; hydration re-skin hook.
+- [x] 3.7 Thread through `WorldGrain`, `GameManagementGrain` (both paths), `OrleansWorldHost`.
 
 ## 4. Sample bundles
 
-- [ ] 4.1 Emberfall `content.yaml`: wolf (loot `wolf_pelt`), cult_acolyte (loot `ember_blade`),
-      items `wolf_pelt`/`ember_blade`/`healing_salve`, spawn weights — `kill:wolf` doctrine
-      becomes satisfiable.
-- [ ] 4.2 Neonveil inline `content:`: drone (loot `scrap_core`), netwatch_agent, items,
-      spawn weights — `kill:drone` doctrine becomes satisfiable.
+- [x] 4.1 Emberfall `content.yaml`: wolf (loot `wolf_pelt`), cult_acolyte (loot `ember_blade`),
+      townsfolk (spawn-request only — makes `kill:townsfolk` doctrine real), spawn weights —
+      `kill:wolf` doctrine becomes satisfiable.
+- [x] 4.2 Neonveil inline `content:`: drone (loot `scrap_core`), netwatch_agent (loot
+      `repair_patch`, a heal item), spawn weights — `kill:drone` doctrine becomes satisfiable.
 
 ## 5. Tests (names per spec Verified-by)
 
-- [ ] 5.1 Loader: `LoadBundle_ContentSection_BindsCreaturesItemsSpawns`.
-- [ ] 5.2 Validator: duplicate ids / unknown spawn creature / unknown loot item / unknown
+- [x] 5.1 Loader: `LoadBundle_ContentSection_BindsCreaturesItemsSpawns`.
+- [x] 5.2 Validator: duplicate ids / unknown spawn creature / unknown loot item / unknown
       behavior preset / doctrine-kill warning.
-- [ ] 5.3 Compiler: deterministic spawn draw, item materialization, atlas registration.
-- [ ] 5.4 Snapshot: `CreatureTypeTag_RoundTrips`.
-- [ ] 5.5 Grain integration: populate-from-spawn-table, defined loot drop, spawn-by-id,
+- [x] 5.3 Compiler: deterministic spawn draw, item materialization, atlas registration.
+- [x] 5.4 Snapshot: `CreatureTypeTag_RoundTrips`.
+- [x] 5.5 Grain integration: populate-from-spawn-table, defined loot drop, spawn-by-id,
       Emberfall/Neonveil bestiary isolation.
-- [ ] 5.6 Full suite green (Aetherium.Test + Aetherctl.Test).
+- [x] 5.6 Full suite green (Aetherium.Test + Aetherctl.Test).
 
 ## Later (out of scope this change)
 

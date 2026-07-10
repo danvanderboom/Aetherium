@@ -88,6 +88,7 @@ namespace Aetherium.Server.MultiWorld
             _worldState.State.AbilityConfig = config.AbilityConfig;
             _worldState.State.ProgressionConfig = config.ProgressionConfig;
             _worldState.State.FactionConfig = config.FactionConfig;
+            _worldState.State.ContentConfig = config.ContentConfig;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -169,7 +170,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig, _worldState.State.ContentConfig);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -362,6 +363,10 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world faction content (engine gap-analysis §4.6), set once at InitializeAsync
         /// and applied to every map this world creates. Null means no factions.</summary>
         public Aetherium.Model.Factions.FactionConfig? FactionConfig { get; set; }
+
+        /// <summary>Per-world content vocabulary (add-content-definitions), set once at
+        /// InitializeAsync and applied to every map this world creates. Null means legacy content.</summary>
+        public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
     }
 }
 

@@ -273,6 +273,9 @@ namespace Aetherium.Server.MultiWorld
             // And factions (engine gap-analysis §4.6 — see wire-factions-live).
             ApplyFactionConfig(_mapState.State?.FactionConfig);
 
+            // And content (add-content-definitions).
+            ApplyContentConfig(_mapState.State?.ContentConfig);
+
             if (_mapState.State != null && _mapState.State.Recipe != null && _world == null)
             {
                 // Reactivation after silo restart. Prefer a persisted snapshot when
@@ -282,6 +285,12 @@ namespace Aetherium.Server.MultiWorld
                 // snapshot store isn't wired, or when no snapshot has been captured.
                 _world = await TryHydrateFromSnapshotAsync()
                     ?? RegenerateFromRecipe(_mapState.State.Recipe);
+
+                // Re-skin data-driven creatures (add-content-definitions): snapshot-hydrated
+                // entities re-bind their definition via CreatureTypeTag (damage preserved);
+                // recipe-regenerated monsters get the same deterministic draw as first creation.
+                ApplyContentPopulation(_world, _mapState.State.Recipe.Seed);
+
                 await PartitionIntoRegionsAsync();
                 AttachWorldEventSubscriber();
             }
@@ -504,7 +513,7 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null)
         {
             var mapId = this.GetPrimaryKeyString();
 
@@ -512,6 +521,7 @@ namespace Aetherium.Server.MultiWorld
             ApplyAbilityConfig(abilityConfig);
             ApplyProgressionConfig(progressionConfig);
             ApplyFactionConfig(factionConfig);
+            ApplyContentConfig(contentConfig);
 
             parameters ??= new Dictionary<string, object>();
 
@@ -553,6 +563,10 @@ namespace Aetherium.Server.MultiWorld
             }
 
             _world = result.World;
+
+            // Data-driven population (add-content-definitions): the passes placed generic
+            // monsters; the content catalog decides what they are. Same seed → same mix.
+            ApplyContentPopulation(_world, seed);
 
             // Runtime map validation (P1-22). Diagnostic, not gating: generation already
             // ran the pipeline's Validation-phase pass, so a MapValidator failure here
@@ -614,6 +628,7 @@ namespace Aetherium.Server.MultiWorld
                 AbilityConfig = abilityConfig,
                 ProgressionConfig = progressionConfig,
                 FactionConfig = factionConfig,
+                ContentConfig = contentConfig,
             };
 
             await _mapState.WriteStateAsync();
@@ -1083,7 +1098,7 @@ namespace Aetherium.Server.MultiWorld
 
                 if (!_monsterTrees.TryGetValue(monster.EntityId, out var tree))
                 {
-                    tree = MonsterBehaviors.BuildWanderAndMeleeTree(_combatSystem);
+                    tree = BuildBehaviorTreeFor(monster);
                     _monsterTrees[monster.EntityId] = tree;
                 }
 
@@ -1591,17 +1606,31 @@ namespace Aetherium.Server.MultiWorld
                     };
                 }
 
-                // Create the entity based on creature type
-                Character? entity = request.CreatureType.ToLowerInvariant() switch
+                // Create the entity based on creature type. The world's content catalog wins
+                // (add-content-definitions): a defined creature id materializes its definition;
+                // anything else falls back to the legacy hardcoded switch.
+                var creatureType = request.CreatureType.ToLowerInvariant();
+                Character? entity;
+                if (_contentCatalog is not null
+                    && _contentCatalog.CreaturesById.TryGetValue(creatureType, out var creatureDefinition))
                 {
-                    "monster" => new Aetherium.Monster(_world),
-                    "wolf" => new Aetherium.Monster(_world),
-                    "bear" => new Aetherium.Monster(_world),
-                    "bandit" => new Aetherium.Monster(_world),
-                    "snake" => new Snake(),
-                    "zombie" => new Zombie(_world),
-                    _ => new Aetherium.Monster(_world)
-                };
+                    var defined = new Aetherium.Monster(_world);
+                    Aetherium.Server.Content.ContentCompiler.ApplyCreature(defined, creatureDefinition, _world);
+                    entity = defined;
+                }
+                else
+                {
+                    entity = creatureType switch
+                    {
+                        "monster" => new Aetherium.Monster(_world),
+                        "wolf" => new Aetherium.Monster(_world),
+                        "bear" => new Aetherium.Monster(_world),
+                        "bandit" => new Aetherium.Monster(_world),
+                        "snake" => new Snake(),
+                        "zombie" => new Zombie(_world),
+                        _ => new Aetherium.Monster(_world)
+                    };
+                }
 
                 if (entity == null)
                 {
@@ -1611,8 +1640,9 @@ namespace Aetherium.Server.MultiWorld
                 // Preserve the request's creature-type string on the entity — several types map
                 // onto the same C# class above, and downstream consumers (first: the faction
                 // standing loop's kill:<creature-type> tags, wire-factions-live) need "wolf" vs
-                // "bandit" to survive past this switch.
-                entity.Set(new Aetherium.Components.CreatureTypeTag(request.CreatureType.ToLowerInvariant()));
+                // "bandit" to survive past this switch. (ApplyCreature already stamped the tag on
+                // the defined path; Set replaces, so this is idempotent there.)
+                entity.Set(new Aetherium.Components.CreatureTypeTag(creatureType));
 
                 // Set location and add to world
                 entity.Set(location);
@@ -1943,6 +1973,76 @@ namespace Aetherium.Server.MultiWorld
             _factionRelations = compiler.CompileRelations(config?.Relations);
         }
 
+        // Per-world content vocabulary (add-content-definitions), compiled from the world's
+        // ContentConfig. Null means legacy hardcoded content (generic Monster, SwordItem loot) —
+        // the engine ships no bestiary, creatures and items are entirely per-world data.
+        private Aetherium.Server.Content.ContentCatalog? _contentCatalog;
+
+        /// <summary>Compiles a world's <see cref="Aetherium.Model.Content.ContentConfig"/> into this
+        /// map's runtime content catalog. Called from InitializeAsync (fresh) and OnActivateAsync
+        /// (rehydrate); null leaves the catalog absent → legacy content everywhere.</summary>
+        private void ApplyContentConfig(Aetherium.Model.Content.ContentConfig? config)
+        {
+            _contentCatalog = config is null ? null : Aetherium.Server.Content.ContentCompiler.Compile(config);
+        }
+
+        /// <summary>
+        /// Re-materializes pass-placed monsters from the content catalog's spawn table
+        /// (add-content-definitions): the population passes decide <em>where and how many</em>,
+        /// this decides <em>what</em>. Entities already carrying a <see cref="Aetherium.Components.CreatureTypeTag"/>
+        /// that resolves in the catalog (snapshot re-hydration) are re-skinned in place with their
+        /// current damage preserved; untagged monsters (fresh generation or recipe regen) get a
+        /// weighted draw seeded from <paramref name="seed"/> in deterministic location order, so a
+        /// given (seed, table) always yields the same creature mix. No-op without a spawn table.
+        /// </summary>
+        private void ApplyContentPopulation(World world, int seed)
+        {
+            if (_contentCatalog is null || !_contentCatalog.HasSpawnTable)
+                return;
+
+            var rng = new Random(seed);
+            var monsters = world.Entities.Values.OfType<Aetherium.Monster>()
+                .Where(m => m.Has<Aetherium.Components.WorldLocation>())
+                .OrderBy(m => m.Get<Aetherium.Components.WorldLocation>().Z)
+                .ThenBy(m => m.Get<Aetherium.Components.WorldLocation>().Y)
+                .ThenBy(m => m.Get<Aetherium.Components.WorldLocation>().X)
+                .ToList();
+
+            foreach (var monster in monsters)
+            {
+                if (monster.Has<Aetherium.Components.CreatureTypeTag>()
+                    && _contentCatalog.CreaturesById.TryGetValue(monster.Get<Aetherium.Components.CreatureTypeTag>().Value, out var existing))
+                {
+                    Aetherium.Server.Content.ContentCompiler.ApplyCreature(monster, existing, world, preserveHealthLevel: true);
+                }
+                else
+                {
+                    var drawn = _contentCatalog.DrawSpawn(rng);
+                    Aetherium.Server.Content.ContentCompiler.ApplyCreature(monster, drawn, world);
+                }
+            }
+        }
+
+        /// <summary>Builds the behavior tree for one monster from its creature definition's
+        /// behavior preset (add-content-definitions). Every preset resolves to the wander-melee
+        /// tree today — this switch is the seam new presets (and, later, ECA-scripted behaviors)
+        /// plug into; the validator already rejects unknown preset names at bundle load.</summary>
+        private BehaviorTree BuildBehaviorTreeFor(Aetherium.Monster monster)
+        {
+            string preset = "wander-melee";
+            if (_contentCatalog is not null
+                && monster.Has<Aetherium.Components.CreatureTypeTag>()
+                && _contentCatalog.CreaturesById.TryGetValue(monster.Get<Aetherium.Components.CreatureTypeTag>().Value, out var definition))
+            {
+                preset = definition.Behavior;
+            }
+
+            return preset switch
+            {
+                _ => MonsterBehaviors.BuildWanderAndMeleeTree(_combatSystem),
+            };
+        }
+
         private ActionContext? TryBuildActionContext(string sessionId)
         {
             if (_world is null) return null;
@@ -2074,8 +2174,7 @@ namespace Aetherium.Server.MultiWorld
             string? lootType = null;
             if (result.TargetEnteredDying && targetWasMonster)
             {
-                lootId = SpawnMonsterLoot(lx, ly, lz);
-                lootType = nameof(Aetherium.Entities.SwordItem);
+                (lootId, lootType) = SpawnMonsterLoot(target, lx, ly, lz);
             }
 
             await _mapState.WriteStateAsync();
@@ -2235,10 +2334,13 @@ namespace Aetherium.Server.MultiWorld
 
                     if (targetDefeated)
                     {
-                        var lootId = SpawnMonsterLoot(tx, ty, tz);
-                        var placement = EntityPlacement.FromLocation(lootId, nameof(Aetherium.Entities.SwordItem),
-                            new Aetherium.Components.WorldLocation(tx, ty, tz));
-                        await FanOutAsync(new EntityPlacedDelta { Placement = placement });
+                        var (lootId, lootType) = SpawnMonsterLoot(target, tx, ty, tz);
+                        if (lootId is not null)
+                        {
+                            var placement = EntityPlacement.FromLocation(lootId, lootType!,
+                                new Aetherium.Components.WorldLocation(tx, ty, tz));
+                            await FanOutAsync(new EntityPlacedDelta { Placement = placement });
+                        }
                     }
                 }
             }
@@ -2253,16 +2355,36 @@ namespace Aetherium.Server.MultiWorld
             };
         }
 
-        /// <summary>Spawns a monster's death-drop (a <see cref="Aetherium.Entities.SwordItem"/>) at the
-        /// fall location and returns its entity id — the shared drop used by both a melee kill
-        /// (<see cref="AttackAsync"/>) and an ability kill so the two never diverge. Adds to
-        /// <c>_world</c> only; the caller fans out the placement delta.</summary>
-        private string SpawnMonsterLoot(int lx, int ly, int lz)
+        /// <summary>Spawns a monster's death-drop at the fall location — the shared drop used by
+        /// both a melee kill (<see cref="AttackAsync"/>) and an ability kill so the two never
+        /// diverge. When the victim's <see cref="Aetherium.Components.CreatureTypeTag"/> resolves
+        /// to a content-catalog definition (add-content-definitions), the drop is that definition's
+        /// loot item — or nothing, when the definition declares none. A victim with no resolvable
+        /// definition keeps the legacy <see cref="Aetherium.Entities.SwordItem"/> drop. Adds to
+        /// <c>_world</c> only; the caller fans out the placement delta when LootId is non-null.</summary>
+        private (string? LootId, string? LootType) SpawnMonsterLoot(Entity victim, int lx, int ly, int lz)
         {
-            var loot = new Aetherium.Entities.SwordItem();
+            Aetherium.Entities.Item loot;
+            string lootType;
+            if (_contentCatalog is not null
+                && victim.Has<Aetherium.Components.CreatureTypeTag>()
+                && _contentCatalog.CreaturesById.TryGetValue(victim.Get<Aetherium.Components.CreatureTypeTag>().Value, out var definition))
+            {
+                if (definition.LootItemId is null
+                    || !_contentCatalog.ItemsById.TryGetValue(definition.LootItemId, out var itemDefinition))
+                    return (null, null); // defined creature, no drop
+                loot = Aetherium.Server.Content.ContentCompiler.MaterializeItem(itemDefinition);
+                lootType = itemDefinition.Id;
+            }
+            else
+            {
+                loot = new Aetherium.Entities.SwordItem();
+                lootType = nameof(Aetherium.Entities.SwordItem);
+            }
+
             loot.Set(new Aetherium.Components.WorldLocation(lx, ly, lz));
             _world!.AddEntity(loot);
-            return loot.EntityId;
+            return (loot.EntityId, lootType);
         }
 
         /// <summary>Per-tick ability upkeep (engine gap-analysis §4.3 — see wire-abilities-live): counts
@@ -2915,6 +3037,11 @@ namespace Aetherium.Server.MultiWorld
         /// gap-analysis §4.6 — see wire-factions-live), so the grain can recompile its faction
         /// registry/relations on reactivation. Null means the world specified no factions.</summary>
         [Id(14)] public Aetherium.Model.Factions.FactionConfig? FactionConfig { get; set; }
+
+        /// <summary>Per-world content vocabulary captured at <c>InitializeAsync</c> time
+        /// (add-content-definitions), so the grain can recompile its content catalog and re-skin
+        /// data-driven creatures on reactivation. Null means legacy hardcoded content.</summary>
+        [Id(15)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
     }
 }
 

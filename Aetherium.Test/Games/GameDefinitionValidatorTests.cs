@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using Aetherium.Model.Abilities;
+using Aetherium.Model.Content;
 using Aetherium.Model.Factions;
 using Aetherium.Model.Games;
 using Aetherium.Model.Progression;
@@ -118,6 +119,114 @@ namespace Aetherium.Test.Games
 
             Assert.That(diagnostics.Any(d => d.Section == "abilities" && d.Message.Contains("Duplicate") && d.Message.Contains("fireball")), Is.True);
             Assert.That(diagnostics.Any(d => d.Section == "factions" && d.Message.Contains("Duplicate") && d.Message.Contains("town")), Is.True);
+        }
+
+        // --- Content (add-content-definitions) ---
+
+        private static ContentConfig ValidContent() => new()
+        {
+            Creatures =
+            {
+                new CreatureDefinition { Id = "wolf", Name = "Wolf", Glyph = "w", Color = "Gray", Health = 20, LootItemId = "pelt" },
+                new CreatureDefinition { Id = "acolyte", Name = "Acolyte", Glyph = "a", Color = "DarkMagenta", Health = 35 },
+            },
+            Items = { new ItemDefinition { Id = "pelt", Name = "Pelt", Icon = "%" } },
+            Spawns = { new SpawnTableEntry { CreatureId = "wolf", Weight = 3 } },
+        };
+
+        [Test]
+        public void Content_ValidSection_ProducesNoDiagnostics()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+
+            Assert.That(Validate(definition), Is.Empty);
+        }
+
+        [Test]
+        public void Content_DuplicateIds_AreErrors()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            definition.Content.Creatures.Add(new CreatureDefinition { Id = "wolf", Name = "Impostor Wolf" });
+            definition.Content.Items.Add(new ItemDefinition { Id = "pelt", Name = "Impostor Pelt" });
+
+            var diagnostics = Validate(definition);
+
+            Assert.That(diagnostics.Any(d => d.Section == "content" && d.Message.Contains("Duplicate") && d.Message.Contains("wolf")), Is.True);
+            Assert.That(diagnostics.Any(d => d.Section == "content" && d.Message.Contains("Duplicate") && d.Message.Contains("pelt")), Is.True);
+        }
+
+        [Test]
+        public void Spawn_UnknownCreature_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            definition.Content.Spawns.Add(new SpawnTableEntry { CreatureId = "dragon", Weight = 1 });
+
+            var diagnostics = Validate(definition);
+
+            var finding = diagnostics.Single();
+            Assert.That(finding.Section, Is.EqualTo("content"));
+            Assert.That(finding.Message, Does.Contain("dragon"));
+        }
+
+        [Test]
+        public void Loot_UnknownItem_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            definition.Content.Creatures[0].LootItemId = "golden_pelt";
+
+            var diagnostics = Validate(definition);
+
+            var finding = diagnostics.Single();
+            Assert.That(finding.Section, Is.EqualTo("content"));
+            Assert.That(finding.Message, Does.Contain("wolf").And.Contain("golden_pelt"));
+        }
+
+        [Test]
+        public void Creature_UnknownBehaviorPreset_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            definition.Content.Creatures[0].Behavior = "ambush-pounce";
+
+            var diagnostics = Validate(definition);
+
+            var finding = diagnostics.Single();
+            Assert.That(finding.Section, Is.EqualTo("content"));
+            Assert.That(finding.Message, Does.Contain("ambush-pounce").And.Contain("wander-melee"));
+        }
+
+        [Test]
+        public void Creature_UnparsableColor_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            definition.Content.Creatures[0].Color = "Crimson";
+
+            var diagnostics = Validate(definition);
+
+            Assert.That(diagnostics.Single().Message, Does.Contain("Crimson"));
+        }
+
+        [Test]
+        public void Doctrine_KillTag_UnknownCreature_IsAWarning()
+        {
+            // The town judges kill:wolf (defined — silent) and kill:ghoul (undefined — a rule
+            // that can never fire from this bestiary: warn, don't error). kill:player is exempt.
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            definition.Factions!.Factions[0].DoctrineDeltas["kill:wolf"] = 10;
+            definition.Factions.Factions[0].DoctrineDeltas["kill:ghoul"] = -5;
+            definition.Factions.Factions[0].DoctrineDeltas["kill:player"] = -100;
+
+            var diagnostics = Validate(definition);
+
+            var finding = diagnostics.Single();
+            Assert.That(finding.Severity, Is.EqualTo(GameDefinitionDiagnosticSeverity.Warning));
+            Assert.That(finding.Message, Does.Contain("ghoul"));
         }
     }
 }

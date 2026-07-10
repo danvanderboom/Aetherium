@@ -25,6 +25,7 @@ namespace Aetherium.Test.Games
             var abilities = new AbilityConfig();
             var progression = new ProgressionConfig();
             var factions = new FactionConfig();
+            var content = new Aetherium.Model.Content.ContentConfig();
 
             var definition = new GameDefinition
             {
@@ -44,6 +45,7 @@ namespace Aetherium.Test.Games
                 Abilities = abilities,
                 Progression = progression,
                 Factions = factions,
+                Content = content,
             };
 
             var request = GameDefinitionMapper.ToCreateWorldRequest(definition);
@@ -60,6 +62,7 @@ namespace Aetherium.Test.Games
             Assert.That(request.AbilityConfig, Is.SameAs(abilities));
             Assert.That(request.ProgressionConfig, Is.SameAs(progression));
             Assert.That(request.FactionConfig, Is.SameAs(factions));
+            Assert.That(request.ContentConfig, Is.SameAs(content));
             Assert.That(request.GameDefinitionId, Is.EqualTo("emberfall"));
             Assert.That(request.GameDefinitionVersion, Is.EqualTo("1.2.3"));
         }

@@ -25,6 +25,13 @@ namespace Aetherium.Server.Games
                 Severity = GameDefinitionDiagnosticSeverity.Error,
                 Message = message,
             });
+            void Warn(string section, string message) => diagnostics.Add(new GameDefinitionDiagnostic
+            {
+                BundlePath = bundlePath,
+                Section = section,
+                Severity = GameDefinitionDiagnosticSeverity.Warning,
+                Message = message,
+            });
 
             // --- Structural (manifest) ---
             if (string.IsNullOrWhiteSpace(definition.Id))
@@ -47,6 +54,8 @@ namespace Aetherium.Server.Games
             var skillIds = ToIdSet(definition.Progression?.Skills.Select(s => s.Id), "progression", "skill id", Error);
             var factionIds = ToIdSet(definition.Factions?.Factions.Select(f => f.Id), "factions", "faction id", Error);
             ToIdSet(definition.Factions?.Bands.Select(b => b.Id), "factions", "band id", Error);
+            var creatureIds = ToIdSet(definition.Content?.Creatures.Select(c => c.Id), "content", "creature id", Error);
+            var itemIds = ToIdSet(definition.Content?.Items.Select(i => i.Id), "content", "item id", Error);
 
             // --- Cross-section references ---
             if (definition.Abilities != null)
@@ -85,6 +94,52 @@ namespace Aetherium.Server.Games
                         Error("factions", $"Relation references unknown faction '{relation.FromFactionId}' (fromFactionId).");
                     if (!factionIds.Contains(relation.ToFactionId))
                         Error("factions", $"Relation references unknown faction '{relation.ToFactionId}' (toFactionId).");
+                }
+            }
+
+            // --- Content (add-content-definitions) ---
+            if (definition.Content != null)
+            {
+                foreach (var creature in definition.Content.Creatures)
+                {
+                    if (creature.Health <= 0)
+                        Error("content", $"Creature '{creature.Id}' has non-positive health ({creature.Health}).");
+                    if (string.IsNullOrWhiteSpace(creature.Glyph))
+                        Error("content", $"Creature '{creature.Id}' has an empty glyph.");
+                    if (!Enum.TryParse<ConsoleColor>(creature.Color, ignoreCase: false, out _))
+                        Error("content", $"Creature '{creature.Id}' color '{creature.Color}' is not a valid ConsoleColor name (e.g. Gray, DarkRed, Cyan).");
+                    if (!Aetherium.Server.Content.ContentCatalog.BehaviorPresets.Contains(creature.Behavior))
+                        Error("content", $"Creature '{creature.Id}' behavior '{creature.Behavior}' is not a known preset ({string.Join(", ", Aetherium.Server.Content.ContentCatalog.BehaviorPresets)}).");
+                    if (creature.LootItemId is { } lootId && !itemIds.Contains(lootId))
+                        Error("content", $"Creature '{creature.Id}' drops loot item '{lootId}', which is not a declared item.");
+                }
+
+                foreach (var spawn in definition.Content.Spawns)
+                {
+                    if (!creatureIds.Contains(spawn.CreatureId))
+                        Error("content", $"Spawn table references unknown creature '{spawn.CreatureId}'.");
+                    if (spawn.Weight <= 0)
+                        Error("content", $"Spawn table entry '{spawn.CreatureId}' has non-positive weight ({spawn.Weight}).");
+                }
+
+                // Typo detector: a doctrine that judges kill:<x> where <x> is no defined creature
+                // will never fire from creature kills in this game. Warning, not error — tags like
+                // kill:player are legitimately outside the bestiary.
+                if (definition.Factions != null)
+                {
+                    foreach (var faction in definition.Factions.Factions)
+                    {
+                        foreach (var tag in faction.DoctrineDeltas.Keys)
+                        {
+                            if (tag.StartsWith("kill:", StringComparison.Ordinal)
+                                && tag["kill:".Length..] is { Length: > 0 } subject
+                                && subject != "player"
+                                && !creatureIds.Contains(subject))
+                            {
+                                Warn("content", $"Faction '{faction.Id}' doctrine judges '{tag}', but no creature '{subject}' is defined — the rule can never fire from this game's bestiary.");
+                            }
+                        }
+                    }
                 }
             }
 
