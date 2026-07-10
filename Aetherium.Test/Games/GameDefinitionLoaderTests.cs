@@ -285,6 +285,50 @@ namespace Aetherium.Test.Games
         }
 
         [Test]
+        public void LoadBundle_RulesSection_BindsTriggersConditionsActions()
+        {
+            // Verifies "ECA Rule Data Model" (add-eca-scripting): the rules section binds triggers,
+            // conditions, and actions from a conventional sibling file like every section.
+            var dir = WriteBundle("rules",
+                ("game.yaml", Manifest),
+                ("rules.yaml", """
+                    rules:
+                      - id: acolyte-summons-wolf
+                        when: creature_died
+                        if:
+                          - kind: creature_type_is
+                            creatureType: cult_acolyte
+                          - kind: chance
+                            probability: 0.5
+                        do:
+                          - kind: spawn_creature
+                            creatureId: wolf
+                          - kind: apply_status
+                            target: Victim
+                            statusId: slowed
+                            durationTicks: 10
+                            magnitude: 0.5
+                    """));
+
+            var result = new GameDefinitionLoader().LoadBundle(dir);
+
+            Assert.That(result.Success, Is.True, string.Join("; ", result.Diagnostics));
+            var rule = result.Definition!.Rules!.Rules.Single();
+            Assert.That(rule.Id, Is.EqualTo("acolyte-summons-wolf"));
+            Assert.That(rule.When, Is.EqualTo("creature_died"));
+            Assert.That(rule.If.Select(c => c.Kind), Is.EqualTo(new[] { "creature_type_is", "chance" }));
+            Assert.That(rule.If[0].CreatureType, Is.EqualTo("cult_acolyte"));
+            Assert.That(rule.If[1].Probability, Is.EqualTo(0.5));
+
+            var spawn = rule.Do[0];
+            Assert.That((spawn.Kind, spawn.CreatureId), Is.EqualTo(("spawn_creature", "wolf")));
+            var status = rule.Do[1];
+            Assert.That(status.Kind, Is.EqualTo("apply_status"));
+            Assert.That(status.Target, Is.EqualTo(Aetherium.Model.Eca.EcaActionTarget.Victim));
+            Assert.That((status.StatusId, status.DurationTicks, status.Magnitude), Is.EqualTo(("slowed", 10, 0.5)));
+        }
+
+        [Test]
         public void LoadDirectory_BadBundle_DoesNotBlockOthers()
         {
             WriteBundle("bad", ("game.yaml", "id: {{{"));

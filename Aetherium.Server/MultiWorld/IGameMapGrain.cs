@@ -27,8 +27,10 @@ namespace Aetherium.Server.MultiWorld
         /// gap-analysis §4.6); null means no factions — see wire-factions-live.
         /// <paramref name="contentConfig"/> is the owning world's content vocabulary — creatures,
         /// items, spawn mix (add-content-definitions); null means legacy hardcoded content.
+        /// <paramref name="ecaConfig"/> is the owning world's reactive rules (add-eca-scripting); null
+        /// means no rules fire.
         /// </summary>
-        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null);
+        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null);
 
         /// <summary>
         /// Gets the current world state for this map.

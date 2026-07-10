@@ -55,6 +55,9 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world content vocabulary (add-content-definitions): creatures, items, spawn
         /// mix. Null preserves the legacy hardcoded population exactly.</summary>
         [Id(19)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
+
+        /// <summary>Per-world reactive logic (add-eca-scripting): event–condition–action rules.</summary>
+        [Id(20)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
     }
 
     /// <summary>
@@ -150,6 +153,9 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world content vocabulary (add-content-definitions): creatures, items, spawn
         /// mix. Null preserves the legacy hardcoded population exactly.</summary>
         [Id(14)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
+
+        /// <summary>Per-world reactive logic (add-eca-scripting): event–condition–action rules.</summary>
+        [Id(15)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
     }
 
     /// <summary>

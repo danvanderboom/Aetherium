@@ -130,6 +130,10 @@ namespace Aetherium.Model.Worlds
         /// <summary>Per-world content vocabulary (add-content-definitions): creatures, items, and
         /// spawn mix. Null preserves the legacy hardcoded population exactly.</summary>
         [Id(14)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
+
+        /// <summary>Per-world reactive logic (add-eca-scripting): event–condition–action rules. Null
+        /// means no rules fire.</summary>
+        [Id(15)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
     }
 
     /// <summary>

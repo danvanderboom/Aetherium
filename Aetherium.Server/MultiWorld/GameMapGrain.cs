@@ -276,6 +276,11 @@ namespace Aetherium.Server.MultiWorld
             // And content (add-content-definitions).
             ApplyContentConfig(_mapState.State?.ContentConfig);
 
+            // And reactive rules (add-eca-scripting), seeded from the persisted recipe so the rule RNG
+            // resumes deterministically. Recipe is null on a brand-new grain — the runtime stays absent
+            // until InitializeAsync applies it with the fresh seed.
+            ApplyEcaConfig(_mapState.State?.EcaConfig, _mapState.State?.Recipe?.Seed ?? 0);
+
             if (_mapState.State != null && _mapState.State.Recipe != null && _world == null)
             {
                 // Reactivation after silo restart. Prefer a persisted snapshot when
@@ -513,7 +518,7 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null)
         {
             var mapId = this.GetPrimaryKeyString();
 
@@ -524,6 +529,7 @@ namespace Aetherium.Server.MultiWorld
             ApplyContentConfig(contentConfig);
 
             parameters ??= new Dictionary<string, object>();
+            // (ECA runtime is applied below, once the world seed is resolved.)
 
             var seed = parameters.TryGetValue("seed", out var seedObj) && seedObj is int seedInt
                 ? seedInt
@@ -567,6 +573,10 @@ namespace Aetherium.Server.MultiWorld
             // Data-driven population (add-content-definitions): the passes placed generic
             // monsters; the content catalog decides what they are. Same seed → same mix.
             ApplyContentPopulation(_world, seed);
+
+            // Reactive logic (add-eca-scripting): compile the rule runtime, seeding its RNG from the
+            // world seed so a given (seed, event order) reproduces the same firings.
+            ApplyEcaConfig(ecaConfig, seed);
 
             // Runtime map validation (P1-22). Diagnostic, not gating: generation already
             // ran the pipeline's Validation-phase pass, so a MapValidator failure here
@@ -629,6 +639,7 @@ namespace Aetherium.Server.MultiWorld
                 ProgressionConfig = progressionConfig,
                 FactionConfig = factionConfig,
                 ContentConfig = contentConfig,
+                EcaConfig = ecaConfig,
             };
 
             await _mapState.WriteStateAsync();
@@ -2023,6 +2034,152 @@ namespace Aetherium.Server.MultiWorld
             }
         }
 
+        // Per-world reactive logic (add-eca-scripting), compiled from the world's EcaConfig. Null means
+        // no rules fire — the kill path behaves exactly as before. The runtime is pure (event → resolved
+        // requests); this grain executes the requests below.
+        private Aetherium.Server.Eca.EcaRuntime? _ecaRuntime;
+
+        /// <summary>Compiles a world's <see cref="Aetherium.Model.Eca.EcaConfig"/> into this map's rule
+        /// runtime, seeding its `chance` RNG from the world seed. Called from InitializeAsync (fresh) and
+        /// OnActivateAsync (rehydrate); null leaves the runtime absent → no rules fire.</summary>
+        private void ApplyEcaConfig(Aetherium.Model.Eca.EcaConfig? config, int seed)
+        {
+            _ecaRuntime = config is null ? null : new Aetherium.Server.Eca.EcaRuntime(config, seed);
+        }
+
+        /// <summary>
+        /// Raises the ECA <c>creature_died</c> event (add-eca-scripting) for a defeated monster and
+        /// executes whatever the rules return. Called from the shared monster-defeat branch of both
+        /// <see cref="AttackAsync"/> and <see cref="UseAbilityAsync"/>, after the engine's built-in kill
+        /// reactions (XP, faction, loot), so rules augment the defaults rather than race them. No-op
+        /// without a rule runtime. A rule-spawned creature or a rule-dealt kill does not re-enter ECA in
+        /// this event (single-level, no same-tick cascade this slice).
+        /// </summary>
+        private async Task RunCreatureDiedRulesAsync(Entity victim, Character killer, int x, int y, int z)
+        {
+            if (_ecaRuntime is null || _world is null)
+                return;
+
+            var ctx = new Aetherium.Server.Eca.EcaEventContext
+            {
+                TriggerKind = Aetherium.Server.Eca.CreatureDiedTrigger.Id,
+                VictimCreatureType = victim.Has<Aetherium.Components.CreatureTypeTag>()
+                    ? victim.Get<Aetherium.Components.CreatureTypeTag>().Value
+                    : victim.GetType().Name.ToLowerInvariant(),
+                VictimEntityId = victim.EntityId,
+                KillerEntityId = killer.EntityId,
+                VictimX = x,
+                VictimY = y,
+                VictimZ = z,
+            };
+
+            foreach (var request in _ecaRuntime.Evaluate(ctx))
+                await ExecuteEcaRequestAsync(request);
+        }
+
+        private async Task ExecuteEcaRequestAsync(Aetherium.Server.Eca.EcaActionRequest request)
+        {
+            if (_world is null)
+                return;
+
+            switch (request.Kind)
+            {
+                case Aetherium.Server.Eca.SpawnCreatureAction.Id:
+                    await ExecuteEcaSpawnAsync(request);
+                    break;
+                case Aetherium.Server.Eca.DealDamageAction.Id:
+                    await ExecuteEcaDamageAsync(request);
+                    break;
+                case Aetherium.Server.Eca.ApplyStatusAction.Id:
+                    ExecuteEcaStatus(request);
+                    break;
+            }
+        }
+
+        /// <summary>Spawns a rule's creature from the content catalog at a passable, unoccupied cell near
+        /// the requested location, and fans out its placement — the same path a spawn-table draw uses.</summary>
+        private async Task ExecuteEcaSpawnAsync(Aetherium.Server.Eca.EcaActionRequest request)
+        {
+            if (_contentCatalog is null || request.CreatureId is null
+                || !_contentCatalog.CreaturesById.TryGetValue(request.CreatureId, out var definition))
+                return;
+
+            var cell = ResolveEcaSpawnCell(request.X, request.Y, request.Z);
+            if (cell is null)
+                return;
+
+            var creature = new Aetherium.Monster(_world!);
+            Aetherium.Server.Content.ContentCompiler.ApplyCreature(creature, definition, _world!);
+            creature.Set(cell);
+            _world!.AddEntity(creature);
+
+            var placement = EntityPlacement.FromLocation(creature.EntityId, nameof(Aetherium.Monster), cell);
+            EntityFactory.ExtractProperties(creature, placement);
+            await FanOutAsync(new EntityPlacedDelta { Placement = placement });
+        }
+
+        /// <summary>Deals a rule's damage to the resolved target through the shared damage pipeline,
+        /// fanning out the resulting health change exactly as the melee/ability paths do.</summary>
+        private async Task ExecuteEcaDamageAsync(Aetherium.Server.Eca.EcaActionRequest request)
+        {
+            if (request.TargetEntityId is null
+                || !_world!.Entities.TryGetValue(request.TargetEntityId, out var target)
+                || !target.Has<Aetherium.Components.Health>())
+                return;
+
+            var packet = DamagePacket.Single(request.DamageType, request.Amount,
+                sourceEntityId: null, delivery: DamageDelivery.Ranged);
+            var result = _damagePipeline.Resolve(target, target, packet, _hitResolver, _deathPolicy.ResolveDyingTicks());
+            if (!result.Hit)
+                return;
+
+            int remaining = target.Has<Aetherium.Components.Health>() ? target.Get<Aetherium.Components.Health>().Level : 0;
+            await FanOutAsync(IntFieldDelta(request.TargetEntityId, "Health", "Level", remaining));
+        }
+
+        /// <summary>Attaches a rule's status to the resolved target (the shipped burning/slowed/prone
+        /// effects). Per-tick status processing is a separate engine concern; this establishes the
+        /// canonical state the effect operates on.</summary>
+        private void ExecuteEcaStatus(Aetherium.Server.Eca.EcaActionRequest request)
+        {
+            if (request.TargetEntityId is null
+                || !_world!.Entities.TryGetValue(request.TargetEntityId, out var target))
+                return;
+
+            var status = BuildEcaStatus(request);
+            if (status is null)
+                return;
+
+            if (!target.Has<StatusEffects>())
+                target.Set(new StatusEffects());
+            target.Get<StatusEffects>().Apply(status);
+        }
+
+        private static StatusEffect? BuildEcaStatus(Aetherium.Server.Eca.EcaActionRequest request) => request.StatusId switch
+        {
+            "burning" => new BurningEffect(request.DurationTicks, request.Magnitude),
+            "slowed" => new SlowedEffect(request.DurationTicks, request.Magnitude),
+            "prone" => new ProneEffect(request.DurationTicks),
+            _ => null,
+        };
+
+        /// <summary>Finds a passable, unoccupied cell for a rule-spawned creature: the requested cell if
+        /// free, else an adjacent free cell, else null (the spawn is skipped rather than stacking).</summary>
+        private Aetherium.Components.WorldLocation? ResolveEcaSpawnCell(int x, int y, int z)
+        {
+            var target = new Aetherium.Components.WorldLocation(x, y, z);
+            if (_world!.PassableTerrain(target) && _world.IsOpenForOccupancy(target))
+                return target;
+
+            foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+            {
+                var neighbor = new Aetherium.Components.WorldLocation(x + dx, y + dy, z);
+                if (_world.PassableTerrain(neighbor) && _world.IsOpenForOccupancy(neighbor))
+                    return neighbor;
+            }
+            return null;
+        }
+
         /// <summary>Builds the behavior tree for one monster from its creature definition's
         /// behavior preset (add-content-definitions). Every preset resolves to the wander-melee
         /// tree today — this switch is the seam new presets (and, later, ECA-scripted behaviors)
@@ -2188,6 +2345,11 @@ namespace Aetherium.Server.MultiWorld
                 await FanOutAsync(new EntityPlacedDelta { Placement = placement });
             }
 
+            // Reactive rules (add-eca-scripting): a monster defeat raises creature_died, after the
+            // built-in kill reactions above, so rules augment rather than race them.
+            if (result.TargetEnteredDying && targetWasMonster)
+                await RunCreatureDiedRulesAsync(target, ctx.Player, lx, ly, lz);
+
             return new Aetherium.Model.AttackResultDto
             {
                 Success = true,
@@ -2341,6 +2503,10 @@ namespace Aetherium.Server.MultiWorld
                                 new Aetherium.Components.WorldLocation(tx, ty, tz));
                             await FanOutAsync(new EntityPlacedDelta { Placement = placement });
                         }
+
+                        // Reactive rules (add-eca-scripting): the ability kill raises creature_died,
+                        // the same event the melee path raises, through the same runtime.
+                        await RunCreatureDiedRulesAsync(target, ctx.Player, tx, ty, tz);
                     }
                 }
             }
@@ -3042,6 +3208,10 @@ namespace Aetherium.Server.MultiWorld
         /// (add-content-definitions), so the grain can recompile its content catalog and re-skin
         /// data-driven creatures on reactivation. Null means legacy hardcoded content.</summary>
         [Id(15)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
+
+        /// <summary>Per-world reactive logic captured at <c>InitializeAsync</c> time (add-eca-scripting),
+        /// so the grain can recompile its rule runtime on reactivation. Null means no rules.</summary>
+        [Id(16)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
     }
 }
 

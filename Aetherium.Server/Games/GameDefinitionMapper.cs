@@ -31,6 +31,7 @@ namespace Aetherium.Server.Games
                 ProgressionConfig = definition.Progression,
                 FactionConfig = definition.Factions,
                 ContentConfig = definition.Content,
+                EcaConfig = definition.Rules,
                 GameDefinitionId = definition.Id,
                 GameDefinitionVersion = definition.Version,
             };

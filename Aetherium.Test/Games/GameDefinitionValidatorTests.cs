@@ -3,6 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using Aetherium.Model.Abilities;
 using Aetherium.Model.Content;
+using Aetherium.Model.Eca;
 using Aetherium.Model.Factions;
 using Aetherium.Model.Games;
 using Aetherium.Model.Progression;
@@ -225,6 +226,128 @@ namespace Aetherium.Test.Games
             var diagnostics = Validate(definition);
 
             var finding = diagnostics.Single();
+            Assert.That(finding.Severity, Is.EqualTo(GameDefinitionDiagnosticSeverity.Warning));
+            Assert.That(finding.Message, Does.Contain("ghoul"));
+        }
+
+        // --- Rules (add-eca-scripting) ---
+
+        private static EcaConfig RulesWith(params EcaRule[] rules) => new() { Rules = rules.ToList() };
+
+        private static EcaRule SpawnWolfRule(string id = "r") => new()
+        {
+            Id = id,
+            When = "creature_died",
+            If = { new EcaConditionDescriptor { Kind = "creature_type_is", CreatureType = "wolf" } },
+            Do = { new EcaActionDescriptor { Kind = "spawn_creature", CreatureId = "wolf" } },
+        };
+
+        [Test]
+        public void Rules_ValidAgainstContent_ProduceNoDiagnostics()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();               // defines "wolf"
+            definition.Rules = RulesWith(SpawnWolfRule());
+
+            Assert.That(Validate(definition), Is.Empty);
+        }
+
+        [Test]
+        public void Rule_DuplicateIds_AreErrors()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            definition.Rules = RulesWith(SpawnWolfRule("dup"), SpawnWolfRule("dup"));
+
+            Assert.That(Validate(definition).Any(d => d.Section == "rules" && d.Message.Contains("Duplicate") && d.Message.Contains("dup")), Is.True);
+        }
+
+        [Test]
+        public void Rule_UnknownTrigger_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            var rule = SpawnWolfRule();
+            rule.When = "sunrise";
+            definition.Rules = RulesWith(rule);
+
+            Assert.That(Validate(definition).Any(d => d.Section == "rules" && d.Message.Contains("sunrise")), Is.True);
+        }
+
+        [Test]
+        public void SpawnCreature_UnknownCreature_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();               // defines "wolf", not "dragon"
+            var rule = SpawnWolfRule();
+            rule.Do[0].CreatureId = "dragon";
+            definition.Rules = RulesWith(rule);
+
+            var finding = Validate(definition).Single(d => d.Section == "rules");
+            Assert.That(finding.Severity, Is.EqualTo(GameDefinitionDiagnosticSeverity.Error));
+            Assert.That(finding.Message, Does.Contain("dragon"));
+        }
+
+        [Test]
+        public void ApplyStatus_UnknownStatus_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            var rule = new EcaRule
+            {
+                Id = "curse",
+                When = "creature_died",
+                Do = { new EcaActionDescriptor { Kind = "apply_status", Target = EcaActionTarget.Killer, StatusId = "petrified" } },
+            };
+            definition.Rules = RulesWith(rule);
+
+            var finding = Validate(definition).Single(d => d.Section == "rules");
+            Assert.That(finding.Message, Does.Contain("petrified"));
+        }
+
+        [Test]
+        public void Chance_OutOfRange_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            var rule = SpawnWolfRule();
+            rule.If.Add(new EcaConditionDescriptor { Kind = "chance", Probability = 1.5 });
+            definition.Rules = RulesWith(rule);
+
+            Assert.That(Validate(definition).Any(d => d.Section == "rules" && d.Message.Contains("1.5")), Is.True);
+        }
+
+        [Test]
+        public void DealDamage_NonPositiveAmount_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();
+            var rule = new EcaRule
+            {
+                Id = "surge",
+                When = "creature_died",
+                Do = { new EcaActionDescriptor { Kind = "deal_damage", Target = EcaActionTarget.Killer, Amount = 0 } },
+            };
+            definition.Rules = RulesWith(rule);
+
+            Assert.That(Validate(definition).Any(d => d.Section == "rules" && d.Message.Contains("deal_damage")), Is.True);
+        }
+
+        [Test]
+        public void CreatureTypeIs_UnknownCreature_IsAWarning()
+        {
+            var definition = ValidDefinition();
+            definition.Content = ValidContent();               // defines "wolf", not "ghoul"
+            var rule = new EcaRule
+            {
+                Id = "r",
+                When = "creature_died",
+                If = { new EcaConditionDescriptor { Kind = "creature_type_is", CreatureType = "ghoul" } },
+                Do = { new EcaActionDescriptor { Kind = "spawn_creature", CreatureId = "wolf" } },
+            };
+            definition.Rules = RulesWith(rule);
+
+            var finding = Validate(definition).Single(d => d.Section == "rules");
             Assert.That(finding.Severity, Is.EqualTo(GameDefinitionDiagnosticSeverity.Warning));
             Assert.That(finding.Message, Does.Contain("ghoul"));
         }

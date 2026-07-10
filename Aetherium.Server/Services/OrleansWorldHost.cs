@@ -62,6 +62,7 @@ namespace Aetherium.Server.Services
                 GameDefinitionId = template.GameDefinitionId,
                 GameDefinitionVersion = template.GameDefinitionVersion,
                 ContentConfig = template.ContentConfig,
+                EcaConfig = template.EcaConfig,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };

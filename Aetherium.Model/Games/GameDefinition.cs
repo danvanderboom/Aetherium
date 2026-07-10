@@ -46,6 +46,7 @@ namespace Aetherium.Model.Games
         [Id(8)] public ProgressionConfig? Progression { get; set; }
         [Id(9)] public FactionConfig? Factions { get; set; }
         [Id(10)] public Aetherium.Model.Content.ContentConfig? Content { get; set; }
+        [Id(11)] public Aetherium.Model.Eca.EcaConfig? Rules { get; set; }
     }
 
     [GenerateSerializer]

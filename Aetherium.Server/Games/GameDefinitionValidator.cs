@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Aetherium.Model.Games;
+using Aetherium.Model.Eca;
+using Aetherium.Server.Eca;
 
 namespace Aetherium.Server.Games
 {
@@ -143,8 +145,116 @@ namespace Aetherium.Server.Games
                 }
             }
 
+            // --- Rules (add-eca-scripting), validated against the reflectable EcaVocabulary ---
+            if (definition.Rules != null)
+            {
+                ToIdSet(definition.Rules.Rules.Select(r => r.Id), "rules", "rule id", Error);
+
+                foreach (var rule in definition.Rules.Rules)
+                {
+                    if (!EcaVocabulary.TryGet(rule.When, out var trigger) || trigger.Role != EcaTileRole.Trigger)
+                        Error("rules", $"Rule '{rule.Id}' has unknown trigger '{rule.When}'.");
+
+                    foreach (var condition in rule.If)
+                        ValidateTile(rule.Id, condition.Kind, EcaTileRole.Condition,
+                            EcaParamValues(condition), creatureIds, Error, Warn);
+
+                    foreach (var action in rule.Do)
+                        ValidateTile(rule.Id, action.Kind, EcaTileRole.Action,
+                            EcaParamValues(action), creatureIds, Error, Warn);
+                }
+            }
+
             return diagnostics;
         }
+
+        /// <summary>
+        /// Validates one condition/action tile against its <see cref="EcaTileDefinition"/> — the
+        /// registry is the source of truth, so this loop is generic over parameter metadata (required
+        /// presence, CreatureRef/StatusRef resolution) rather than a per-kind switch. Only the two
+        /// numeric range guards this slice needs are keyed on the specific tile+parameter.
+        /// </summary>
+        private static void ValidateTile(string ruleId, string kind, EcaTileRole expectedRole,
+            IReadOnlyDictionary<string, object?> values, HashSet<string> creatureIds,
+            Action<string, string> error, Action<string, string> warn)
+        {
+            if (!EcaVocabulary.TryGet(kind, out var def) || def.Role != expectedRole)
+            {
+                error("rules", $"Rule '{ruleId}' uses unknown {expectedRole.ToString().ToLowerInvariant()} '{kind}'.");
+                return;
+            }
+
+            foreach (var p in def.Parameters)
+            {
+                values.TryGetValue(p.Name, out var value);
+
+                // Required-presence is only meaningful for string-ish parameters — a required number
+                // like probability legitimately allows 0 and is covered by its range check below.
+                bool isStringish = p.ValueType is EcaValueType.Text or EcaValueType.CreatureRef
+                    or EcaValueType.StatusRef or EcaValueType.EnumChoice;
+                if (p.Required && isStringish && string.IsNullOrEmpty(value as string))
+                {
+                    error("rules", $"Rule '{ruleId}' {kind} is missing required parameter '{p.Name}'.");
+                    continue;
+                }
+
+                switch (p.ValueType)
+                {
+                    // An action referencing a missing creature will fail at runtime (error); a
+                    // condition referencing one simply never matches (warning) — the typo detector.
+                    case EcaValueType.CreatureRef when value is string cref && cref.Length > 0 && !creatureIds.Contains(cref):
+                        if (def.Role == EcaTileRole.Action)
+                            error("rules", $"Rule '{ruleId}' {kind} references creature '{cref}', which is not defined in content.");
+                        else
+                            warn("rules", $"Rule '{ruleId}' {kind} references creature '{cref}', which is not defined in content — it can never match.");
+                        break;
+
+                    case EcaValueType.StatusRef when value is string sref && !p.EnumChoices.Contains(sref):
+                        error("rules", $"Rule '{ruleId}' {kind} references status '{sref}', which is not one of: {string.Join(", ", p.EnumChoices)}.");
+                        break;
+                }
+            }
+
+            if (kind == ChanceCondition.Id && values.TryGetValue(ChanceCondition.ProbabilityParam, out var prob)
+                && prob is double probability && (probability < 0 || probability > 1))
+                error("rules", $"Rule '{ruleId}' chance probability {probability} is outside [0, 1].");
+            if (kind == DealDamageAction.Id && values.TryGetValue(DealDamageAction.AmountParam, out var amt)
+                && amt is double amount && amount <= 0)
+                error("rules", $"Rule '{ruleId}' deal_damage amount {amount} must be greater than 0.");
+        }
+
+        /// <summary>Adapts a condition descriptor's typed fields to a param-name→value map — the one
+        /// place that knows the flat descriptor's shape, so <see cref="ValidateTile"/> stays generic.</summary>
+        private static IReadOnlyDictionary<string, object?> EcaParamValues(EcaConditionDescriptor c) => c.Kind switch
+        {
+            CreatureTypeIsCondition.Id => new Dictionary<string, object?>
+                { [CreatureTypeIsCondition.CreatureTypeParam] = c.CreatureType },
+            ChanceCondition.Id => new Dictionary<string, object?>
+                { [ChanceCondition.ProbabilityParam] = c.Probability },
+            _ => new Dictionary<string, object?>(),
+        };
+
+        private static IReadOnlyDictionary<string, object?> EcaParamValues(EcaActionDescriptor a) => a.Kind switch
+        {
+            SpawnCreatureAction.Id => new Dictionary<string, object?>
+            {
+                [SpawnCreatureAction.CreatureIdParam] = a.CreatureId,
+                [SpawnCreatureAction.OffsetXParam] = a.OffsetX,
+                [SpawnCreatureAction.OffsetYParam] = a.OffsetY,
+            },
+            DealDamageAction.Id => new Dictionary<string, object?>
+            {
+                [DealDamageAction.AmountParam] = a.Amount,
+                [DealDamageAction.DamageTypeParam] = a.DamageType,
+            },
+            ApplyStatusAction.Id => new Dictionary<string, object?>
+            {
+                [ApplyStatusAction.StatusIdParam] = a.StatusId,
+                [ApplyStatusAction.DurationTicksParam] = a.DurationTicks,
+                [ApplyStatusAction.MagnitudeParam] = a.Magnitude,
+            },
+            _ => new Dictionary<string, object?>(),
+        };
 
         private static HashSet<string> ToIdSet(IEnumerable<string>? ids, string section, string what,
             Action<string, string> error)
