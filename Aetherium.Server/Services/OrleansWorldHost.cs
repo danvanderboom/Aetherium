@@ -59,9 +59,18 @@ namespace Aetherium.Server.Services
                 AbilityConfig = template.AbilityConfig,
                 ProgressionConfig = template.ProgressionConfig,
                 FactionConfig = template.FactionConfig,
+                GameDefinitionId = template.GameDefinitionId,
+                GameDefinitionVersion = template.GameDefinitionVersion,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };
+
+            // WorldTemplate.Size arrived with add-game-definition-loader; before it, this path
+            // silently fell back to WorldConfig's 100x100 default regardless of the request.
+            if (template.Size is { } dims)
+            {
+                config.Size = new WorldSize { Width = dims.Width, Height = dims.Height, Depth = dims.Depth };
+            }
 
             // Initialize the world
             await worldGrain.InitializeAsync(config);

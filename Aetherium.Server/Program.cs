@@ -241,6 +241,18 @@ namespace Aetherium.Server
                 var generator = sp.GetRequiredService<Aetherium.Server.HubWorld.HubWorldGenerator>();
                 return new Aetherium.Server.HubWorld.HubTemplateResolver(generator);
             });
+
+            // Game definition bundles (add-game-definition-loader): YAML-defined games under
+            // Data/Games, each instantiable as any number of concurrently-running worlds.
+            builder.Services.AddSingleton<Aetherium.Server.Games.GameDefinitionRegistry>(sp =>
+            {
+                var gamesPath = Environment.GetEnvironmentVariable("GAMES_PATH") ?? "./Data/Games";
+                var registry = new Aetherium.Server.Games.GameDefinitionRegistry(gamesPath);
+                registry.LoadAll();
+                foreach (var diagnostic in registry.Diagnostics)
+                    Console.WriteLine($"[Program] Game definition diagnostic: {diagnostic}");
+                return registry;
+            });
             
             // Add prefab library
             var environment = builder.Environment.EnvironmentName;

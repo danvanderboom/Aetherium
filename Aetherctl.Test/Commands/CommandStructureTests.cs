@@ -52,6 +52,17 @@ namespace Aetherctl.Test.Commands
         }
 
         [Fact]
+        public void GameCommand_CanBeAdded()
+        {
+            var root = new RootCommand();
+            GameCommands.AddToRoot(root);
+            var gameCmd = root.Subcommands.FirstOrDefault(c => c.Name == "game");
+            Assert.NotNull(gameCmd);
+            Assert.Equal(new[] { "create", "instances", "list" },
+                gameCmd!.Subcommands.Select(c => c.Name).OrderBy(n => n).ToArray());
+        }
+
+        [Fact]
         public void WorldCommand_CanBeAdded()
         {
             var root = new RootCommand();

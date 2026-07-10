@@ -692,7 +692,12 @@ namespace Aetherium.Server.Management
                     DeathPolicy = hubConfig?.DeathPolicy ?? request.DeathPolicy,
                     AbilityConfig = hubConfig?.AbilityConfig ?? request.AbilityConfig,
                     ProgressionConfig = hubConfig?.ProgressionConfig ?? request.ProgressionConfig,
-                    FactionConfig = hubConfig?.FactionConfig ?? request.FactionConfig
+                    FactionConfig = hubConfig?.FactionConfig ?? request.FactionConfig,
+                    Size = (hubConfig?.Size ?? request.Size) is { } size
+                        ? new Aetherium.Model.Worlds.WorldDimensions { Width = size.Width, Height = size.Height, Depth = size.Depth }
+                        : null,
+                    GameDefinitionId = hubConfig?.GameDefinitionId ?? request.GameDefinitionId,
+                    GameDefinitionVersion = hubConfig?.GameDefinitionVersion ?? request.GameDefinitionVersion
                 };
 
                 // Default to public world
@@ -726,7 +731,9 @@ namespace Aetherium.Server.Management
                     DeathPolicy = request.DeathPolicy,
                     AbilityConfig = request.AbilityConfig,
                     ProgressionConfig = request.ProgressionConfig,
-                    FactionConfig = request.FactionConfig
+                    FactionConfig = request.FactionConfig,
+                    GameDefinitionId = request.GameDefinitionId,
+                    GameDefinitionVersion = request.GameDefinitionVersion
                 };
 
                 // Ensure WorldId is set
@@ -744,6 +751,36 @@ namespace Aetherium.Server.Management
                 Console.WriteLine($"[GameManagementGrain] Created world {worldId} ({config.Name}) via direct grain{(hubConfig != null ? " (hub)" : "")}");
                 return worldId;
             }
+        }
+
+        // --- Game definitions (add-game-definition-loader) ---
+
+        public Task<List<Aetherium.Model.Games.GameDefinitionSummaryDto>> ListGameDefinitionsAsync()
+        {
+            var registry = _serviceProvider.GetService<Aetherium.Server.Games.GameDefinitionRegistry>();
+            return Task.FromResult(registry?.ListSummaries() ?? new List<Aetherium.Model.Games.GameDefinitionSummaryDto>());
+        }
+
+        public async Task<Aetherium.Model.Games.GameInstanceResult> CreateGameInstanceAsync(string gameDefinitionId, string? instanceName = null)
+        {
+            var registry = _serviceProvider.GetService<Aetherium.Server.Games.GameDefinitionRegistry>();
+            if (registry == null)
+                return Aetherium.Model.Games.GameInstanceResult.Fail("No game definition registry is configured on this server.");
+
+            if (!registry.TryGet(gameDefinitionId, out var definition) || definition == null)
+                return Aetherium.Model.Games.GameInstanceResult.Fail($"Unknown game definition '{gameDefinitionId}'.");
+
+            var request = Aetherium.Server.Games.GameDefinitionMapper.ToCreateWorldRequest(definition, instanceName);
+            var worldId = await CreateWorldAsync(request);
+
+            Console.WriteLine($"[GameManagementGrain] Created game instance {worldId} of {definition.Id} v{definition.Version}");
+            return Aetherium.Model.Games.GameInstanceResult.Ok(worldId);
+        }
+
+        public async Task<List<WorldInfo>> ListGameInstancesAsync(string gameDefinitionId)
+        {
+            var worlds = await ListWorldsAsync();
+            return worlds.Where(w => w.GameDefinitionId == gameDefinitionId).ToList();
         }
 
         public async Task<OperationResult> PauseWorldAsync(string worldId)

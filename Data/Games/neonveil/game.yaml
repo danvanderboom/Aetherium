@@ -1,0 +1,85 @@
+# Neonveil — sample game definition bundle (add-game-definition-loader).
+# A sci-fi netrunning game: bandwidth-fueled intrusion programs, corporate security,
+# an anarchist collective, and permadeath. Same engine as Emberfall, different data.
+# This bundle uses the single-file style: every section lives inline in the manifest.
+id: neonveil
+name: Neonveil
+version: 0.9.0
+description: A neon-lit netrunning game of bandwidth, breach programs, and burned decks.
+tags: [scifi, netrunner, sample]
+
+world:
+  generatorType: rooms-and-corridors
+  size: { width: 50, height: 50, depth: 1 }
+  maxPlayers: 20
+
+death:
+  permadeath: true
+  permadeathBehavior: Spectate
+  downStateEnabled: false
+  dropOnDeath: All
+  corpseRetentionTicks: 100
+  respawnLocation:
+    mode: WorldSpawn
+  xpLossPolicy: None
+
+abilities:
+  characterResourcePools:
+    - tag: bandwidth
+      max: 80
+      regenPerTick: 4
+      regenPolicy: Continuous
+  abilities:
+    - id: breach
+      resourcePoolTag: bandwidth
+      resourceCost: 20
+      cooldown: 2
+      range: 4
+      targetShape: single
+      effects:
+        - kind: DealDamage
+          damageType: ice
+          amount: 30
+      tags: [program]
+    - id: spike
+      resourcePoolTag: bandwidth
+      resourceCost: 35
+      cooldown: 4
+      range: 6
+      targetShape: single
+      effects:
+        - kind: DealDamage
+          damageType: voltage
+          amount: 55
+      tags: [program]
+
+progression:
+  pools:
+    - id: street_cred
+      curve: { kind: Linear, xpPerLevel: 50 }
+  xpAwardRules:
+    - onEvent: MonsterDefeated
+      poolId: street_cred
+      amount: 10
+  requireSkillToCastAbilities: false
+
+factions:
+  factions:
+    - id: helix_corp
+      name: Helix Corporation
+      tags: [corp]
+      doctrineDeltas:
+        "kill:drone": -20
+      rankRules:
+        - { minStanding: 200, rankId: contractor }
+    - id: null_collective
+      name: The Null Collective
+      tags: [anarchist]
+      doctrineDeltas:
+        "kill:drone": 15
+  relations:
+    - { fromFactionId: null_collective, toFactionId: helix_corp, disposition: War, mutual: true }
+  bands:
+    - { id: flagged, minStanding: -1000 }
+    - { id: unknown, minStanding: -50 }
+    - { id: trusted, minStanding: 150 }

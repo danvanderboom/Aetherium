@@ -80,7 +80,9 @@ namespace Aetherium.Server.MultiWorld
                 CreatedAt = config.CreatedAt,
                 NarrativeId = config.NarrativeId,
                 MapIds = new List<string>(),
-                ClusterId = config.ClusterId
+                ClusterId = config.ClusterId,
+                GameDefinitionId = config.GameDefinitionId,
+                GameDefinitionVersion = config.GameDefinitionVersion
             };
             _worldState.State.DeathPolicy = config.DeathPolicy;
             _worldState.State.AbilityConfig = config.AbilityConfig;
