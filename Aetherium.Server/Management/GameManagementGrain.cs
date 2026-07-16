@@ -699,7 +699,8 @@ namespace Aetherium.Server.Management
                     GameDefinitionId = hubConfig?.GameDefinitionId ?? request.GameDefinitionId,
                     GameDefinitionVersion = hubConfig?.GameDefinitionVersion ?? request.GameDefinitionVersion,
                     ContentConfig = hubConfig?.ContentConfig ?? request.ContentConfig,
-                    EcaConfig = hubConfig?.EcaConfig ?? request.EcaConfig
+                    EcaConfig = hubConfig?.EcaConfig ?? request.EcaConfig,
+                    Topology = hubConfig?.Topology ?? request.Topology
                 };
 
                 // Default to public world
@@ -737,7 +738,8 @@ namespace Aetherium.Server.Management
                     GameDefinitionId = request.GameDefinitionId,
                     GameDefinitionVersion = request.GameDefinitionVersion,
                     ContentConfig = request.ContentConfig,
-                    EcaConfig = request.EcaConfig
+                    EcaConfig = request.EcaConfig,
+                    Topology = request.Topology
                 };
 
                 // Ensure WorldId is set

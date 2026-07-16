@@ -291,6 +291,11 @@ namespace Aetherium.Server.MultiWorld
                 _world = await TryHydrateFromSnapshotAsync()
                     ?? RegenerateFromRecipe(_mapState.State.Recipe);
 
+                // Re-resolve the world's tiling from persisted state (docs/grid-topologies.md).
+                // Null/empty (any pre-topology map) → square, so old persisted state reactivates
+                // byte-identically.
+                _world.Topology = Aetherium.Topology.GridTopologyRegistry.Get(_mapState.State.Topology);
+
                 // Re-skin data-driven creatures (add-content-definitions): snapshot-hydrated
                 // entities re-bind their definition via CreatureTypeTag (damage preserved);
                 // recipe-regenerated monsters get the same deterministic draw as first creation.
@@ -518,7 +523,7 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null)
         {
             var mapId = this.GetPrimaryKeyString();
 
@@ -569,6 +574,10 @@ namespace Aetherium.Server.MultiWorld
             }
 
             _world = result.World;
+
+            // Resolve the world's tiling once (docs/grid-topologies.md) — every adjacency/
+            // distance/line/facing consumer reads World.Topology. Null/empty → square.
+            _world.Topology = Aetherium.Topology.GridTopologyRegistry.Get(topology);
 
             // Data-driven population (add-content-definitions): the passes placed generic
             // monsters; the content catalog decides what they are. Same seed → same mix.
@@ -640,6 +649,7 @@ namespace Aetherium.Server.MultiWorld
                 FactionConfig = factionConfig,
                 ContentConfig = contentConfig,
                 EcaConfig = ecaConfig,
+                Topology = topology,
             };
 
             await _mapState.WriteStateAsync();
@@ -936,8 +946,11 @@ namespace Aetherium.Server.MultiWorld
             if (character is null || location is null)
                 return Task.FromResult<string?>(null);
 
-            var heading = character.Get<Aetherium.Components.HasHeading>()?.Heading ?? 0;
-            var bearing = DegreesToCardinal(heading);
+            // Nearest-cardinal bearing for the perception view — same boundaries the
+            // deleted DegreesToCardinal helper used (WorldDirection is square-legacy
+            // cosmetics; degrees are the facing source of truth).
+            var bearing = character.Get<Aetherium.Components.HasHeading>()?.ToWorldDirection()
+                ?? Aetherium.WorldDirection.North;
 
             var perception = new Aetherium.Server.PerceptionService()
                 .ComputePerception(_world, location, bearing, new System.Drawing.Size(40, 40));
@@ -1808,10 +1821,10 @@ namespace Aetherium.Server.MultiWorld
             if (distance < 1 || distance > 100)
                 return MoveResult.Fail("Distance must be between 1 and 100");
 
-            // Translate relative direction against the player's current heading.
+            // Relative direction resolves against the player's heading per cell, in
+            // the world's topology (docs/grid-topologies.md Rule 2) — on square,
+            // byte-identical to the old cardinalize-then-rotate pair.
             var heading = player.Get<Aetherium.Components.HasHeading>()?.Heading ?? 0;
-            var bearing = DegreesToCardinal(heading);
-            var rotated = RotateRelativeByHeading(direction, bearing);
 
             // Preserve old position for the delta before movement mutates the entity.
             var oldX = current.X; var oldY = current.Y; var oldZ = current.Z;
@@ -1819,7 +1832,7 @@ namespace Aetherium.Server.MultiWorld
             // Validated, per-step movement: stops at the first wall/closed door/
             // occupied cell/map edge, so this path can no longer walk through
             // geometry (it previously applied the full delta unchecked).
-            var outcome = _world.TryMoveSteps(player, rotated, distance);
+            var outcome = _world.TryMoveSteps(player, heading, direction, distance);
             if (!outcome.Success)
                 return MoveResult.Fail(outcome.BlockedReason ?? "Blocked");
 
@@ -2171,9 +2184,9 @@ namespace Aetherium.Server.MultiWorld
             if (_world!.PassableTerrain(target) && _world.IsOpenForOccupancy(target))
                 return target;
 
-            foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+            foreach (var adjacent in _world.Topology.Neighbors(new Aetherium.Topology.GridCoord(x, y, z)))
             {
-                var neighbor = new Aetherium.Components.WorldLocation(x + dx, y + dy, z);
+                var neighbor = adjacent.ToWorldLocation();
                 if (_world.PassableTerrain(neighbor) && _world.IsOpenForOccupancy(neighbor))
                     return neighbor;
             }
@@ -2295,8 +2308,11 @@ namespace Aetherium.Server.MultiWorld
 
             var attackerLoc = ctx.ViewLocation;
             var targetLoc = target.Get<Aetherium.Components.WorldLocation>();
-            int distance = Math.Abs(targetLoc.X - attackerLoc.X)
-                         + Math.Abs(targetLoc.Y - attackerLoc.Y)
+            // Melee reach: topology metric on the plane + vertical steps (on square,
+            // the Manhattan distance this gate has always used).
+            int distance = _world.Topology.Distance(
+                               Aetherium.Topology.GridCoord.From(attackerLoc),
+                               Aetherium.Topology.GridCoord.From(targetLoc))
                          + Math.Abs(targetLoc.Z - attackerLoc.Z);
             if (distance > 1)
                 return Aetherium.Model.AttackResultDto.Fail("Target is not in reach");
@@ -2433,8 +2449,9 @@ namespace Aetherium.Server.MultiWorld
                     return AbilityResultDto.Fail("Target has no location");
                 var tl = target.Get<Aetherium.Components.WorldLocation>();
                 tx = tl.X; ty = tl.Y; tz = tl.Z;
-                int distance = Math.Abs(tl.X - ctx.ViewLocation.X)
-                             + Math.Abs(tl.Y - ctx.ViewLocation.Y)
+                int distance = _world!.Topology.Distance(
+                                   Aetherium.Topology.GridCoord.From(ctx.ViewLocation),
+                                   Aetherium.Topology.GridCoord.From(tl))
                              + Math.Abs(tl.Z - ctx.ViewLocation.Z);
                 if (distance > (int)Math.Ceiling(ability.Range))
                     return AbilityResultDto.Fail("Target is out of range");
@@ -3114,39 +3131,9 @@ namespace Aetherium.Server.MultiWorld
         private static Aetherium.Model.InteractionResultDto Fail(string reason)
             => new Aetherium.Model.InteractionResultDto { Success = false, Reason = reason };
 
-        private static Aetherium.WorldDirection DegreesToCardinal(int degrees)
-        {
-            int n = ((degrees % 360) + 360) % 360;
-            if (n < 45 || n >= 315) return Aetherium.WorldDirection.North;
-            if (n < 135) return Aetherium.WorldDirection.East;
-            if (n < 225) return Aetherium.WorldDirection.South;
-            return Aetherium.WorldDirection.West;
-        }
-
-        private static Aetherium.WorldDirection RotateRelativeByHeading(Aetherium.Model.RelativeDirection rel, Aetherium.WorldDirection heading)
-        {
-            // Translate (Forward/Backward/Left/Right) against the character's bearing.
-            // Forward = heading; Backward = opposite; Left = 90° CCW; Right = 90° CW.
-            int rotations = rel switch
-            {
-                Aetherium.Model.RelativeDirection.Forward => 0,
-                Aetherium.Model.RelativeDirection.Right => 1,
-                Aetherium.Model.RelativeDirection.Backward => 2,
-                Aetherium.Model.RelativeDirection.Left => 3,
-                _ => 0,
-            };
-            var d = heading;
-            for (int i = 0; i < rotations; i++)
-                d = d switch
-                {
-                    Aetherium.WorldDirection.North => Aetherium.WorldDirection.East,
-                    Aetherium.WorldDirection.East => Aetherium.WorldDirection.South,
-                    Aetherium.WorldDirection.South => Aetherium.WorldDirection.West,
-                    Aetherium.WorldDirection.West => Aetherium.WorldDirection.North,
-                    _ => d,
-                };
-            return d;
-        }
+        // The former DegreesToCardinal/RotateRelativeByHeading helpers live on as the
+        // reference implementations inside SquareTopologyGoldenTests, which pin
+        // IGridTopology.ResolveRelative to their exact behavior on square worlds.
     }
 
     /// <summary>
@@ -3212,6 +3199,12 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world reactive logic captured at <c>InitializeAsync</c> time (add-eca-scripting),
         /// so the grain can recompile its rule runtime on reactivation. Null means no rules.</summary>
         [Id(16)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
+
+        /// <summary>The world's tiling captured at <c>InitializeAsync</c> time
+        /// (docs/grid-topologies.md), so the grain can re-resolve its <c>World.Topology</c> on
+        /// reactivation without re-running InitializeAsync. Null/empty means square — so any
+        /// map persisted before topologies shipped reactivates as square correctly.</summary>
+        [Id(17)] public string? Topology { get; set; }
     }
 }
 

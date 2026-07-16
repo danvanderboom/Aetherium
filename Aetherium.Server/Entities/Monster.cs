@@ -100,23 +100,29 @@ namespace Aetherium
             if (location == null)
                 return new List<WorldDirection>();
 
-            var candidates = new (WorldDirection Direction, WorldLocation Target)[]
+            // Candidates come from the world's topology (square: the four cardinals);
+            // WorldDirection is the square-legacy currency TryMoveSteps still speaks —
+            // a non-square wander needs a heading-based variant of this API.
+            var cell = Aetherium.Topology.GridCoord.From(location);
+            var valid = new List<WorldDirection>(world.Topology.MaxDirectionCount);
+            foreach (var step in world.Topology.Steps(cell))
             {
-                // Canonical engine convention: North = -Y, South = +Y.
-                (WorldDirection.North, location.FromDelta(0, -1, 0)),
-                (WorldDirection.South, location.FromDelta(0, +1, 0)),
-                (WorldDirection.East,  location.FromDelta(+1, 0, 0)),
-                (WorldDirection.West,  location.FromDelta(-1, 0, 0)),
-            };
-
-            var valid = new List<WorldDirection>(4);
-            foreach (var (direction, target) in candidates)
-            {
-                if (world.PassableTerrain(target))
-                    valid.Add(direction);
+                if (world.PassableTerrain(step.Target.ToWorldLocation()))
+                    valid.Add(HeadingToCardinal(step.HeadingDegrees));
             }
 
             return valid;
+        }
+
+        /// <summary>Nearest cardinal to an edge heading — exact on square (edge headings
+        /// are multiples of 90°); a lossy square-legacy adapter anywhere else.</summary>
+        private static WorldDirection HeadingToCardinal(int degrees)
+        {
+            int n = ((degrees % 360) + 360) % 360;
+            if (n < 45 || n >= 315) return WorldDirection.North;
+            if (n < 135) return WorldDirection.East;
+            if (n < 225) return WorldDirection.South;
+            return WorldDirection.West;
         }
 
         //public void SetGoal()

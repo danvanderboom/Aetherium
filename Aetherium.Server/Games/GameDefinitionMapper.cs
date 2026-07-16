@@ -32,6 +32,7 @@ namespace Aetherium.Server.Games
                 FactionConfig = definition.Factions,
                 ContentConfig = definition.Content,
                 EcaConfig = definition.Rules,
+                Topology = definition.World.Topology,
                 GameDefinitionId = definition.Id,
                 GameDefinitionVersion = definition.Version,
             };

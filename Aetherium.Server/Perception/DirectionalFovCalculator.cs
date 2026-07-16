@@ -36,13 +36,13 @@ namespace Aetherium.Systems
             var omnidirectionalVisible = baseFovCalculator.ComputeVisible(world, origin, bounds, maxRange);
 
             // Then, filter to only cells within the directional cone
-            return FilterByCone(omnidirectionalVisible, origin, bounds, headingDegrees, fovDegrees);
+            return FilterByCone(world, omnidirectionalVisible, origin, bounds, headingDegrees, fovDegrees);
         }
 
         /// <summary>
         /// Filters a visibility grid to only include cells within a directional cone.
         /// </summary>
-        private bool[,] FilterByCone(bool[,] omnidirectionalVisible, WorldLocation origin, Rectangle bounds,
+        private bool[,] FilterByCone(World world, bool[,] omnidirectionalVisible, WorldLocation origin, Rectangle bounds,
             int headingDegrees, int fovDegrees)
         {
             var width = bounds.Width;
@@ -72,9 +72,13 @@ namespace Aetherium.Systems
                     int worldX = bounds.X + x;
                     int worldY = bounds.Y + y;
 
-                    // Vector from origin to cell
-                    double dx = worldX - origin.X;
-                    double dy = worldY - origin.Y;
+                    // Vector from origin to cell in the topology's local embedding —
+                    // on square, exactly the raw coordinate difference. The heading
+                    // vector below is already in these +X-east/+Y-south axes, so the
+                    // cone dot-product stays valid on any planar topology.
+                    var (dx, dy) = world.Topology.Delta(
+                        Aetherium.Topology.GridCoord.From(origin),
+                        new Aetherium.Topology.GridCoord(worldX, worldY, origin.Z));
 
                     // Skip the origin cell itself (always visible)
                     if (dx == 0 && dy == 0)

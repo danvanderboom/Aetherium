@@ -134,6 +134,10 @@ namespace Aetherium.Model.Worlds
         /// <summary>Per-world reactive logic (add-eca-scripting): event–condition–action rules. Null
         /// means no rules fire.</summary>
         [Id(15)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
+
+        /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
+        /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
+        [Id(16)] public string? Topology { get; set; }
     }
 
     /// <summary>

@@ -48,6 +48,12 @@ namespace Aetherium.Server.Games
                 Error("world", $"'world.size' dimensions must be positive (got {size.Width}x{size.Height}x{size.Depth}).");
             if (definition.World.MaxPlayers <= 0)
                 Error("world", $"'world.maxPlayers' must be positive (got {definition.World.MaxPlayers}).");
+            // Topology (docs/grid-topologies.md): omitted → square; otherwise must be a
+            // registered tiling. The registry knows only "square" today; P1/P2 register
+            // "hex"/"tri" and this check accepts them automatically.
+            if (!string.IsNullOrWhiteSpace(definition.World.Topology)
+                && !Aetherium.Topology.GridTopologyRegistry.TryGet(definition.World.Topology, out _))
+                Error("world", $"'world.topology' '{definition.World.Topology}' is not a known tiling ({string.Join(", ", Aetherium.Topology.GridTopologyRegistry.Names)}).");
 
             // --- Section-local id uniqueness ---
             var abilityIds = ToIdSet(definition.Abilities?.Abilities.Select(a => a.Id), "abilities", "ability id", Error);

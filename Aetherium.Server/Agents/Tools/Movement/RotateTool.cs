@@ -73,6 +73,12 @@ namespace Aetherium.Server.Agents.Tools.Movement
                 else
                     return ToolExecutionResult.Error("Invalid clockwise value");
                 
+                // 90° is the square turn preset (IGridTopology.TurnStepDegrees for square).
+                // Hex (60°) / triangle (120°) worlds will need this preset resolved
+                // server-side from the player's cell — the tool has no world handle — so a
+                // future topology-aware rotate routes the clockwise/counter-clockwise intent
+                // through the gateway and lets the grain apply TurnStepDegrees. On square
+                // today the constant is exactly TurnStepDegrees, so behavior is unchanged.
                 degrees = clockwise ? 90 : -90;
                 hasClockwise = true;
             }

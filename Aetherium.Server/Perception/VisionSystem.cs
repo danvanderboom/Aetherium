@@ -88,9 +88,11 @@ namespace Aetherium.Systems
                     
                     if (hasLightSources && lightLevel < 0.05)
                     {
-                        // Very dark cell in a world with light sources - only allow visibility if very close (within 2 cells)
-                        var dx = worldLoc.X - origin.X;
-                        var dy = worldLoc.Y - origin.Y;
+                        // Very dark cell in a world with light sources - only allow visibility if very close (within 2 cells).
+                        // Euclidean distance in the topology's local embedding (Delta); on square, the raw difference used before.
+                        var (dx, dy) = world.Topology.Delta(
+                            Aetherium.Topology.GridCoord.From(origin),
+                            Aetherium.Topology.GridCoord.From(worldLoc));
                         var distance = Math.Sqrt(dx * dx + dy * dy);
                         if (distance > 2.0)
                             continue;

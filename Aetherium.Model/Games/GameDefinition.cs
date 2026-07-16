@@ -20,6 +20,11 @@ namespace Aetherium.Model.Games
         [Id(2)] public Aetherium.Model.Worlds.WorldDimensions? Size { get; set; }
         [Id(3)] public int MaxPlayers { get; set; } = 100;
         [Id(4)] public string? NarrativeId { get; set; }
+
+        /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) |
+        /// "hex" | "tri" | (later) "h3". Null/empty means square, byte-identically to the
+        /// pre-topology engine. The YAML `world.topology:` key binds here.</summary>
+        [Id(5)] public string? Topology { get; set; }
     }
 
     /// <summary>

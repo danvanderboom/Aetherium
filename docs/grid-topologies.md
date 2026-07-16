@@ -1,6 +1,6 @@
 # Grid Topologies — Pluggable World Tilings (Square · Hex · Triangle · H3-ready)
 
-*Status: approved design, implementation not yet scheduled — this document defines the phased backlog (P0–P3) to be pulled when a milestone needs it. Grounded in the 2026-07-16 engine survey (file references verified against `develop` @ df65e5d). The hexagon-specific deep dive lives in [hexagonal-tiles.md](hexagonal-tiles.md); this document supersedes its interface sketch with the generalized abstraction.*
+*Status: **P0 (the seam) is built** — `Aetherium.Server/Topology/` ships `IGridTopology`/`SquareTopology`/`GridTopologyRegistry`, every surveyed call site routes through it, the `world.topology` config field is threaded end-to-end (default `"square"`), and the full suite (2171 tests) is green including golden-master equivalence for the rewritten tables. P1–P3 remain the documented backlog below. Grounded in the 2026-07-16 engine survey. The hexagon-specific deep dive lives in [hexagonal-tiles.md](hexagonal-tiles.md); this document supersedes its interface sketch with the generalized abstraction.*
 
 ## The goal
 
@@ -175,7 +175,7 @@ flowchart LR
 
 ## Phased backlog
 
-### P0 — the seam *(size M; square-only; zero behavior change)*
+### P0 — the seam *(size M; square-only; zero behavior change)* — ✅ **built**
 
 Create `IGridTopology` + `SquareTopology` + `GridTopologyRegistry` + the property harness. Route the surveyed call sites: `World.TryMove`/`TryMoveSteps` (`Core/World.cs:277-302,431-477`), `Monster.GetValidCardinalDirections` (`Entities/Monster.cs:97-120`), legacy `GameSession.MoveView` (pinned to square), `GameMapGrain` heading-snap/relative-turn (`:3117-3149`), melee (`:2296-2302`), ability range (`:2436-2439`), ECA spawn offsets (`:2168-2181`), `MonsterBehaviors.cs:81-103`, `InteractionSystem.cs:160-172`, `FovCalculator`/`LightCalculator` lines (square `Line` *is* today's Bresenham, moved verbatim), `VisionSystem`/`InfraredVisionSystem`/`LightingSystem` rectangle scans → `Range` (behavior-pinning snapshots resolve rectangle-vs-disc questions in favor of today's output), `Extensions.cs:22-56` + `HasHeading.ToWorldDirection` marked square-legacy, `RotateTool` preset → `TurnStepDegrees`. Thread the config field; validator accepts only `"square"`.
 **Gate:** the full existing test suite green, untouched, plus golden-master equivalence tests for every rewritten table.
