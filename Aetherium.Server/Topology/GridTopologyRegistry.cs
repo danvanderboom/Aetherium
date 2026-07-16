@@ -19,6 +19,7 @@ namespace Aetherium.Topology
             new(StringComparer.OrdinalIgnoreCase)
             {
                 [SquareTopology.Instance.Name] = SquareTopology.Instance,
+                [HexTopology.Instance.Name] = HexTopology.Instance,
             };
 
         /// <summary>Resolves a topology by name; null/empty falls back to square.
