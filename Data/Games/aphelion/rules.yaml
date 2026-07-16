@@ -1,0 +1,35 @@
+# The station reacts (docs/design/unity-sample/game-design.md): four ECA rules on the
+# shipped T0 vocabulary — every death has a consequence a modder can read. Each rule is
+# also a presentation event the Unity client scores with VFX/audio (art-audio.md).
+rules:
+  - id: mite-pop
+    when: creature_died          # scrap-mites pop like blown capacitors
+    if:
+      - { kind: creature_type_is, creatureType: scrap-mite }
+      - { kind: chance, probability: 0.35 }
+    do:
+      - { kind: deal_damage, target: Killer, damageType: energy, amount: 3 }
+
+  - id: custodian-burst
+    when: creature_died          # a custodian's swarm bays fly open
+    if:
+      - { kind: creature_type_is, creatureType: custodian }
+      - { kind: chance, probability: 0.5 }
+    do:
+      - { kind: spawn_creature, creatureId: scrap-mite, offsetX: 1 }
+      - { kind: spawn_creature, creatureId: scrap-mite, offsetX: -1 }
+
+  - id: sentinel-shock
+    when: creature_died          # dying feedback pulse through your suit systems
+    if:
+      - { kind: creature_type_is, creatureType: sentinel }
+    do:
+      - { kind: apply_status, target: Killer, statusId: slowed, durationTicks: 10, magnitude: 0.5 }
+
+  - id: overseer-death-rattle
+    when: creature_died          # the node's last act: summon its guards
+    if:
+      - { kind: creature_type_is, creatureType: overseer-node }
+    do:
+      - { kind: spawn_creature, creatureId: sentinel, offsetX: 2 }
+      - { kind: spawn_creature, creatureId: sentinel, offsetX: -2 }

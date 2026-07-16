@@ -1,0 +1,27 @@
+# Aphelion — the sci-fi sample game (docs/design/unity-sample/game-design.md).
+# A co-op salvage crawl through hibernating mega-stations: this bundle is the game's
+# entire MEANING (creatures, items, spawns, reactive rules, death policy); everything a
+# player sees and hears lives in the Unity project at samples/unity/Aphelion/. The
+# content ids below are the shared vocabulary with the client's theme assets.
+# M0 scope: no abilities yet (the kit is attack + items); the "station" generator is a
+# proposed engine slice — maze stands in.
+id: aphelion
+name: Aphelion
+version: 0.1.0
+description: A co-op salvage crawl through hibernating mega-stations at the cold end of a decades-long orbit. Bring the light back. Mind what grew in the dark.
+tags: [scifi, station-crawler, coop, sample]
+
+world:
+  generatorType: maze
+  size: { width: 72, height: 72, depth: 3 }   # three decks
+  maxPlayers: 8
+
+death:
+  permadeath: false
+  downStateEnabled: true          # co-op revives (the revive VERB is engine gap G7, M2)
+  reviveWindowTicks: 8
+  respawnInvulnerabilityTicks: 3
+  corpseRetentionTicks: 600
+  dropOnDeath: Partial
+  respawnLocation: { mode: WorldSpawn }   # the docking bay
+  xpLossPolicy: None

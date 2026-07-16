@@ -9,6 +9,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>Aetherium.Client</RootNamespace>
+    <Version>0.1.0</Version>
     <Description>Transport-agnostic .NET client core for Aetherium servers: connection lifecycle, mirror protocol DTOs, typed tool invocations, perception store with anchoring and frame diffing. No Unity, no engine assemblies.</Description>
   </PropertyGroup>
 

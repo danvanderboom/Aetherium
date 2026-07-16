@@ -42,6 +42,7 @@ namespace Aetherium.Test.Games
             Assert.That(ids, Does.Contain("neonveil"));
             Assert.That(ids, Does.Contain("hexhaven"));
             Assert.That(ids, Does.Contain("trigrove"));
+            Assert.That(ids, Does.Contain("aphelion"));
             Assert.That(registry.Diagnostics.Where(d => d.Severity == GameDefinitionDiagnosticSeverity.Error), Is.Empty,
                 "The shipped sample bundles must load and validate cleanly: " + string.Join("; ", registry.Diagnostics));
 
@@ -51,6 +52,19 @@ namespace Aetherium.Test.Games
             Assert.That(hexhaven.World.GeneratorType, Is.EqualTo("hex-caves"));
             Assert.That(registry.TryGet("trigrove", out var trigrove), Is.True);
             Assert.That(trigrove!.World.Topology, Is.EqualTo("tri"));
+
+            // Aphelion (docs/design/unity-sample/game-design.md): the sci-fi sample's meaning
+            // as data — threat-ladder bestiary, salvage kit, four reactive death rules, co-op
+            // death policy, three decks.
+            Assert.That(registry.TryGet("aphelion", out var aphelion), Is.True);
+            Assert.That(aphelion!.World.Size!.Depth, Is.EqualTo(3), "three decks");
+            Assert.That(aphelion.Death!.DownStateEnabled, Is.True, "co-op revives");
+            Assert.That(aphelion.Content!.Creatures.Select(c => c.Id), Is.EquivalentTo(
+                new[] { "scrap-mite", "custodian", "sentinel", "vent-lurker", "overseer-node" }));
+            Assert.That(aphelion.Content.Items.Select(i => i.Id), Does.Contain("medgel").And.Contain("arc-cutter"));
+            Assert.That(aphelion.Rules!.Rules.Select(r => r.Id), Is.EquivalentTo(
+                new[] { "mite-pop", "custodian-burst", "sentinel-shock", "overseer-death-rattle" }));
+            Assert.That(aphelion.Abilities, Is.Null, "M0 kit is attack + items; abilities arrive in M1");
         }
 
         [Test]
