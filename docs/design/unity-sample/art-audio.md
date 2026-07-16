@@ -119,6 +119,8 @@ The state machine's inputs are a **blend of server hints and client inference** 
 
 ### Asset sourcing & licensing (repo rules)
 
+The concrete sourcing plan — which packs, which pieces are made in-project, and the code-generated music pipeline — lives in [assets.md](assets.md); the first slice is committed with per-file provenance in the project's [ATTRIBUTIONS.md](../../../samples/unity/Aphelion/ATTRIBUTIONS.md). The rules:
+
 The sample's assets are **committed to the repo**, so licensing is a hard gate, not a preference:
 
 - **CC0 only** for anything committed (Kenney packs, OpenGameArt/freesound filtered to CC0). No CC-BY in-repo, no "royalty-free" packs whose licenses forbid redistribution in source form (that excludes most commercial SFX libraries — e.g. Sonniss GDC packs are usable in builds but not redistributable as files, so they're out).

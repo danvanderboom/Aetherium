@@ -10,7 +10,7 @@ Three milestones, each independently valuable and demoable. Scope is expressed a
 
 | Track | Deliverables |
 |---|---|
-| Engine | **G1** self-state in perception (HP, statuses, pools) — the only engine slice in M0 |
+| Engine | **G1** interoception channel in perception (own HP, statuses, pools) — the only engine slice in M0 |
 | Library | `Aetherium.Client` core: connection, mirror DTOs + drift tests, ToolClient (incl. composite absolute-move), PerceptionStore (anchoring, frame diff, memory), LobbyClient; integration tests against the in-proc server |
 | Unity pkg | `com.aetherium.unity`: behaviour + dispatcher, GridMapView, EntityViewRegistry, ThemeAsset with fallback chain, mock provider + frame recorder, `link.xml`, pack script |
 | Bundle | `Data/Games/aphelion/` v0.1: world (maze stand-in, 3 decks), death policy, content (5 creatures, 6 items, spawns), 4 ECA rules; no abilities yet (kit = attack + items) |
@@ -27,9 +27,9 @@ Three milestones, each independently valuable and demoable. Scope is expressed a
 
 | Track | Deliverables |
 |---|---|
-| Engine | **G3** `ability` tool · **G2** enemy presentation state · **G4** absolute-move fix · **G5** vision-mode enum completion · **G6** player instance creation (+ bundle opt-in) |
+| Engine | **G3** `ability` tool · **G2** social-insight channel (condition bands, capability reads) · **G5** vision-mode enum completion · **G6** player instance creation (+ bundle opt-in) |
 | Bundle | v0.2: `abilities.yaml` (overcharge-bolt, breach-strike, stasis-snare), `progression.yaml` skills that unlock them, tuning pass from M0 playtests |
-| Sample | Ability HUD + targeting, enemy health bars & status VFX, IR mode with cooling heat trails, sonar ping, full adaptive-music state graph, window-vista backdrops, "host a station" in the lobby, VFX pass (overcharge beam, stasis dome) |
+| Sample | Ability HUD + targeting, enemy condition reads (posture/smoke/sparks per insight band) & status VFX, IR mode with cooling heat trails, sonar ping, full adaptive-music state graph, window-vista backdrops, "host a station" in the lobby, VFX pass (overcharge beam, stasis dome) |
 | Library | v0.1 tag (`unity-client/v0.1.0`), consumable via git URL; legacy `Aetherium.Unity/` project retired after parity (migration Phase B); docs: package README + quickstart for external games |
 
 **Acceptance:** the M1 screenshot set ([art-audio.md](art-audio.md)); an external empty Unity project can install the package from the git URL and render a live server following the quickstart; all M1 engine slices land with their own OpenSpec specs/tests.

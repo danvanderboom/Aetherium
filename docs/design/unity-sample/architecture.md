@@ -171,6 +171,40 @@ The client is topology-blind — it sees one URL. Everything below is server-sid
 
 Management stays a separate plane in all topologies: `aetherctl`/REST (API-key gated in prod) create and operate worlds; the game client only lists/joins.
 
+## Scaling to massive player counts (grains vs. services)
+
+An honest look at the one-diagram version above: four load-bearing components are **not** grains today — `GameHub`, `GameSessionManager` (+ per-connection `GameSession`), `PerceptionService`, and `AgentToolRegistry` are ordinary host services, implemented and shipped. Per the project's direction, they stay that way while the game gets built; this section records how the architecture reaches tens or hundreds of thousands of clients when that re-examination comes, so nothing designed now paints us into a corner.
+
+Each component has a different scaling story — "make everything a grain" is not the answer:
+
+| Component | What it is | Scaling story |
+|---|---|---|
+| `AgentToolRegistry` | Immutable reflection metadata | **No change, ever.** Stateless and identical on every host; replicate freely. |
+| `GameHub` | SignalR connection endpoint | **Cannot be a grain** — hubs are the network edge, one transient instance per invocation. They scale by adding hosts behind a load balancer; the already-referenced `UFX.Orleans.SignalRBackplane` routes sends to whichever host owns a connection. At scale this tier becomes deliberately *thin*: parse, authorize, forward. |
+| `PerceptionService` | Pure FOV/lighting/audio computation | Stateless function over (world mirror, player) — it can run wherever the session state lives. If sessions become grains, it's called grain-side (or as `[StatelessWorker]` grains for burst parallelism). No redesign, just relocation. |
+| `GameSession` / `GameSessionManager` | Per-connection world mirror + perception dispatch | **The actual bottleneck.** Session state is pinned to the host owning the SignalR connection, so grain→session fan-out couples map grains to specific hosts, and a host loss drops its sessions' mirrors. |
+
+The Orleans-native evolution, when it's time:
+
+1. **`PlayerSessionGrain`** (keyed by player/session id) absorbs `GameSession`: it owns the world mirror, subscribes to its map's deltas via Orleans streams, recomputes perception grain-side, and pushes frames to the client *by connection id through the backplane*. Hosts become stateless; sessions survive reconnects and host loss; placement spreads mirrors across the cluster.
+2. **Map grains already partition the world.** A station is a grain — roughly one core's worth of simulation — and 100k players across thousands of station instances spread naturally across silos. Per-mutation fan-out cost is bounded by players-per-map (8 for Aphelion), not total population. This is the engine's existing scale unit and it's the right one.
+3. **The management grain** (`GameManagementGrain("GLOBAL")`) is a single-activation coordinator — fine at current scale, and shardable by game id (or backed by read replicas for world listings) long before it matters.
+
+```mermaid
+flowchart LR
+    LB[Load balancer] --> H1[Gateway host A<br/>GameHub only]
+    LB --> H2[Gateway host B<br/>GameHub only]
+    subgraph cluster [Orleans cluster]
+        S1["Silo 1: GameMapGrain ×n<br/>PlayerSessionGrain ×m"]
+        S2["Silo 2: GameMapGrain ×n<br/>PlayerSessionGrain ×m"]
+        S3["Silo 3: management ·<br/>events · narrative grains"]
+    end
+    H1 & H2 -- "backplane<br/>(connection-id routed)" --- S1 & S2
+    S1 <-- "streams: map deltas" --> S2
+```
+
+What we deliberately *don't* do now: none of this changes the client protocol or the client library — frames in, tools out, regardless of where perception is computed. That's the criterion that makes deferral safe: the session-grain migration is a server-internal refactor, invisible on the wire, and it should be sequenced *after* the game proves the protocol (per project direction: game first, then re-examine the server architecture).
+
 ## Performance & responsiveness model
 
 - **Action feedback:** full round-trip (input → grain → fresh frame) targets the protocol spec's ≤100 ms on LAN. Presentation starts on input (wind-ups, sounds); state changes only on server confirmation.

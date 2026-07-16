@@ -16,31 +16,31 @@ The design brief allows adding a few key engine features "within reason." This d
 | "Do stations need a new deck concept?" | z-levels + `changelevel` are native; `world.size.depth: 3` gives three decks |
 | "Down-state/respawn for co-op?" | Death policy per bundle + `ReceiveDowned/Respawn/Died` events are wired |
 | "Can operators stand up stations?" | `aetherctl game create aphelion` / management REST — shipped |
+| "Absolute-direction movement fails; coordinates are player-relative" | **By design, not a bug.** Relative-only movement and player-relative coordinates are fairness constraints: every player — human or AI agent — acts through the same embodied interface, and no client ever holds privileged absolute world state. The client library's composite `MoveAsync(direction)` maps WASD onto the same rotate+step actions any agent could take (same action-budget cost); nothing server-side changes |
 
 ## The gaps
 
-### G1 — Self state in perception *(S/M · needed by M0)*
+### G1 — Interoception: the self-sense channel *(S/M · needed by M0)*
 
-**Need:** a HUD. Today a client learns its own health only from downed/died events and its inventory from perception — there is no self health/max, no active statuses, no resource pools (charge/stamina), no cooldowns in any frame.
-**Recommendation:** add a `Self` block to `PerceptionDto` (health/max, active status ids with remaining ticks, resource pool values/max, ability cooldown remainders). Pure protocol read-model over state the grain already owns; no gameplay change; per-world-data neutral.
+**Need:** a character's awareness of their own body. The engine's philosophy is that clients receive *perception*, and interoception — the sense of one's own internal state — is a perception channel like sight or hearing, not "HUD data." Today a client learns its own health only from downed/died events; there is no self health/max, no felt statuses, no resource pools (charge/stamina), no cooldown readiness in any frame.
+**Recommendation:** an `Interoception` block on `PerceptionDto`: health/max, active status ids with remaining ticks, resource pool values/max, ability cooldown remainders. Pure protocol read-model over state the grain already owns; no gameplay change; per-world-data neutral. Framing it as a sense keeps the door open for later depth — statuses that *distort* interoception (concussion blurs your own readings) fit naturally.
 **Workaround if deferred:** HUD infers HP from attack-received deltas — unacceptably lossy; this gap is the one true M0 blocker.
 
-### G2 — Enemy presentation state *(S · M1)*
+### G2 — Social insight: intuition about others *(S/M · M1)*
 
-**Need:** enemy health bars, status VFX on others, and clean identity. `CharacterDto` today: id, tile, hostile flag, relative location — no health fraction, no statuses, and the creature id must be parsed out of `"Creature:<id>"`.
-**Recommendation:** add `CreatureTypeId` (first-class string), `HealthFraction` (0–1, coarse — a fraction leaks less than absolute values), and `ActiveStatusIds`. Respect the existing privacy stance: other *players'* heading stays hidden; a `FacingDegrees` for non-player creatures only.
-**Workaround until then:** attacker-only HP from attack results (the store already folds this); status VFX limited to self.
+**Need:** we are social creatures with instincts about the beings around us. Layered on top of *detecting* someone with the outer senses (they must already be in your perception), a character gets a read: how hurt they look, whether they're dangerous, whether they could help. Today `CharacterDto` carries only id, tile, hostile flag, and relative location — no condition, no statuses, no capability read, and the creature id must be parsed out of `"Creature:<id>"`.
+**Recommendation:** an `Insight` block per visible character, designed as intuition rather than telemetry:
+- `CreatureTypeId` first-class (what you recognize it as),
+- `Condition` as coarse bands (`Healthy / Wounded / Critical`) rather than a numeric fraction — a *feeling* about their state, which also leaks less server truth and renders beautifully as posture/smoke/sparks instead of a floating bar,
+- `Capabilities` — perceived capability tags (`can-attack`, `can-heal`, `armored`…), derived from what the entity actually has,
+- visible `ActiveStatusIds` (you can see that something is burning or slowed).
+Respect the existing privacy stance: other *players'* heading stays hidden; `FacingDegrees` for non-player creatures only. The banded/tagged shape leaves room for an acuity dial later (a skill or faction rank that sharpens insight from two bands to four) — per-world data, naturally.
+**Workaround until then:** attacker-only condition from attack results (the store already folds this); status VFX limited to self.
 
 ### G3 — Ability casting as a player tool *(S · M1)*
 
 **Need:** the Reclaimer kit. `GameMapGrain.UseAbilityAsync` is wired (combat slice) but no `ability` tool exists in the player-profile registry, so `ExecuteTool` can't reach it.
-**Recommendation:** an `ability` tool (`abilityId`, `targetEntityId?`) delegating to the grain method, plus ability/pool state via G1's `Self` block. Small because both ends exist; the tool is the missing middle.
-
-### G4 — Absolute-direction movement through the grain gateway *(S · M1, workaround at M0)*
-
-**Need:** WASD in a top-down game means "move north," not "rotate then advance." `move` with `N/E/S/W` currently errors through the grain gateway ("Absolute directions require async execution via management grain"); only relative `F/B/L/R` work.
-**Recommendation:** make `MoveTool` resolve absolute→(rotate+step) atomically server-side through the gateway.
-**Workaround (M0):** the client library's composite `MoveAsync(direction)` issues the rotate+move pair; slightly chattier, same result; API unchanged when the fix lands.
+**Recommendation:** an `ability` tool (`abilityId`, `targetEntityId?`) delegating to the grain method, plus ability/pool state via G1's interoception block. Small because both ends exist; the tool is the missing middle.
 
 ### G5 — Vision-mode wire vocabulary *(S · M1)*
 
@@ -87,10 +87,10 @@ The design brief allows adding a few key engine features "within reason." This d
 
 | # | Gap | Size | Milestone | Type |
 |---|---|---|---|---|
-| G1 | Self state in perception (HP, statuses, pools, cooldowns) | S/M | **M0** | Protocol |
-| G2 | Enemy presentation state (type id, HP fraction, statuses) | S | M1 | Protocol |
+| G1 | Interoception channel (self HP, statuses, pools, cooldowns) | S/M | **M0** | Protocol |
+| G2 | Social-insight channel (type id, condition bands, capabilities) | S/M | M1 | Protocol |
 | G3 | `ability` player tool | S | M1 | Tool registry |
-| G4 | Absolute-move via grain gateway | S | M1 (client workaround M0) | Tool/grain |
+| G4 | *(withdrawn — relative-only movement is a deliberate fairness constraint, not a gap)* | — | — | By design |
 | G5 | Vision-mode wire enum completion | S | M1 | Protocol fix |
 | G6 | Player-facing instance creation (+ bundle opt-in flag) | S/M | M1 | Hub + data |
 | G7 | Revive interaction | M | M2 | Gameplay slice |

@@ -19,7 +19,8 @@ Everything below is grounded in the server's *actual* client surface (verified 2
 | Entity identity: creatures surface as `CharacterDto` whose `Name`/`Tile.Name` is **`Creature:<contentId>`** (e.g. `Creature:custodian`) with glyph/colors in `Tile.Settings`; items as `ItemDto {Id, Label, Icon, KeyId, Location}` | Theme binding keys off the **content id** — the same id authored in the game bundle's `content.yaml` |
 | Rich frame extras: `Inventory`, `Affordances` (available interactions with targets/keys/usage options), `NavigationData` (compass), lighting/vision modes, `GameTimeOfDay`, `Weather`/`Season`, and an `Audio` payload (`Biome`, `DangerLevel`, `ReverbPreset`, `Occlusion`, `AmbientEmitters`, `SuggestedMusicTrack`, `FootstepMaterial`) | The library exposes these as first-class events/state; the theme layer binds audio hints to mixers |
 | Player lifecycle events: `ReceiveDowned` / `ReceiveRespawn` / `ReceiveDied` → `PlayerVitalsDto`; combat feedback rides `ExecuteTool("attack").Data` (`damage`, `remainingHealth`, `defeated`) | Vitals surface as events; the store folds attack results into per-entity presentation state (last-known HP) |
-| Known sharp edges: `move` accepts relative directions (`F/B/L/R`) but **absolute (N/E/S/W) fails through the grain gateway**; perception lacks self-vitals/enemy HP/ability state; the vision-mode wire enum is narrower than the tool advertises | Library provides a composite absolute-move helper now; the rest are tracked in [engine-gaps.md](engine-gaps.md) with owners and milestones |
+| Movement is **relative-only** (`F/B/L/R` + rotate) and coordinates are player-relative — a deliberate engine constraint: humans and AI agents act through the same embodied interface, and no client holds privileged absolute state | The library embraces it: a composite `MoveAsync(direction)` maps WASD onto the same rotate+step actions any agent could take, and the PerceptionStore owns anchoring (below) |
+| Perception doesn't yet carry interoception (own vitals/pools/statuses) or social insight (others' condition/capabilities); the vision-mode wire enum is narrower than the tool advertises | Tracked in [engine-gaps.md](engine-gaps.md) as the G1/G2 perception channels and G5, with milestones |
 
 ### Player-profile tool catalog (what games can invoke)
 
@@ -28,6 +29,8 @@ Everything below is grounded in the server's *actual* client surface (verified 2
 ## Layer 1 — `Aetherium.Client` (pure .NET core)
 
 Targets `netstandard2.1` + `net10.0`. Depends only on `Microsoft.AspNetCore.SignalR.Client`. No Unity, no engine assemblies. Everything testable with `dotnet test`.
+
+**Why those two targets (verified against Unity's 2026 roadmap):** today's production Unity 6 LTS still runs Mono/IL2CPP with the **.NET Standard 2.1** API compatibility level — that is the current ceiling for any assembly shipped into Unity, so `netstandard2.1` is the Unity-facing target. Unity's CoreCLR back end is an experimental desktop-only preview as of 6.7 and explicitly not production-ready; with **Unity 6.8 (end of 2026) Mono retires and CoreCLR ships with full .NET 10 and C# 14**. When that lands, the same package flips its vendored DLLs to the `net10.0` build with zero restructuring — the dual-target core is deliberately positioned on both sides of Unity's runtime transition. (Sources: [Unity CoreCLR upgrade guide](https://discussions.unity.com/t/path-to-coreclr-2026-upgrade-guide/1714279), [June 2026 CoreCLR status update](https://discussions.unity.com/t/coreclr-scripting-and-serialization-update-june-2026/1723299), [Unity Manual — CoreCLR back end (experimental)](https://docs.unity3d.com/6000.7/Documentation/Manual/scripting-backends-coreclr.html).)
 
 ```mermaid
 flowchart TB
@@ -75,7 +78,7 @@ Task<ToolResult> OpenAsync(string targetEntityId);         // + Close, Drop
 Task<ToolResult> SetVisionModeAsync(VisionMode mode);      // + lighting mode, FOV, directional toggle
 ```
 
-The composite `MoveAsync(CompassDirection)` exists because absolute directions currently fail through the grain gateway: it issues the minimal `rotate` then `move F` pair. It's marked as a temporary shim — the server-side fix (atomic absolute move) is [engine gap G4](engine-gaps.md), after which the composite becomes a single call with no API change to games.
+The composite `MoveAsync(CompassDirection)` is the WASD bridge over a *deliberate* engine constraint: the protocol only offers embodied, heading-relative movement, identically for humans and AI agents, so no client gets a privileged interface. The composite issues the minimal `rotate` + `move F` pair — exactly what any agent would do — and games that prefer full immersion can skip it and bind tank-style controls to the raw relative verbs.
 
 **`PerceptionStore`** — the heart of the core. Responsibilities:
 

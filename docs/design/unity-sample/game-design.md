@@ -42,7 +42,7 @@ A run is 15–30 minutes. The M0 win condition is client-orchestrated (reach the
 
 ## How Aphelion maps onto the engine
 
-Every row is an existing engine capability; the game is a re-skin plus data.
+Every row is an existing engine capability (the two marked *proposed* are the perception-channel additions from [engine-gaps.md](engine-gaps.md)); the game is a re-skin plus data.
 
 | Aphelion concept | Engine capability | Where it's defined |
 |---|---|---|
@@ -52,6 +52,8 @@ Every row is an existing engine capability; the game is a re-skin plus data.
 | Bulkheads & airlocks | Doors + keys/locks + open/close affordances | engine interaction system |
 | Darkness & suit lamp | Lighting simulation + light sources + FOV | engine perception |
 | IR visor / sonar pulse | Vision modes (infrared, echolocation) + heat trails | engine perception (`setvisionmode`) |
+| Suit biotelemetry (your HUD) | Interoception — the self-sense perception channel *(proposed: G1)* | engine perception |
+| A Reclaimer's read of hostiles | Social insight — intuition about others *(proposed: G2)* | engine perception |
 | Feral drones & Bloom | Data-driven creatures with behavior presets | `content.yaml` |
 | Salvage, medgel, weapons | Data-driven items (heal / weapon-bonus / carriable) | `content.yaml` |
 | Reactive station events | ECA rules (`creature_died` trigger, T0 vocabulary) | `rules.yaml` |
@@ -348,8 +350,9 @@ requireSkillToCastAbilities: false
 
 The server owns truth (continuous, speed-based simulation — no turns); the client owns *feel*. The contract:
 
-- **Movement** is grid-authoritative but presented smoothly — the client tweens the pawn between cells (~120 ms ease), plays footfalls, and leans the camera. Speed differences between creatures come from the engine's action-budget model and read clearly because slow things visibly lumber.
+- **Movement** is grid-authoritative but presented smoothly — the client tweens the pawn between cells (~120 ms ease), plays footfalls, and leans the camera. Speed differences between creatures come from the engine's action-budget model and read clearly because slow things visibly lumber. Under the hood, all movement is *embodied and heading-relative* — a deliberate engine fairness constraint (humans and AI agents share the exact same interface, and no client sees absolute coordinates); WASD works because the client composes the same rotate+step actions any agent would issue.
 - **Attacks** resolve server-side (damage pipeline: attack vs defense, damage types); the client renders anticipation → hit spark → damage number → recoil from the resulting deltas/perception. Misses and blocks read from result payloads.
+- **Reading the fight** uses the two perception channels rather than floating UI: **interoception** (your suit's biotelemetry — health, charge, stamina, what's burning you) drives the HUD gauges, and **social insight** (a Reclaimer's practiced read of machines and creatures) drives how enemies *look* — a Wounded custodian trails smoke and sparks, a Critical one staggers with a guttering worklight. Condition arrives as intuition bands (Healthy/Wounded/Critical), not numbers, so the presentation stays diegetic.
 - **Abilities** are the spice: `overcharge-bolt` is the screen-clearing beam with bloom and a capacitor-whine; `stasis-snare` is a visible slow-field the whole party can exploit. Cooldowns and charge live in the HUD's suit panel.
 - **Statuses**: `burning` = ember particles + ticking hurt flashes; `slowed` = cyan crystalline shader + pitch-dropped audio. (Status *ticking* has a known engine gap — statuses currently apply as state; per-tick damage processing is on the gap list. M0 presents statuses visually; mechanical ticking lands with that engine slice.)
 - **Death**: enemies ragdoll-burst with parts + sparks (mites *pop* — the ECA rule makes this a real gameplay event, not just VFX). Player down-state dims the world to heartbeat-red; a teammate channel-revives inside the window, else respawn at the dock.

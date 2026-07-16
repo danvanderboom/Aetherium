@@ -1,6 +1,6 @@
 # Design Suite: Unity Client Library & the Aphelion Sample Game
 
-*Status: proposed design (2026-07-16). Nothing here is implemented yet; this suite is the blueprint for the next initiative. Ground-truth claims about the engine were verified against `develop` @ df65e5d.*
+*Status: design (2026-07-16), plus the first concrete slice: the [Aphelion Unity project skeleton](../../../samples/unity/Aphelion/README.md) with its CC0/generated asset set is committed under `samples/unity/Aphelion/`. Code (client library, scenes, engine gap slices) is not yet implemented. Ground-truth claims about the engine were verified against `develop` @ df65e5d.*
 
 ## What this is
 
@@ -17,6 +17,7 @@ The engine barely changes. The entire meaning of Aphelion is a YAML bundle (`Dat
 | **[architecture.md](architecture.md)** | End-to-end system diagrams: client subsystems ↔ server/cluster subsystems, session bootstrap, the co-op action loop, YAML→pixels data flow, deployment topologies, trust model |
 | **[game-design.md](game-design.md)** | Aphelion: premise, pillars, core loop, the full draft bundle in real YAML (creatures, items, ECA rules, abilities, factions, progression), combat feel, multiplayer shape, expansion roadmap |
 | **[art-audio.md](art-audio.md)** | The beauty pass: low-poly URP direction, palette, lighting recipe, the modular station kit, VFX set, IR/sonar rendering, adaptive music state machine, asset licensing rules |
+| **[assets.md](assets.md)** | Where every asset comes from: CC0 packs (Quaternius/Kenney), made-in-project, and code-generated music — with the committed first slice inventoried |
 | **[engine-gaps.md](engine-gaps.md)** | What the engine lacks, sized and milestone-mapped — and the longer list of things that looked like gaps but are already shipped |
 | **[milestones.md](milestones.md)** | M0 "First Light" / M1 "Reclaimer Kit" / M2 "The Long Dark" — deliverables and acceptance criteria per track |
 
