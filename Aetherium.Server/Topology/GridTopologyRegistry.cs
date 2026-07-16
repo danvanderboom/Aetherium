@@ -20,6 +20,7 @@ namespace Aetherium.Topology
             {
                 [SquareTopology.Instance.Name] = SquareTopology.Instance,
                 [HexTopology.Instance.Name] = HexTopology.Instance,
+                [TriangleTopology.Instance.Name] = TriangleTopology.Instance,
             };
 
         /// <summary>Resolves a topology by name; null/empty falls back to square.

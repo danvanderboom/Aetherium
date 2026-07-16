@@ -230,6 +230,14 @@ Light sources found:
                 FieldOfViewDegrees = fovDegrees ?? 360,  // 360 means omnidirectional
                 VisibleBounds = bounds.ToDto(),
                 UpdateTimestamp = Guid.NewGuid(),
+
+                // Tiling (docs/grid-topologies.md): the client reads Topology to pick its cell
+                // layout; SelfCellParity surfaces the one bit relative deltas can't convey on a
+                // triangular world (which way the perceiver's own triangle points).
+                Topology = world.Topology.Name,
+                SelfCellParity = world.Topology.Name == "tri"
+                    ? (playerLocation.X + playerLocation.Y) & 1
+                    : (int?)null,
                 
                 // Add mode information
                 CurrentLightingMode = lightingMode,
