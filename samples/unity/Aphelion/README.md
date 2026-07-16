@@ -10,6 +10,9 @@ This is a **Unity 6 (6000.4) URP project skeleton** — openable in Unity, but t
 Assets/
 ├─ ThirdParty/Quaternius/     14 CC0 models — the full creature cast (Reclaimer, Scrap Mite,
 │                             Custodian, Sentinel, Vent Lurker, Overseer), props, two planets
+├─ ThirdParty/Quaternius/Animated/  4 CC0 rigged characters with full skeletal clip sets —
+│                             two 18-clip astronaut player skins, the Overseer mech
+│                             (Walk/Run/Shoot/Death), the flying Vent Lurker
 ├─ ThirdParty/Kenney/         18 CC0 sci-fi sounds — doors, lasers, impacts, explosions,
 │                             force fields, reactor hum (mapped to game events)
 └─ Audio/                     Music + body SFX synthesized by Tools~/AudioGen — the Aphelion

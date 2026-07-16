@@ -35,7 +35,7 @@ Three-quarter top-down **perspective** camera: ~50° tilt, ~35° FOV, distance-f
 | Console / crate / pipe stack / hydroponic rack | props for custodial, cargo, and Bloom-touched rooms |
 | Docking bay set | spawn/extraction landmark: clamps, warning stripes, the *Meridian*'s umbilical |
 
-Creatures and the Reclaimer are primitive-built low-poly with **strong silhouettes and one emissive identifier each** (readability at small scale is the test):
+Creatures and the Reclaimer come from the committed CC0 model set ([assets.md](assets.md)), re-materialed to the palette with **strong silhouettes and one emissive identifier each** (readability at small scale is the test):
 
 - **Scrap Mite** — palm-size tri-leg chip, single amber eye, skittering hop.
 - **Custodian** — barrel body, too many folding arms, flickering worklight.
@@ -43,6 +43,15 @@ Creatures and the Reclaimer are primitive-built low-poly with **strong silhouett
 - **Vent Lurker** — sinuous quadruped, matte black, bioluminescent teal seams (bright on IR).
 - **Overseer Node** — armored pillar with slowly rotating rings; the room's light dims toward it.
 - **Reclaimer** — bulky suit, backpack, head-lamp; palette-swappable accent stripe per player.
+
+### Animation: two motion languages
+
+Characters are fully 3D and animate as they walk and act — with the motion style split by fiction, which happens to match the assets exactly:
+
+- **Organics and suited characters** (Reclaimers, Vent Lurker, future Bloom creatures) use **skeletal animation** — the committed models carry full clip sets (the astronauts ship 18 clips: Idle/Walk/Run, gun variants, Punch, HitReact, Death, plus Wave/Yes/No, which become co-op ping emotes; the Overseer mech has Walk/Run/Shoot_Big/Kick/Death). An Animator state machine per creature is driven by the client library's entity events: `EntityMoved` plays Walk/Run with playback speed synced to the tween, attack results trigger Punch/Shoot and HitReact on the target, a kill-vanish plays Death before the dissolve, idle time plays Idle with random offsets so crowds don't metronome.
+- **Machines** (Scrap Mite, Custodian, Sentinel) use **procedural transform animation** — hover bob, body roll into turns, servo-stepped rotation, stagger on hit, seizure-flicker at Critical condition. Rigid bodies moving rigidly is the *correct* read for feral drones, needs no rig, and gives the machines an uncanny stiffness that contrasts with the organics' fluidity.
+
+All clips play in place (no root motion); the PerceptionStore's grid tween owns position, animation owns everything else.
 
 ### Palette
 

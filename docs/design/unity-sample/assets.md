@@ -18,7 +18,8 @@ Hard rule (enforced via `ATTRIBUTIONS.md` review convention): **only CC0 or repo
 | Sci-fi props | Same catalog (computers, crates, containers, pods, pipes, batteries) | CC0 1.0 | Good for dressing; station *structure* is better made in-project |
 | Planets (window backdrops) | Same catalog | CC0 1.0 | Placeholder until a custom skybox shader (M1) |
 | SFX palette | [Kenney Sci-Fi Sounds](https://kenney.nl/assets/sci-fi-sounds) (70 sounds) + Kenney [Impact](https://kenney.nl/assets/impact-sounds)/[Interface](https://kenney.nl/assets/interface-sounds) packs if needed | CC0 1.0 | Excellent — doors, lasers, impacts, force fields, engines |
-| Bigger structure kits (if wanted later) | Quaternius **Modular Sci-Fi Megakit** (277 pieces, Unity-URP-ready) & **Ultimate Space Kit** — free zips via [quaternius.com](https://quaternius.com/) / itch.io | CC0 1.0 | The fallback if the in-project kit route underdelivers; downloads are browser-interactive (itch), so it's a manual grab-and-curate step |
+| **Animated characters** | Quaternius **Ultimate Space Kit** — its download is a **public Google Drive folder** (headless-fetchable, unlike itch): self-contained glTFs with full skeletal clip sets (astronauts, mechs, enemies) | CC0 1.0 | Excellent — committed: two 18-clip astronaut player skins, the 17-clip mech (Overseer), the flying enemy (Vent Lurker) |
+| Bigger structure kits (if wanted later) | Quaternius **Modular Sci-Fi Megakit** (277 pieces, Unity-URP-ready) — free zip via [quaternius.com](https://quaternius.com/) / itch.io | CC0 1.0 | The fallback if the in-project kit route underdelivers; the itch download is browser-interactive, so it's a manual grab-and-curate step |
 | Textures/HDRIs (if needed) | [Poly Haven](https://polyhaven.com/), Kenney Prototype Textures | CC0 | Graybox + detail textures |
 
 **The committed first slice** (see [ATTRIBUTIONS.md](../../../samples/unity/Aphelion/ATTRIBUTIONS.md) for per-file provenance): 14 Quaternius models covering the *entire creature cast* (Reclaimer astronaut, flying scrap-mite drone, animated custodian robot, armed sentinel, alien vent-lurker, overseer mech), six props, two planets (~3.4 MB), plus 18 Kenney sounds mapped to game events (~1.4 MB). Every model's license was verified on its source page at download time.
@@ -49,6 +50,6 @@ Why this is the right call beyond licensing: the stems are *parametric*. Tuning 
 
 ## Gaps this plan leaves open (deliberately)
 
-- **Animations:** several Quaternius models ship with animations (the custodian robot has a full set); the mite/mech may need simple procedural motion (bob/hover/turn) — which the art direction already prefers for M0.
+- ~~Animations~~ **Resolved:** the poly.pizza GLBs turned out to be static exports (no rigs), but the Ultimate Space Kit's Drive distribution ships the same characters *with* full skeletal clip sets — four animated characters are now committed (`Assets/ThirdParty/Quaternius/Animated/`). Machines (mite/custodian/sentinel) animate procedurally **by design** — see the [animation direction](art-audio.md#animation-two-motion-languages).
 - **A proper skybox** (planet shader with atmosphere + starfield) replaces the placeholder planet models at M1.
 - **Voice/creature vocalizations:** M0 uses pitched Kenney sounds; a synthesized vocalization pass (same AudioGen approach — formant chirps for drones) is an M1 nicety.

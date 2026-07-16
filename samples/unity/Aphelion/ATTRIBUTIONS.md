@@ -23,6 +23,19 @@ Source: [Quaternius](https://quaternius.com/) free packs, fetched as glTF binari
 | `backdrop-planet-a.glb` | Planet | https://poly.pizza/m/hKZtOOMadH | Window backdrop |
 | `backdrop-planet-b.glb` | Planet | https://poly.pizza/m/4NxxeyYMPJ | Window backdrop |
 
+## Animated 3D characters — Quaternius Ultimate Space Kit (CC0 1.0)
+
+Source: the pack's **public Google Drive distribution** (the download link on [the pack page](https://quaternius.com/packs/ultimatespacekit.html)), fetched 2026-07-16 as self-contained glTF files (embedded buffers) **with full skeletal animation sets**. License: CC0 1.0 — stated on the pack page and in the committed `License.txt` (note: that file's header says "Ultimate Platformer Pack", an authoring slip in the pack's Drive folder; the operative text is the CC0 1.0 dedication, which matches the pack page).
+
+| File (`Assets/ThirdParty/Quaternius/Animated/`) | Original | Animation clips | Aphelion role |
+|---|---|---|---|
+| `reclaimer-finn.gltf` | Astronaut_FinnTheFrog | 18: Idle, Walk, Run, Walk_Gun, Run_Gun, Run_Gun_Shoot, Idle_Gun, Punch, HitReact, Death, Duck, Jump (+Idle/Land), Wave, Yes, No, Weapon | Reclaimer — player skin A |
+| `reclaimer-rae.gltf` | Astronaut_RaeTheRedPanda | same 18-clip set | Reclaimer — player skin B |
+| `overseer-mech-animated.gltf` | Mech_FinnTheFrog | 17: Idle, Walk, Run, Shoot_Big, Shoot_Small, Kick, HitRecieve_1/2, Death, Dance, Hello, Pickup, Jump set, Yes, No | Overseer Node |
+| `ventlurker-glub.gltf` | Enemy_Flying | 8: Flying_Idle, Fast_Flying, Headbutt, Punch, HitReact, Death, Yes, No | Vent Lurker |
+
+More remain at the same source when needed (Enemy_ExtraSmall/Small/Large for Bloom variants; two more astronauts; three more mechs).
+
 ## Sound effects — Kenney (CC0 1.0)
 
 Source: [Sci-Fi Sounds](https://kenney.nl/assets/sci-fi-sounds) by [Kenney](https://kenney.nl) (pack v1.0, CC0 — `License.txt` committed alongside). 18 of the pack's 70 sounds, selected for the M0 sound palette:
