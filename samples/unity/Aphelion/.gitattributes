@@ -1,0 +1,3 @@
+# glTF files carry base64-embedded binary buffers - never normalize line endings
+*.gltf -text
+*.glb -text
