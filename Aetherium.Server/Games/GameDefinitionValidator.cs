@@ -17,6 +17,15 @@ namespace Aetherium.Server.Games
     /// </summary>
     public class GameDefinitionValidator
     {
+        // Shared, discovery-once generator registry for the topology-support check. Discovery
+        // reflects over the server assembly exactly like WorldGenerationOrchestrator's registry.
+        private static readonly Lazy<Aetherium.WorldGen.MapGeneratorRegistry> GeneratorRegistry = new(() =>
+        {
+            var registry = new Aetherium.WorldGen.MapGeneratorRegistry();
+            registry.DiscoverTypes();
+            return registry;
+        });
+
         public List<GameDefinitionDiagnostic> Validate(GameDefinition definition, string bundlePath = "")
         {
             var diagnostics = new List<GameDefinitionDiagnostic>();
@@ -49,11 +58,33 @@ namespace Aetherium.Server.Games
             if (definition.World.MaxPlayers <= 0)
                 Error("world", $"'world.maxPlayers' must be positive (got {definition.World.MaxPlayers}).");
             // Topology (docs/grid-topologies.md): omitted → square; otherwise must be a
-            // registered tiling. The registry knows only "square" today; P1/P2 register
-            // "hex"/"tri" and this check accepts them automatically.
+            // registered tiling, and the chosen generator must declare support for it via
+            // ITopologyAwareGenerator (a generator that doesn't implement the interface is
+            // implicitly square-only).
             if (!string.IsNullOrWhiteSpace(definition.World.Topology)
                 && !Aetherium.Topology.GridTopologyRegistry.TryGet(definition.World.Topology, out _))
                 Error("world", $"'world.topology' '{definition.World.Topology}' is not a known tiling ({string.Join(", ", Aetherium.Topology.GridTopologyRegistry.Names)}).");
+            else if (!string.IsNullOrWhiteSpace(definition.World.GeneratorType))
+            {
+                var effectiveTopology = string.IsNullOrWhiteSpace(definition.World.Topology)
+                    ? Aetherium.Topology.GridTopologyRegistry.DefaultName
+                    : definition.World.Topology;
+                var generator = GeneratorRegistry.Value.GetGenerator(definition.World.GeneratorType);
+                if (generator != null)
+                {
+                    var supported = generator is Aetherium.WorldGen.ITopologyAwareGenerator aware
+                        ? aware.SupportedTopologies
+                        : new[] { Aetherium.Topology.GridTopologyRegistry.DefaultName };
+                    if (!supported.Contains(effectiveTopology, StringComparer.OrdinalIgnoreCase))
+                        Error("world", $"Generator '{definition.World.GeneratorType}' does not support topology '{effectiveTopology}' (it supports: {string.Join(", ", supported)}).");
+                }
+                else if (!string.Equals(effectiveTopology, Aetherium.Topology.GridTopologyRegistry.DefaultName, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Unknown generator names aren't a validator error today (world creation
+                    // surfaces that), but with a non-square topology we can't verify support.
+                    Warn("world", $"Generator '{definition.World.GeneratorType}' is not a registered generator; cannot verify it supports topology '{effectiveTopology}'.");
+                }
+            }
 
             // --- Section-local id uniqueness ---
             var abilityIds = ToIdSet(definition.Abilities?.Abilities.Select(a => a.Id), "abilities", "ability id", Error);

@@ -40,8 +40,17 @@ namespace Aetherium.Test.Games
             var ids = registry.All.Select(d => d.Id).ToList();
             Assert.That(ids, Does.Contain("emberfall"));
             Assert.That(ids, Does.Contain("neonveil"));
+            Assert.That(ids, Does.Contain("hexhaven"));
+            Assert.That(ids, Does.Contain("trigrove"));
             Assert.That(registry.Diagnostics.Where(d => d.Severity == GameDefinitionDiagnosticSeverity.Error), Is.Empty,
                 "The shipped sample bundles must load and validate cleanly: " + string.Join("; ", registry.Diagnostics));
+
+            // The non-square sample bundles carry their tiling as data (docs/grid-topologies.md).
+            Assert.That(registry.TryGet("hexhaven", out var hexhaven), Is.True);
+            Assert.That(hexhaven!.World.Topology, Is.EqualTo("hex"));
+            Assert.That(hexhaven.World.GeneratorType, Is.EqualTo("hex-caves"));
+            Assert.That(registry.TryGet("trigrove", out var trigrove), Is.True);
+            Assert.That(trigrove!.World.Topology, Is.EqualTo("tri"));
         }
 
         [Test]

@@ -61,6 +61,66 @@ namespace Aetherium.Test.Games
         }
 
         [Test]
+        public void Topology_UnknownTiling_IsAnError()
+        {
+            var definition = ValidDefinition();
+            definition.World.Topology = "dodecagon";
+
+            var diagnostics = Validate(definition);
+            Assert.That(diagnostics.Single().Severity, Is.EqualTo(GameDefinitionDiagnosticSeverity.Error));
+            Assert.That(diagnostics.Single().Message, Does.Contain("dodecagon"));
+        }
+
+        [Test]
+        public void Topology_GeneratorWithoutSupport_IsAnError()
+        {
+            // rooms-and-corridors carves square rooms; it never declared hex support.
+            var definition = ValidDefinition();
+            definition.World.GeneratorType = "rooms-and-corridors";
+            definition.World.Topology = "hex";
+
+            var diagnostics = Validate(definition);
+            Assert.That(diagnostics.Single().Severity, Is.EqualTo(GameDefinitionDiagnosticSeverity.Error));
+            Assert.That(diagnostics.Single().Message, Does.Contain("does not support topology 'hex'"));
+        }
+
+        [Test]
+        public void Topology_HexCavesOnHex_IsValid()
+        {
+            var definition = ValidDefinition();
+            definition.World.GeneratorType = "hex-caves";
+            definition.World.Topology = "hex";
+
+            Assert.That(Validate(definition), Is.Empty);
+        }
+
+        [Test]
+        public void Topology_HexNativeGeneratorOnSquare_IsAnError()
+        {
+            // The reverse mismatch: hex-caves only makes sense on a hex lattice, so a
+            // square (omitted-topology) world may not pick it.
+            var definition = ValidDefinition();
+            definition.World.GeneratorType = "hex-caves";
+            definition.World.Topology = null;
+
+            var diagnostics = Validate(definition);
+            Assert.That(diagnostics.Single().Severity, Is.EqualTo(GameDefinitionDiagnosticSeverity.Error));
+            Assert.That(diagnostics.Single().Message, Does.Contain("does not support topology 'square'"));
+        }
+
+        [Test]
+        public void Topology_UnknownGeneratorWithNonSquareTopology_IsAWarning()
+        {
+            var definition = ValidDefinition();
+            definition.World.GeneratorType = "no-such-generator";
+            definition.World.Topology = "tri";
+
+            var diagnostics = Validate(definition);
+            Assert.That(diagnostics.Single().Severity, Is.EqualTo(GameDefinitionDiagnosticSeverity.Warning));
+            Assert.That(diagnostics.Single().Message, Does.Contain("cannot verify"));
+        }
+
+        [Test]
         public void Skill_UnknownAbilityReference_IsAnError()
         {
             var definition = ValidDefinition();

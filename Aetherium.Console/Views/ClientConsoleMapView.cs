@@ -66,6 +66,11 @@ namespace Aetherium.Views
             Heading = Perception.PlayerHeading.ToClientDirection();
             WorldLocation = Perception.PlayerLocation; // This is always (0,0,0) for relative coordinates
 
+            // The server names the world's tiling; all cell-placement math below comes from the
+            // shared GridCellLayout so square/hex/tri render from the same relative keys.
+            var topology = Perception.Topology;
+            symbolWidth = GridCellLayout.CellCharWidth(topology);
+
             var worldWidth = size.Width / symbolWidth;
             var worldHeight = size.Height;
 
@@ -91,13 +96,33 @@ namespace Aetherium.Views
 
             for (int y = 0; y < size.Height; y++)
             {
-                for (int x = 0; x < size.Width / symbolWidth; x++)
+                var relativeY = y - yoffset;
+
+                // Hex rows with odd relY shift right half a cell (one character); blank the
+                // leading character so the stagger never leaves a stale glyph behind.
+                var stagger = GridCellLayout.RowStaggerChars(topology, relativeY);
+                if (stagger > 0)
                 {
-                    Console.SetCursorPosition(screenPosition.X + (x * symbolWidth), screenPosition.Y + y);
+                    Console.SetCursorPosition(screenPosition.X, screenPosition.Y + y);
+                    Console.BackgroundColor = BackgroundColor;
+                    Console.Write(new string(' ', stagger));
+                }
+
+                for (int x = 0; x < worldWidth; x++)
+                {
+                    var charColumn = x * symbolWidth + stagger;
+                    if (charColumn + symbolWidth > size.Width)
+                    {
+                        // A staggered row's last cell doesn't fit; blank what remains of the row.
+                        Console.SetCursorPosition(screenPosition.X + charColumn, screenPosition.Y + y);
+                        Console.BackgroundColor = BackgroundColor;
+                        Console.Write(new string(' ', size.Width - charColumn));
+                        break;
+                    }
+                    Console.SetCursorPosition(screenPosition.X + charColumn, screenPosition.Y + y);
 
                     // Calculate relative coordinates (offsets from player at center)
-                    var relativeX = x - xoffset;
-                    var relativeY = y - yoffset;
+                    var relativeX = GridCellLayout.RelXForCellIndex(topology, x, relativeY, xoffset);
                     var relativeZ = 0; // Player is always on Z=0 relative to themselves
 
                     // Create location key for looking up in perception visuals (using relative coordinates)
@@ -230,8 +255,11 @@ namespace Aetherium.Views
                 ScreenPosition.X,
                 ScreenPosition.Y + size.Height + 3);
 
+            var tilingSuffix = string.IsNullOrEmpty(topology) || topology == "square"
+                ? ""
+                : $", {topology} tiling";
             Console.Write(
-                CenterText($"Player Position: (0, 0, 0) [relative coordinates only]",
+                CenterText($"Player Position: (0, 0, 0) [relative coordinates only{tilingSuffix}]",
                 Size.Width));
 
             // Inventory summary (simple one-line list)
@@ -513,6 +541,9 @@ namespace Aetherium.Views
                 return new AsciiMapData(0, 0);
             }
 
+            var topology = Perception.Topology;
+            symbolWidth = GridCellLayout.CellCharWidth(topology);
+
             var worldWidth = ContentSize.Width / symbolWidth;
             var worldHeight = ContentSize.Height;
 
@@ -521,13 +552,21 @@ namespace Aetherium.Views
             var xoffset = worldWidth / 2;
             var yoffset = worldHeight / 2;
 
+            // A cell glyph repeated/truncated to the topology's cell width.
+            string Cell(string glyph) => glyph.Length >= symbolWidth
+                ? glyph.Substring(0, symbolWidth)
+                : string.Concat(Enumerable.Repeat(glyph.Length > 0 ? glyph : " ", symbolWidth)).Substring(0, symbolWidth);
+
+            var blank = new string(' ', symbolWidth);
+
             for (int y = 0; y < worldHeight; y++)
             {
                 for (int x = 0; x < worldWidth; x++)
                 {
-                    // Calculate relative coordinates (offsets from player at center)
-                    var relativeX = x - xoffset;
+                    // Same cell mapping as DrawContents (the capture is a cell grid, so the hex
+                    // half-character stagger is dropped but cell content stays aligned).
                     var relativeY = y - yoffset;
+                    var relativeX = GridCellLayout.RelXForCellIndex(topology, x, relativeY, xoffset);
                     var relativeZ = 0;
 
                     // Create location key for looking up in perception visuals (using relative coordinates)
@@ -536,7 +575,7 @@ namespace Aetherium.Views
                     // Check if this location is visible
                     if (!Perception.Visuals.TryGetValue(locationKey, out var visual))
                     {
-                        asciiMap.Tiles[y][x] = "  "; // Empty space
+                        asciiMap.Tiles[y][x] = blank; // Empty space
                         continue;
                     }
 
@@ -547,11 +586,11 @@ namespace Aetherium.Views
                         if (Perception.TileTypes.TryGetValue("Player", out var playerTileType) &&
                             playerTileType.Settings.TryGetValue("MapCharacter", out var playerChar))
                         {
-                            asciiMap.Tiles[y][x] = playerChar + playerChar; // 2 characters wide
+                            asciiMap.Tiles[y][x] = Cell(playerChar);
                         }
                         else
                         {
-                            asciiMap.Tiles[y][x] = "@@"; // Default player character
+                            asciiMap.Tiles[y][x] = Cell("@"); // Default player character
                         }
                     }
                     else
@@ -566,19 +605,17 @@ namespace Aetherium.Views
                         if (itemAtLocation != null && !string.IsNullOrEmpty(itemAtLocation.Icon))
                         {
                             var icon = itemAtLocation.Icon;
-                            if (icon.Length >= 2)
-                                asciiMap.Tiles[y][x] = icon.Substring(0, 2);
-                            else
-                                asciiMap.Tiles[y][x] = icon.PadRight(2);
+                            asciiMap.Tiles[y][x] = icon.Length >= symbolWidth
+                                ? icon.Substring(0, symbolWidth)
+                                : icon.PadRight(symbolWidth);
                         }
                         else if (visual.Terrain != null && visual.Terrain.Settings.TryGetValue("MapCharacter", out var terrainChar))
                         {
-                            // Terrain - duplicate the character to fill 2 spaces
-                            asciiMap.Tiles[y][x] = terrainChar + terrainChar;
+                            asciiMap.Tiles[y][x] = Cell(terrainChar);
                         }
                         else
                         {
-                            asciiMap.Tiles[y][x] = "  "; // Unknown/empty
+                            asciiMap.Tiles[y][x] = blank; // Unknown/empty
                         }
                     }
                 }

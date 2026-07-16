@@ -1,0 +1,47 @@
+# Hexhaven — the hexagonal-topology sample bundle (docs/grid-topologies.md P1).
+# A cave-dwelling colony on a six-way lattice: same engine, same YAML schema as
+# Emberfall/Neonveil — the only structural difference is `world.topology: hex`,
+# which makes movement, FOV, light, and melee reach resolve on hexagon adjacency.
+id: hexhaven
+name: Hexhaven
+version: 0.1.0
+description: A lantern-lit cave colony carved into a hexagonal lattice.
+tags: [fantasy, hex, sample]
+
+world:
+  generatorType: hex-caves
+  topology: hex
+  size: { width: 40, height: 40, depth: 1 }
+  maxPlayers: 20
+
+content:
+  creatures:
+    - id: waxgrub
+      name: Waxgrub
+      description: A pale burrowing grub that chews slow spirals through the comb.
+      glyph: w
+      color: DarkYellow
+      health: 12
+      attackPower: 2
+      speed: 0.75
+      behavior: wander-melee
+      lootItemId: wax_lump
+    - id: comb_warden
+      name: Comb Warden
+      description: A chitin-plated sentinel that patrols the six ways of every chamber.
+      glyph: W
+      color: DarkCyan
+      health: 40
+      attackPower: 8
+      speed: 1.0
+      behavior: wander-melee
+  items:
+    - id: wax_lump
+      name: Wax Lump
+      icon: "*"
+      weight: 1
+  spawns:
+    - creatureId: waxgrub
+      weight: 5
+    - creatureId: comb_warden
+      weight: 1
