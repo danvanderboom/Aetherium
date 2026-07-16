@@ -9,7 +9,8 @@ namespace Aetherium.Topology
     /// resolved here exactly once at grain init (the ContentCompiler/EcaRuntime
     /// compile-once pattern) onto <see cref="Aetherium.Core.World.Topology"/>; an
     /// omitted or null field means <see cref="DefaultName"/> ("square"), byte-identically
-    /// to the pre-seam engine. P1 registers "hex", P2 "tri" (docs/grid-topologies.md).
+    /// to the pre-seam engine. Registers "hex", "tri", and "h3" (docs/grid-topologies.md,
+    /// docs/h3-topology.md).
     /// </summary>
     public static class GridTopologyRegistry
     {
@@ -21,6 +22,7 @@ namespace Aetherium.Topology
                 [SquareTopology.Instance.Name] = SquareTopology.Instance,
                 [HexTopology.Instance.Name] = HexTopology.Instance,
                 [TriangleTopology.Instance.Name] = TriangleTopology.Instance,
+                [H3Topology.Instance.Name] = H3Topology.Instance,
             };
 
         /// <summary>Resolves a topology by name; null/empty falls back to square.

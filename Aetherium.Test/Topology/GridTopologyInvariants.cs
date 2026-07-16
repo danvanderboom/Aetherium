@@ -14,12 +14,23 @@ namespace Aetherium.Test.Topology
     /// </summary>
     public static class GridTopologyInvariants
     {
-        /// <summary>Runs all eight invariants over a sample of cells around the origin.</summary>
+        /// <summary>Runs all eight invariants over a square sample of cells around the origin —
+        /// the entry point for lattice topologies whose integer (x, y) are all valid cells.</summary>
         public static void AssertAll(IGridTopology topology, int extent = 3, int z = 0)
-        {
-            var cells = Sample(extent, z).ToList();
+            => AssertAll(topology, Sample(extent, z), extent);
 
-            foreach (var cell in cells)
+        /// <summary>
+        /// Runs all eight invariants over an explicit cell set — the entry point for topologies
+        /// (H3) whose cells are not an integer lattice, so the sample must be an actual set of
+        /// valid cells (e.g. a gridDisk that includes at least one pentagon). Per-cell and
+        /// pairwise checks range over the given cells; Range/BFS completeness is computed live
+        /// from the topology at <paramref name="rangeRadius"/>, independent of the sample.
+        /// </summary>
+        public static void AssertAll(IGridTopology topology, IEnumerable<GridCoord> cells, int rangeRadius = 2)
+        {
+            var list = cells.ToList();
+
+            foreach (var cell in list)
             {
                 NeighborSymmetry(topology, cell);
                 DirectionCountBounds(topology, cell);
@@ -29,15 +40,15 @@ namespace Aetherium.Test.Topology
             }
 
             // Pairwise metric + geometry over the sample (quadratic, but the sample is small).
-            foreach (var a in cells)
-            foreach (var b in cells)
+            foreach (var a in list)
+            foreach (var b in list)
             {
                 DistanceMetricAxioms(topology, a, b);
                 LineConnected(topology, a, b);
             }
 
-            foreach (var center in cells)
-                RangeIsExactBall(topology, center, extent);
+            foreach (var center in list)
+                RangeIsExactBall(topology, center, rangeRadius);
         }
 
         // 1. Neighbor symmetry: every edge has a reverse edge.

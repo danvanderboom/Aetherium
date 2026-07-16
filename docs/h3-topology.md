@@ -1,6 +1,6 @@
-# H3 as an Aetherium Topology — Stage-Setting
+# H3 as an Aetherium Topology
 
-*Status: forward-looking design (P3 of [grid-topologies.md](grid-topologies.md)). No H3 code or dependency exists yet. The [seam](grid-topologies.md#the-abstraction) (P0), hex (P1), and triangle (P2) are built and green; this document records exactly how Uber's **H3** hierarchical geospatial grid drops into that same `IGridTopology` when a planetary/lunar game wants it — and the one code artifact that already ships to keep the seam ready: the [pentagon-mock CI guard](#the-pentagon-mock-already-in-ci).*
+*Status: **the `H3Topology` drop-in is built and green.*** [`H3Topology`](../Aetherium.Server/Topology/H3Topology.cs) implements `IGridTopology` + [`IHierarchicalGridTopology`](../Aetherium.Server/Topology/IHierarchicalGridTopology.cs) on the [`pocketken.H3`](#dependency-assessment-pocketkenh3) NuGet dependency, is registered as `"h3"`, and passes the full [8-invariant harness](../Aetherium.Test/Topology/GridTopologyInvariants.cs) over a real H3 hex disc plus pentagon-specific 5-neighbor coverage and an end-to-end `World.TryMoveSteps` walk ([`H3TopologyTests`](../Aetherium.Test/Topology/H3TopologyTests.cs)). What this document describes as "later" is now the tiling math itself; what **remains** before a *playable* planetary/lunar world is the last-mile integration — [perception keys](#perception-on-a-sphere-celltolocalij-keys) rerouted through `cellToLocalIj` (today `PerceptionService` subtracts raw lattice coords, correct for square/hex/tri but not a sphere) and an [`ITopologyAwareGenerator`](grid-topologies.md) declaring `"h3"` — both gated on an actual planetary game concept, not on the topology. The [pentagon-mock CI guard](#the-pentagon-mock-already-in-ci) still ships as the permanent regression net.*
 
 ## Why H3, and why it fits
 
@@ -63,16 +63,22 @@ A planetary/lunar world is procedural, not kit-based: a generator declaring `Sup
 
 ## Dependency assessment: `pocketken.H3`
 
-[`pocketken.H3`](https://github.com/pocketken/H3.net) is a maintained **pure-C# port of H3 v4** — Apache-2.0, on NuGet, `netstandard2.0/2.1`+, **no native interop** (so it works in the Orleans silo and, importantly, in a future CoreCLR Unity client without a native plugin). Nothing in the solution references it today.
+[`pocketken.H3`](https://github.com/pocketken/H3.net) is a maintained **pure-C# port of H3 v4** — Apache-2.0, on NuGet (`4.5.0.1`), `netstandard2.0/2.1`+, **no native interop** (so it works in the Orleans silo and, importantly, in a future CoreCLR Unity client without a native plugin). `Aetherium.Server` now references it.
 
-- **Needed calls:** `latLngToCell`/`cellToLatLng`, `gridDisk`, `gridPathCells`, `gridDistance`, `cellToLocalIj`, `cellToParent`/`cellToChildren`, `isPentagon`, `cellToBoundary`.
-- **Risks:** small maintainer community; .NET 10 compatibility unverified until we try it.
-- **Fallback:** vendor the minimal index-math subset (index bit-layout, `gridDisk`, `gridDistance`, pentagon detection) behind the topology seam — everything H3-specific is already confined to one `IGridTopology` implementation, so a vendored subset changes nothing outside `H3Topology`.
+- **Calls used** (all verified on .NET 10): `H3Index.FromLatLng`/`ToLatLng`, `GridDiskDistances` (neighbors + `Range`), `GridPathCells` (`Line`), `GridDistance`, `CellToLocalIj`/`LocalIjToCell`, `GetParentForResolution`/`GetChildrenForResolution`, `IsPentagon`, `Resolution`, `GetAzimuthInRadians`/`GetGreatCircleDistanceInRadians` (the `Delta` projection). The `H3Index` ↔ `ulong` implicit conversions make the [`GridCoord` packing](#cell-identity-packing-h3-into-worldlocation) a two-line shift.
+- **Confirmed:** neighbor symmetry holds at pentagons; `CellToLocalIj`, `GridPathCells`, and `GridDiskDistances` all work at and around pentagon cells; neighbor azimuths are evenly spread (~60°), so the derived per-cell edge headings satisfy invariant 7. `H3TopologyTests` locks these in.
+- **Risks:** small maintainer community. `GridDistance`/`GridPathCells` are documented upstream as unreliable *across* a pentagon — so the full pairwise invariant harness is run over a pentagon-free hex disc, and pentagon cells get targeted 5-neighbor coverage instead (mirroring how `PentagonishTopology` isolates the non-uniform property).
+- **Fallback:** vendor the minimal index-math subset behind the topology seam — everything H3-specific is confined to `H3Topology`, so a vendored subset changes nothing outside it.
 
 ## The pentagon-mock (already in CI)
 
-The one P3 artifact that ships now, so the seam cannot rot before H3 arrives: [`PentagonishTopology`](../Aetherium.Test/Topology/PentagonishTopology.cs) — an intentionally irregular grid (y-even rows are 5-neighbor "pentagons", y-odd rows are 6-neighbor hexagons) run through the same [8-invariant harness](../Aetherium.Test/Topology/GridTopologyInvariants.cs) every real topology passes ([`PentagonishTopologyTests`](../Aetherium.Test/Topology/PentagonishTopologyTests.cs)). It exercises exactly the property H3 will depend on — cells whose neighbor count is not the maximum — so if any seam or caller ever reintroduces a "cells all have N edges" or "there is a global plane" assumption, CI fails long before H3 is written.
+This artifact predates `H3Topology` and still earns its keep as a *cheap* guard: [`PentagonishTopology`](../Aetherium.Test/Topology/PentagonishTopology.cs) — an intentionally irregular grid (y-even rows are 5-neighbor "pentagons", y-odd rows are 6-neighbor hexagons) run through the same [8-invariant harness](../Aetherium.Test/Topology/GridTopologyInvariants.cs) every real topology passes ([`PentagonishTopologyTests`](../Aetherium.Test/Topology/PentagonishTopologyTests.cs)). It exercises the non-uniform-degree property *without* pulling H3 into a test's dependency graph or paying H3's per-call cost, so seam-level regressions (a reintroduced "cells all have N edges" or "there is a global plane" assumption) fail fast even in test runs that never touch `H3Topology`.
 
-## When to pull this
+## What remains for a playable H3 world
 
-Not before a game concept actually wants a planetary or lunar surface. Until then the cost of readiness is zero — the seam, the per-cell direction machinery, the `Delta`-not-`CellCenter` discipline, and the pentagon-mock guard are all already in place and green. When the day comes, `H3Topology` is a single new `IGridTopology` implementation plus the `pocketken.H3` dependency; nothing above it changes.
+The tiling is done; a *game* on it needs two last-mile pieces, both gated on an actual planetary/lunar concept:
+
+1. **Perception keys.** `PerceptionService` emits `"relX,relY,relZ"` by subtracting raw lattice coords — correct for square/hex/tri, meaningless for two halves of a packed H3 index. On a sphere these become `cellToLocalIj`-anchored `"relI,relJ,relZ"` keys (see [above](#perception-on-a-sphere-celltolocalij-keys)); the contract (opaque strings, no absolute coordinates) is unchanged.
+2. **Worldgen.** A generator declaring `SupportedTopologies=["h3"]` that samples 3-D noise over each cell's center unit vector (see [Worldgen](#worldgen)).
+
+Neither touches the topology, the seam, or anything above them; both are small and self-contained. Until a game wants a planet, the cost of leaving them unbuilt is zero — `H3Topology` is registered, invariant-green, and ready.
