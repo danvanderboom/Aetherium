@@ -26,10 +26,12 @@ accept an optional `self` entity and, when supplied, populate `PerceptionDto.Int
 projecting the character's own `Health` (level/max), `StatusEffects` (each active status's id and
 remaining ticks), `ResourcePools` (each pool's tag, current, max, and inverse flag), and
 `AbilityCooldowns` (each ability still cooling down and its remaining ticks; a ready ability is
-absent). `GameMapGrain.ComputeAgentPerceptionAsync` SHALL pass the resolved player character as `self`
-so a live player/agent frame includes interoception.
+absent). Both live perception paths SHALL supply `self`: `GameMapGrain.ComputeAgentPerceptionAsync`
+passes the resolved player character (the agent JSON path), and `GameSession.GetPerception` passes
+the session's player (the path behind every `ReceivePerceptionUpdate` hub push), so a live
+player/agent frame includes interoception on either route.
 
-**Verified by:** `Aetherium.Test.Perception.InteroceptionTests.Interoception_Health_ReflectsSelfLevelAndMax`, `.Interoception_Statuses_ListSelfActiveStatuses_WithRemainingTicks`, `.Interoception_Pools_CarryTagCurrentMaxAndInverseFlag`, `.Interoception_Cooldowns_ListOnlyAbilitiesStillOnCooldown_WithRemainingTicks`, `.ComputeAgentPerceptionAsync_IncludesInteroceptionForThePlayer`
+**Verified by:** `Aetherium.Test.Perception.InteroceptionTests.Interoception_Health_ReflectsSelfLevelAndMax`, `.Interoception_Statuses_ListSelfActiveStatuses_WithRemainingTicks`, `.Interoception_Pools_CarryTagCurrentMaxAndInverseFlag`, `.Interoception_Cooldowns_ListOnlyAbilitiesStillOnCooldown_WithRemainingTicks`, `.ComputeAgentPerceptionAsync_IncludesInteroceptionForThePlayer`, `Aetherium.Client.Tests.InProcServerIntegrationTests.LiveFrame_CarriesInteroception_ThroughTheHubPush`
 
 #### Scenario: Own health is felt
 
@@ -55,6 +57,11 @@ so a live player/agent frame includes interoception.
 
 - **WHEN** `GameMapGrain.ComputeAgentPerceptionAsync(entityId)` computes a player's frame
 - **THEN** the returned perception's `Interoception` is populated from that player's own components
+
+#### Scenario: Hub-pushed frames feel the body too
+
+- **WHEN** the server pushes `ReceivePerceptionUpdate` to a connected client (computed via `GameSession.GetPerception`)
+- **THEN** the frame's `Interoception` is populated from the session player's own components
 
 ### Requirement: Interoception Is Self-Only and Fail-Safe
 

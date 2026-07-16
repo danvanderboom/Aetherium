@@ -13,6 +13,7 @@
   - `AbilityCooldowns.Snapshot` → `Cooldowns` (`AbilityId`, `RemainingTicks`)
 - [x] 2.3 Leave `Interoception` `null` when `self` is `null` (no behavior change for existing callers).
 - [x] 2.4 In `GameMapGrain.ComputeAgentPerceptionAsync`, pass the resolved player `Character` as `self`.
+- [x] 2.5 *(discovered during client-library integration testing)* In `GameSession.GetPerception` — the path behind every `ReceivePerceptionUpdate` hub push — pass the session's `Player` as `self`, so live client frames (not just agent JSON) carry interoception. Verified end-to-end by `Aetherium.Client.Tests.InProcServerIntegrationTests.LiveFrame_CarriesInteroception_ThroughTheHubPush` against the real in-proc server.
 
 ## 3. Tests (each maps to a spec requirement via its `**Verified by:**` line)
 

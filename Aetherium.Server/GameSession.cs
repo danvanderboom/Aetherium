@@ -605,6 +605,11 @@ namespace Aetherium.Server
 				fovDegrees = hasHeading?.FieldOfViewDegrees ?? 120; // Default 120 for humans
 			}
 
+			// Passing the session's player as `self` populates the interoception channel on
+			// every hub-pushed frame (add-interoception-channel) — the same wiring the grain's
+			// agent path has. For local sessions the World is authoritative; for grain-bound
+			// sessions the mirror player's Health stays current via ("Health","Level") deltas
+			// in ApplyDelta (statuses/pools mirror as those deltas are added).
 			return perceptionService.ComputePerception(
 				World,
 				ViewLocation,
@@ -616,7 +621,8 @@ namespace Aetherium.Server
 				GetCurrentGameTime(),
 				DirectionalVisionMode,
 				DirectionalVisionMode ? (int?)HeadingDegrees : null,
-				fovDegrees);
+				fovDegrees,
+				self: Player);
 		}
 	}
 

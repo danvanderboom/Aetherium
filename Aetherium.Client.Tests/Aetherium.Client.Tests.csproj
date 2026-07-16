@@ -10,6 +10,8 @@
     <PackageReference Include="NUnit" Version="3.14.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <!-- In-proc server hosting for the integration suite (WebApplicationFactory). -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

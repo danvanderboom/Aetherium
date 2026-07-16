@@ -48,11 +48,14 @@ namespace Aetherium.Client
         /// <param name="worldId">Optional world to auto-join on connect (rides the query string).</param>
         /// <param name="mapId">Optional map within the world.</param>
         /// <param name="accessTokenProvider">Optional JWT provider for deployed servers; absent in dev.</param>
+        /// <param name="configureHttpConnection">Optional transport hook — used by in-proc
+        /// integration tests to route through a TestServer handler; games never need it.</param>
         public AetheriumConnection(
             string baseUrl,
             string? worldId = null,
             string? mapId = null,
-            Func<Task<string?>>? accessTokenProvider = null)
+            Func<Task<string?>>? accessTokenProvider = null,
+            Action<Microsoft.AspNetCore.Http.Connections.Client.HttpConnectionOptions>? configureHttpConnection = null)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 throw new ArgumentException("A server base URL is required.", nameof(baseUrl));
@@ -69,6 +72,7 @@ namespace Aetherium.Client
                 {
                     if (accessTokenProvider != null)
                         options.AccessTokenProvider = () => accessTokenProvider()!;
+                    configureHttpConnection?.Invoke(options);
                 })
                 .WithAutomaticReconnect()
                 .Build();

@@ -98,9 +98,10 @@ namespace Aetherium.Client
             string baseUrl,
             string? worldId = null,
             string? mapId = null,
-            Func<Task<string?>>? accessTokenProvider = null)
+            Func<Task<string?>>? accessTokenProvider = null,
+            Action<Microsoft.AspNetCore.Http.Connections.Client.HttpConnectionOptions>? configureHttpConnection = null)
         {
-            Connection = new AetheriumConnection(baseUrl, worldId, mapId, accessTokenProvider);
+            Connection = new AetheriumConnection(baseUrl, worldId, mapId, accessTokenProvider, configureHttpConnection);
             Tools = new ToolClient(Connection);
             Lobby = new LobbyClient(Connection);
         }
