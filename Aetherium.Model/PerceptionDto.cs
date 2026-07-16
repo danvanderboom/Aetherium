@@ -74,6 +74,13 @@ namespace Aetherium.Model
         // Audio perception
         public AudioPerceptionDto? Audio { get; set; }
 
+        /// <summary>
+        /// Interoception — the perceiver's own body state (health, felt statuses, resource
+        /// pools, ability readiness). Null when the frame was computed without a perceiving
+        /// self entity (openspec/changes/add-interoception-channel); always self-only.
+        /// </summary>
+        public InteroceptionDto? Interoception { get; set; }
+
         public PerceptionDto()
         {
         }

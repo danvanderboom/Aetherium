@@ -39,7 +39,8 @@ namespace Aetherium.Server
             World world,
             WorldLocation playerLocation,
             Aetherium.WorldDirection playerHeading,
-            Size viewportSize)
+            Size viewportSize,
+            Entity? self = null)
         {
             // Use default modes for backward compatibility
             return ComputePerception(
@@ -53,7 +54,8 @@ namespace Aetherium.Server
                 DateTime.UtcNow,
                 false,  // directional vision disabled by default
                 null,   // no heading degrees
-                null);  // no FOV degrees
+                null,   // no FOV degrees
+                self: self);
         }
 
         public PerceptionDto ComputePerception(
@@ -96,7 +98,8 @@ namespace Aetherium.Server
             int? headingDegrees,
             int? fovDegrees,
             InteractionSystem? interactionSystem = null,
-            GameSession? session = null)
+            GameSession? session = null,
+            Entity? self = null)
         {
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
@@ -238,6 +241,11 @@ Light sources found:
                 SelfCellParity = world.Topology.Name == "tri"
                     ? (playerLocation.X + playerLocation.Y) & 1
                     : (int?)null,
+
+                // Interoception (add-interoception-channel): the perceiver's own body state,
+                // populated only when the caller supplied the perceiving entity. Self-only —
+                // it reads this entity's components and nothing else.
+                Interoception = self is null ? null : BuildInteroception(self),
                 
                 // Add mode information
                 CurrentLightingMode = lightingMode,
@@ -484,6 +492,60 @@ Light sources found:
             var regionX = location.X / 64;
             var regionY = location.Y / 64;
             return $"region:{regionX},{regionY},{location.Z}";
+        }
+
+        /// <summary>
+        /// Projects the perceiving character's own components into the interoception block
+        /// (add-interoception-channel). Every read is guarded — Entity.Get&lt;T&gt;() throws on a
+        /// missing component — so a body without pools/statuses/cooldowns degrades to empty
+        /// lists (and 0/0 health), never a throw. Reads ONLY <paramref name="self"/>.
+        /// </summary>
+        private static InteroceptionDto BuildInteroception(Entity self)
+        {
+            var interoception = new InteroceptionDto();
+
+            if (self.Has<Health>())
+            {
+                var health = self.Get<Health>();
+                interoception.Health = health.Level;
+                interoception.MaxHealth = health.MaxLevel;
+            }
+
+            if (self.Has<Combat.StatusEffects>())
+            {
+                foreach (var effect in self.Get<Combat.StatusEffects>().Active)
+                    interoception.Statuses.Add(new SelfStatusDto
+                    {
+                        Id = effect.Id,
+                        RemainingTicks = effect.RemainingTicks,
+                    });
+            }
+
+            if (self.Has<Abilities.ResourcePools>())
+            {
+                foreach (var pool in self.Get<Abilities.ResourcePools>().All)
+                    interoception.Pools.Add(new ResourcePoolStateDto
+                    {
+                        Tag = pool.Tag,
+                        Current = pool.Current,
+                        Max = pool.Max,
+                        IsInverse = pool.IsInverse,
+                    });
+            }
+
+            if (self.Has<Abilities.AbilityCooldowns>())
+            {
+                // Snapshot holds only abilities with ticks remaining (entries drop at 0),
+                // so this is directly "what isn't ready yet".
+                foreach (var (abilityId, remaining) in self.Get<Abilities.AbilityCooldowns>().Snapshot)
+                    interoception.Cooldowns.Add(new AbilityReadinessDto
+                    {
+                        AbilityId = abilityId,
+                        RemainingTicks = remaining,
+                    });
+            }
+
+            return interoception;
         }
 
         private AudioPerceptionDto ComputeAudioPerception(

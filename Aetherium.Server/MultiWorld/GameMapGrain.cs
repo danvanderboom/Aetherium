@@ -952,8 +952,10 @@ namespace Aetherium.Server.MultiWorld
             var bearing = character.Get<Aetherium.Components.HasHeading>()?.ToWorldDirection()
                 ?? Aetherium.WorldDirection.North;
 
+            // Passing the character as `self` populates the interoception channel — the
+            // player's own health/statuses/pools/cooldowns (add-interoception-channel).
             var perception = new Aetherium.Server.PerceptionService()
-                .ComputePerception(_world, location, bearing, new System.Drawing.Size(40, 40));
+                .ComputePerception(_world, location, bearing, new System.Drawing.Size(40, 40), self: character);
             var json = System.Text.Json.JsonSerializer.Serialize(perception);
             return Task.FromResult<string?>(json);
         }

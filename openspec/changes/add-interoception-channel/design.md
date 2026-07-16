@@ -30,7 +30,9 @@ The self-state this channel reports already exists as ECS components on the `Cha
 - **Guarded reads (`Has<T>()` before `Get<T>()`).** `Entity.Get<T>()` throws on a missing component, so
   each of the four projections is guarded; a character without, say, `ResourcePools` yields an empty
   `Pools` list rather than throwing. When `self` is provided, `Interoception` is non-null even if some
-  sub-lists are empty (an absent `Health` reports `0/0`).
+  sub-lists are empty. (In practice `Health` can never be absent — the `Entity` base ctor gives every
+  body `Health(100, 100)` — so the guard there is pure defense; the three genuinely optional
+  components are statuses, pools, and cooldowns.)
 - **Cooldowns list only what's not ready.** `AbilityCooldowns.Snapshot` holds only entries with ticks
   remaining (they're removed at 0), so `Cooldowns` is a direct projection — a ready ability is absent,
   which is exactly the "what isn't ready yet" read a HUD wants.
