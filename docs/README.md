@@ -33,7 +33,8 @@ The console/terminal client is the reference renderer — ASCII, with dynamic li
 - **[Gameplay telemetry](gameplay-telemetry.md)** — design vision: event records at chokepoints, rollups/heatmaps/funnels, synthetic playtesting, the LLM analyst
 - **[Localization](localization.md)** — design vision: TextRef ids, per-locale catalogs and grammars, native procedural prose, LLM locale packs
 - **[ECA scripting](eca-scripting.md)** — shipped T0 runtime: when/if/do rules as data, `creature_died` trigger, reflectable vocabulary registry, `rules.yaml` bundle section
-- **[Hexagonal tiles](hexagonal-tiles.md)** — exploratory design: topology as per-world data, the `ITopology` seam, what's already grid-agnostic, hex asset landscape
+- **[Grid topologies](grid-topologies.md)** — approved design: pluggable per-world tilings (square/hex/triangle) with per-cell direction sets, shaped for Uber's H3 hierarchical planetary grids; P0–P3 phased backlog
+- **[Hexagonal tiles](hexagonal-tiles.md)** — the hexagon deep-dive behind the grid-topologies design: hex-specific FOV/worldgen analysis and the hex asset landscape
 - **[Multi-world ecosystems](multiworld-ecosystems.md)** — clusters, portals, cross-world economy, meta-progression, hub worlds
 - **[Instances](instances.md)** — dungeon instances, lockouts, party/raid grains
 - **[Procedural audio](PROCEDURAL_AUDIO_IMPLEMENTATION.md)** — biome audio profiles and the audio generation pass

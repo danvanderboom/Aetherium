@@ -2,6 +2,8 @@
 
 *Status: exploratory design, not scheduled. Grounded in a code survey of the engine (2026-07-16, `develop` @ df65e5d + design branch); every claim below about current behavior carries a file reference. Companion asset analysis: [docs/design/unity-sample/assets.md](design/unity-sample/assets.md).*
 
+> **Superseded in part by [grid-topologies.md](grid-topologies.md)** — the approved generalized design (square/hex/triangle, H3-ready). That document owns the topology abstraction (its `IGridTopology` replaces the sketch below, adding per-cell direction sets and the `Delta` embedding); this one remains the hexagon deep-dive: why hex, the hex-specific FOV/worldgen analysis, and the hex asset landscape.
+
 ## The question
 
 What would it take for Aetherium to support hexagonal tiles instead of (or alongside) square tiles — and what would that do to the 3D asset pipeline?
