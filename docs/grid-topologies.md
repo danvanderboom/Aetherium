@@ -1,6 +1,6 @@
 # Grid Topologies — Pluggable World Tilings (Square · Hex · Triangle · H3-ready)
 
-*Status: **P0 (the seam) is built** — `Aetherium.Server/Topology/` ships `IGridTopology`/`SquareTopology`/`GridTopologyRegistry`, every surveyed call site routes through it, the `world.topology` config field is threaded end-to-end (default `"square"`), and the full suite (2171 tests) is green including golden-master equivalence for the rewritten tables. P1–P3 remain the documented backlog below. Grounded in the 2026-07-16 engine survey. The hexagon-specific deep dive lives in [hexagonal-tiles.md](hexagonal-tiles.md); this document supersedes its interface sketch with the generalized abstraction.*
+*Status: **P0–P3 are built.** `Aetherium.Server/Topology/` ships `IGridTopology`/`SquareTopology`/`HexTopology`/`TriangleTopology`/`GridTopologyRegistry`; every surveyed call site routes through the seam; the `world.topology` config field is threaded end-to-end (default `"square"`); `PerceptionDto` carries `Topology` + `SelfCellParity`; and the full suite (2204 tests) is green including golden-master square equivalence, hex/triangle end-to-end engine tests, and the [pentagon-mock](h3-topology.md#the-pentagon-mock-already-in-ci) CI guard. H3 itself is documented and staged (not implemented) in [h3-topology.md](h3-topology.md). Remaining per-phase polish (dedicated hex/triangle generators + bundles, client layout math) is noted in each phase below. Grounded in the 2026-07-16 engine survey. The hexagon-specific deep dive lives in [hexagonal-tiles.md](hexagonal-tiles.md); this document supersedes its interface sketch with the generalized abstraction.*
 
 ## The goal
 
@@ -192,9 +192,9 @@ Because hex reuses `WorldLocation(q,r)` and every generator fills integer coordi
 
 **Remaining polish:** a dedicated triangle test bundle under `Data/Games/` and the client-side triangle layout/parity rendering (both consume the shipped topology + `SelfCellParity`, no engine change).
 
-### P3 — H3 stage-setting *(S; doc + one test artifact)*
+### P3 — H3 stage-setting *(S; doc + one test artifact)* — ✅ **built**
 
-`docs/h3-topology.md` (the packing plan, `cellToLocalIj` perception keys, hierarchy-via-portals posture, `Delta`-as-azimuthal-projection, dependency assessment with vendoring fallback) **plus one code artifact**: a mock `PentagonishTopology` — an intentionally irregular grid — running through the property harness in CI as the permanent guard that no uniform-direction assumption regresses into the seam.
+**Built:** [docs/h3-topology.md](h3-topology.md) records the full stage-setting — the `WorldLocation` packing (H3's reserved top bit makes the 64-bit index split lossless), `cellToLocalIj` perception keys (preserving the opaque-string, no-absolute-coordinates contract on a sphere), hierarchy-via-portals posture, `Delta`-as-azimuthal-projection, worldgen by cell-center noise, and the `pocketken.H3` dependency assessment with a vendoring fallback. **Plus the one code artifact**: [`PentagonishTopology`](../Aetherium.Test/Topology/PentagonishTopology.cs) — an intentionally irregular grid (y-even rows are 5-neighbor pentagons, y-odd rows 6-neighbor hexagons, cut symmetrically so neighbor symmetry holds) — runs through the [8-invariant harness](../Aetherium.Test/Topology/GridTopologyInvariants.cs) in CI as the permanent guard that no uniform-direction (or global-plane) assumption regresses into the seam before H3 is written.
 
 ## YAML, validator, worldgen, protocol
 
