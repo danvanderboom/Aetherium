@@ -41,7 +41,8 @@ The console/terminal client is the reference renderer — ASCII, with dynamic li
 - **[Agent training](training/README.md)** — telemetry, curricula, benchmarks, and the training dashboard
 
 ### Clients
-- **[Unity 2D client](unity/README.md)** — tilemap rendering, Xbox controller support · **[Unity testing](unity/testing.md)**
+- **[Unity client library & Aphelion sample — design suite](design/unity-sample/README.md)** — proposed design: reusable `com.aetherium.unity` package, `samples/` layout, and a co-op sci-fi station-crawler sample game
+- **[Unity 2D client](unity/README.md)** — legacy tilemap scaffold (superseded by the design suite above) · **[Unity testing](unity/testing.md)**
 - **[Unreal client guide](clients/unreal-client-guide.md)** — forward-looking migration guide (client not yet built)
 
 ## Audits & status
