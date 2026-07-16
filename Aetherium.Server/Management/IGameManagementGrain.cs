@@ -38,6 +38,11 @@ namespace Aetherium.Server.Management
         Task<OperationResult> PauseWorldAsync(string worldId);
         Task<OperationResult> ResumeWorldAsync(string worldId);
         Task<OperationResult> ShutdownWorldAsync(string worldId);
+
+        // Game definitions (add-game-definition-loader): YAML-bundled games and their instances
+        Task<List<Aetherium.Model.Games.GameDefinitionSummaryDto>> ListGameDefinitionsAsync();
+        Task<Aetherium.Model.Games.GameInstanceResult> CreateGameInstanceAsync(string gameDefinitionId, string? instanceName = null);
+        Task<List<Aetherium.Server.MultiWorld.WorldInfo>> ListGameInstancesAsync(string gameDefinitionId);
         
         // World ACL and Invites (using IWorldHost)
         Task<List<Aetherium.Model.Worlds.WorldSummary>> ListWorldsWithAclAsync(Aetherium.Model.Worlds.WorldQuery query);

@@ -1,0 +1,29 @@
+# Unity generated folders — never commit
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]serSettings/
+
+# Unity regenerates these at the project root (root-scoped so Tools~ projects keep theirs)
+/*.csproj
+/*.sln
+*.user
+*.pidb
+*.booproj
+*.svd
+*.unityproj
+
+# OS / crash junk
+.DS_Store
+desktop.ini
+sysinfo.txt
+*.stackdump
+
+# Tools~ ends with '~' so Unity skips importing it, but the repo root ignores '*~' —
+# un-ignore the folder here and keep only its build output ignored.
+!Tools~/
+Tools~/**/bin/
+Tools~/**/obj/

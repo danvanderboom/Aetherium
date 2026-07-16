@@ -39,8 +39,11 @@ namespace Aetherium.Systems
                     if (target == origin)
                         continue;
 
-                    var dx = bx - origin.X;
-                    var dy = by - origin.Y;
+                    // Euclidean falloff in the topology's local embedding (Delta) —
+                    // on square, exactly the raw coordinate difference used before.
+                    var (dx, dy) = world.Topology.Delta(
+                        Aetherium.Topology.GridCoord.From(origin),
+                        Aetherium.Topology.GridCoord.From(target));
                     var distance = Math.Sqrt(dx * dx + dy * dy);
                     if (distance > maxRange)
                         continue;
@@ -53,15 +56,21 @@ namespace Aetherium.Systems
         }
 
         /// <summary>
-        /// Walks a Bresenham line from origin to target, marking each cell visible until
-        /// cumulative opacity reaches 1.0 (the blocking cell is the last marked).
+        /// Walks the topology's line from origin to target (square: Bresenham), marking
+        /// each cell visible until cumulative opacity reaches 1.0 (the blocking cell is
+        /// the last marked). The origin cell is skipped — you see out of your own cell.
         /// </summary>
         private static void CastRay(World world, WorldLocation origin, WorldLocation target, Rectangle bounds, bool[,] visible)
         {
             double cumulativeOpacity = 0.0;
+            var originCell = Aetherium.Topology.GridCoord.From(origin);
 
-            foreach (var step in EnumerateLine(origin, target))
+            foreach (var cell in world.Topology.Line(originCell, Aetherium.Topology.GridCoord.From(target)))
             {
+                if (cell == originCell)
+                    continue;
+
+                var step = cell.ToWorldLocation();
                 var stepPoint = new Point(step.X, step.Y);
                 var cellOpacity = GetCellOpacity(world, step);
                 cumulativeOpacity += cellOpacity;
@@ -115,45 +124,6 @@ namespace Aetherium.Systems
             }
 
             return Clamp01(opacity);
-        }
-
-        private static IEnumerable<WorldLocation> EnumerateLine(WorldLocation start, WorldLocation end)
-        {
-            // Bresenham's line algorithm (2D on X/Y), includes the end cell, excludes the start cell
-            int x0 = start.X;
-            int y0 = start.Y;
-            int x1 = end.X;
-            int y1 = end.Y;
-
-            int dx = Math.Abs(x1 - x0);
-            int dy = -Math.Abs(y1 - y0);
-            int sx = x0 < x1 ? 1 : -1;
-            int sy = y0 < y1 ? 1 : -1;
-            int err = dx + dy;
-
-            int x = x0;
-            int y = y0;
-
-            while (true)
-            {
-                if (!(x == x0 && y == y0))
-                    yield return new WorldLocation(x, y, start.Z);
-
-                if (x == x1 && y == y1)
-                    break;
-
-                int e2 = 2 * err;
-                if (e2 >= dy)
-                {
-                    err += dy;
-                    x += sx;
-                }
-                if (e2 <= dx)
-                {
-                    err += dx;
-                    y += sy;
-                }
-            }
         }
 
         private static double Clamp01(double value) => value < 0 ? 0 : (value > 1 ? 1 : value);

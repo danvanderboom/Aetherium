@@ -95,9 +95,13 @@ namespace Aetherium.Server.Ai
                 if (!other.Has<Health>() || !other.Has<WorldLocation>()) return false;
 
                 var otherLocation = other.Get<WorldLocation>();
-                int distance = Math.Abs(otherLocation.X - selfLocation.X)
-                              + Math.Abs(otherLocation.Y - selfLocation.Y)
-                              + Math.Abs(otherLocation.Z - selfLocation.Z);
+                // Topology metric on the plane + vertical steps (the Z axis is
+                // engine-level, not topology's) — on square this is the Manhattan
+                // distance this rule has always used.
+                int distance = ctx.World.Topology.Distance(
+                                   Aetherium.Topology.GridCoord.From(selfLocation),
+                                   Aetherium.Topology.GridCoord.From(otherLocation))
+                             + Math.Abs(otherLocation.Z - selfLocation.Z);
                 return distance <= 1;
             });
         }

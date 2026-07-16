@@ -163,8 +163,9 @@ namespace Aetherium.Server
             if (targetLoc == null)
                 return InteractionResult.Fail("Target has no location");
 
-            var distance = System.Math.Abs(targetLoc.X - ctx.ViewLocation.X) +
-                           System.Math.Abs(targetLoc.Y - ctx.ViewLocation.Y);
+            var distance = ctx.World.Topology.Distance(
+                Aetherium.Topology.GridCoord.From(ctx.ViewLocation),
+                Aetherium.Topology.GridCoord.From(targetLoc));
             if (distance > 1 || targetLoc.Z != ctx.ViewLocation.Z)
                 return InteractionResult.Fail("Too far away");
 

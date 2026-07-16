@@ -1,0 +1,26 @@
+# Emberfall — sample game definition bundle (add-game-definition-loader).
+# A fantasy dungeon RPG: mana-fueled spellcraft, uneasy townsfolk, a wolf-revering cult.
+# This bundle uses the split-file style: the world shape and death policy live here in the
+# manifest; abilities/progression/factions live in conventional sibling files.
+# Keys are the camelCase of the engine's per-world config types.
+id: emberfall
+name: Emberfall
+version: 1.0.0
+description: A fantasy dungeon RPG of mana-fueled spellcraft and uneasy townsfolk.
+tags: [fantasy, rpg, sample]
+
+world:
+  generatorType: maze
+  size: { width: 60, height: 60, depth: 2 }
+  maxPlayers: 40
+
+death:
+  permadeath: false
+  downStateEnabled: true
+  reviveWindowTicks: 5
+  respawnInvulnerabilityTicks: 3
+  corpseRetentionTicks: 600
+  dropOnDeath: Partial
+  respawnLocation:
+    mode: WorldSpawn
+  xpLossPolicy: None

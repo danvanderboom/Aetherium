@@ -80,12 +80,17 @@ namespace Aetherium.Server.MultiWorld
                 CreatedAt = config.CreatedAt,
                 NarrativeId = config.NarrativeId,
                 MapIds = new List<string>(),
-                ClusterId = config.ClusterId
+                ClusterId = config.ClusterId,
+                GameDefinitionId = config.GameDefinitionId,
+                GameDefinitionVersion = config.GameDefinitionVersion
             };
             _worldState.State.DeathPolicy = config.DeathPolicy;
             _worldState.State.AbilityConfig = config.AbilityConfig;
             _worldState.State.ProgressionConfig = config.ProgressionConfig;
             _worldState.State.FactionConfig = config.FactionConfig;
+            _worldState.State.ContentConfig = config.ContentConfig;
+            _worldState.State.EcaConfig = config.EcaConfig;
+            _worldState.State.Topology = config.Topology;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -167,7 +172,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig, _worldState.State.ContentConfig, _worldState.State.EcaConfig, _worldState.State.Topology);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -360,6 +365,18 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world faction content (engine gap-analysis §4.6), set once at InitializeAsync
         /// and applied to every map this world creates. Null means no factions.</summary>
         public Aetherium.Model.Factions.FactionConfig? FactionConfig { get; set; }
+
+        /// <summary>Per-world content vocabulary (add-content-definitions), set once at
+        /// InitializeAsync and applied to every map this world creates. Null means legacy content.</summary>
+        public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
+
+        /// <summary>Per-world reactive logic (add-eca-scripting), set once at InitializeAsync and applied
+        /// to every map this world creates. Null means no rules.</summary>
+        public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
+
+        /// <summary>The world's tiling (docs/grid-topologies.md), set once at InitializeAsync and
+        /// applied to every map this world creates. Null/empty means square.</summary>
+        public string? Topology { get; set; }
     }
 }
 

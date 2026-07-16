@@ -70,6 +70,19 @@ namespace Aetherium.Model.Worlds
     }
 
     /// <summary>
+    /// World dimensions as Model-layer data (the server's <c>WorldSize</c> is a server type, so
+    /// contracts that live here — <see cref="WorldTemplate"/>, game definitions — carry this
+    /// instead; the server maps it onto <c>WorldSize</c> at creation time).
+    /// </summary>
+    [GenerateSerializer]
+    public class WorldDimensions
+    {
+        [Id(0)] public int Width { get; set; }
+        [Id(1)] public int Height { get; set; }
+        [Id(2)] public int Depth { get; set; } = 1;
+    }
+
+    /// <summary>
     /// Template for creating a world.
     /// </summary>
     [GenerateSerializer]
@@ -101,6 +114,30 @@ namespace Aetherium.Model.Worlds
         /// and rank rules, inter-faction relations, standing bands. Null means no factions — the
         /// engine ships none. See wire-factions-live and docs/factions-reputation.md.</summary>
         [Id(10)] public FactionConfig? FactionConfig { get; set; }
+
+        /// <summary>Requested world dimensions. Null falls back to the server default. (Added with
+        /// add-game-definition-loader; previously the IWorldHost creation path silently dropped the
+        /// requested size because this contract had no field to carry it.)</summary>
+        [Id(11)] public WorldDimensions? Size { get; set; }
+
+        /// <summary>Id of the game definition this world was created from, if any
+        /// (add-game-definition-loader). Null for worlds created outside the definition path.</summary>
+        [Id(12)] public string? GameDefinitionId { get; set; }
+
+        /// <summary>Version of the game definition this world was created from, if any.</summary>
+        [Id(13)] public string? GameDefinitionVersion { get; set; }
+
+        /// <summary>Per-world content vocabulary (add-content-definitions): creatures, items, and
+        /// spawn mix. Null preserves the legacy hardcoded population exactly.</summary>
+        [Id(14)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
+
+        /// <summary>Per-world reactive logic (add-eca-scripting): event–condition–action rules. Null
+        /// means no rules fire.</summary>
+        [Id(15)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
+
+        /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
+        /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
+        [Id(16)] public string? Topology { get; set; }
     }
 
     /// <summary>

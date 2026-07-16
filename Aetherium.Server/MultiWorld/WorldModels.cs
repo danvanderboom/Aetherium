@@ -44,6 +44,24 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world faction content (engine gap-analysis §4.6). Null means no factions.
         /// See wire-factions-live.</summary>
         [Id(16)] public FactionConfig? FactionConfig { get; set; }
+
+        /// <summary>Id of the game definition this world was created from, if any
+        /// (add-game-definition-loader). Null for worlds created outside the definition path.</summary>
+        [Id(17)] public string? GameDefinitionId { get; set; }
+
+        /// <summary>Version of the game definition this world was created from, if any.</summary>
+        [Id(18)] public string? GameDefinitionVersion { get; set; }
+
+        /// <summary>Per-world content vocabulary (add-content-definitions): creatures, items, spawn
+        /// mix. Null preserves the legacy hardcoded population exactly.</summary>
+        [Id(19)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
+
+        /// <summary>Per-world reactive logic (add-eca-scripting): event–condition–action rules.</summary>
+        [Id(20)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
+
+        /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
+        /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
+        [Id(21)] public string? Topology { get; set; }
     }
 
     /// <summary>
@@ -88,6 +106,13 @@ namespace Aetherium.Server.MultiWorld
         [Id(9)] public List<string> MapIds { get; set; } = new List<string>(); // IDs of GameMapGrains
         [Id(10)] public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
         [Id(11)] public string? ClusterId { get; set; } // Cluster ID for multi-world ecosystems
+
+        /// <summary>Id of the game definition this world was created from, if any
+        /// (add-game-definition-loader) — lets instance listings group worlds by game.</summary>
+        [Id(12)] public string? GameDefinitionId { get; set; }
+
+        /// <summary>Version of the game definition this world was created from, if any.</summary>
+        [Id(13)] public string? GameDefinitionVersion { get; set; }
     }
 
     /// <summary>
@@ -121,6 +146,24 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world faction content (engine gap-analysis §4.6). Null means no factions.
         /// See wire-factions-live.</summary>
         [Id(11)] public FactionConfig? FactionConfig { get; set; }
+
+        /// <summary>Id of the game definition this world was created from, if any
+        /// (add-game-definition-loader). Set by the definition→instance path; null elsewhere.</summary>
+        [Id(12)] public string? GameDefinitionId { get; set; }
+
+        /// <summary>Version of the game definition this world was created from, if any.</summary>
+        [Id(13)] public string? GameDefinitionVersion { get; set; }
+
+        /// <summary>Per-world content vocabulary (add-content-definitions): creatures, items, spawn
+        /// mix. Null preserves the legacy hardcoded population exactly.</summary>
+        [Id(14)] public Aetherium.Model.Content.ContentConfig? ContentConfig { get; set; }
+
+        /// <summary>Per-world reactive logic (add-eca-scripting): event–condition–action rules.</summary>
+        [Id(15)] public Aetherium.Model.Eca.EcaConfig? EcaConfig { get; set; }
+
+        /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
+        /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
+        [Id(16)] public string? Topology { get; set; }
     }
 
     /// <summary>

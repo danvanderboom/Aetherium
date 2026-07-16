@@ -55,37 +55,49 @@ These claims were verified by direct code search, not assumed from spec titles.
 
 **What's genuinely still missing**, per direct code search: no damage-type packets (`kinetic`/`thermal`/etc.) or per-tag mitigation — damage is a single flat integer; no pluggable hit resolution (attack always lands if in range, no RNG/crit/miss); no status effects (`Burning`/`Slowed`/`Prone`); no `Dying`/`Corpse` entity-state transition — a defeated target is deleted or left at 0 HP, not given an interaction affordance; no threat/aggro ledger beyond simple on-tick retaliation; no ranged/projectile combat. §4.2 below still describes real, unshipped work — it should be read as "deepen the existing MVP," not "build from zero."
 
-### 3.2 Factions & reputation — MISSING
+**Second correction (2026-07-09):** the §4.2 depth this section calls "unshipped" has since landed. `Aetherium.Server/Combat/` now has `DamagePacket`/`Resistances` (flat+percent+minimum mitigation), pluggable `IHitResolver` (`AlwaysHitResolver` and `RollHitResolver`), `StatusEffect`/`StatusEffectSystem` (`Burning`/`Slowed`/`Prone`), a `Dying`→`Corpse` `DeathSystem` (no more silent deletion), and a `ThreatTable`, all composed by `DamagePipeline`. It's live-wired, not just unit-tested in isolation: `GameMapGrain.AttackAsync` (player melee) and `UseAbilityAsync` (ability casts) both resolve through `DamagePipeline`, a lethal hit now enters `Dying` before `Corpse` per `DeathPolicy`, and `ThreatTable` is populated on every hit. Two gaps remain from the original list: (1) the live path still pins `AlwaysHitResolver` — `RollHitResolver`'s RNG/crit/miss exists but isn't switched on for melee yet — and single-component `"physical"` damage tags, not the full multi-tag packet the primitive supports; (2) monster retaliation (`Aetherium.Server/Ai/MonsterBehaviors.cs`) still calls the old `CombatSystem.TryAttack`, not `DamagePipeline` — only the player-attacking-monster and ability-cast directions were rerouted. No ranged/projectile combat still.
 
-**Evidence.** Search for `Faction|Guild|Alliance|Standing|Reputation|Allegiance` found only `RelationshipType.Alliance` inside `Narrative/Social/RelationshipMatrix.cs` — a **per-NPC-pair relationship graph** (guard likes merchant, merchant fears bandit). This is not a faction system: there is no notion of a group as a first-class entity, no shared standing between a player and a group, no rank/rite membership, no faction-gated content.
+### 3.2 Factions & reputation — IMPLEMENTED (2026-07-09)
 
-### 3.3 Character progression — MISSING
+**Original evidence.** Search for `Faction|Guild|Alliance|Standing|Reputation|Allegiance` found only `RelationshipType.Alliance` inside `Narrative/Social/RelationshipMatrix.cs` — a **per-NPC-pair relationship graph** (guard likes merchant, merchant fears bandit), not a faction system.
 
-**Evidence.** No XP, no levels, no skills, no talents, no classes, no attribute stats beyond `Health`. There is `Aetherium.Server/MetaProgression` for cross-world discoveries and unlocks — a **meta layer**, not a within-character progression.
+**Correction.** §4.6 shipped. `Aetherium.Model.Factions` defines `FactionConfig` (per-world data: `FactionDefinition` with doctrine deltas/rank rules/starting standing, directed `FactionRelationDefinition`, `StandingBand`). `Aetherium.Server.Factions` compiles it (`FactionCompiler` → registry + relations), evaluates rank grants (`RankEvaluator`, monotonic threshold), resolves standing bands (`BandResolver`), and holds the per-actor `ReputationLedger`. It's live, not just data: `ApplyFactionAction(actor, tag)` is the single standing-mutation chokepoint, called from both melee and ability kill paths with `kill:<creature-type>`, so every faction judges the same act by its own doctrine (including oppositely — a pacifist faction and a warlike one react to the same kill in opposite directions). `RelationshipMatrix` remains the *NPC-personal* layer, now sitting atop this new faction layer as originally designed in §4.6. See [docs/factions-reputation.md](../../factions-reputation.md) for the full T0–T5 maturity ladder and design survey; T0 (this implementation) is live, T1+ (LLM faction leaders, ECA graduation) is not.
 
-### 3.4 Abilities / spells — MISSING
+### 3.3 Character progression — IMPLEMENTED (2026-07-09)
 
-**Evidence.** Search for `Ability|Spell|Cooldown|Mana|Stamina|Talent|Experience` matched only irrelevant occurrences (management API, class declarations, generator parameters). There is no ability registry, no cooldown tracker, no resource pool component, no cast/channel/instant taxonomy.
+**Original evidence.** No XP, no levels, no skills, no talents, no classes, no attribute stats beyond `Health`. `Aetherium.Server/MetaProgression` was cross-world/meta only, not within-character.
 
-### 3.5 Behavior-driven NPC AI — MISSING
+**Correction.** §4.4 shipped. `Aetherium.Model.Progression` defines per-world `ProgressionConfig` (`ProgressPoolDefinition` + `LevelCurveDefinition`, `SkillDefinitionData`, starting attributes/role affinity, XP award rules, attribute derivations). `ProgressionCompiler` compiles it into a `SkillCatalog` + per-pool level curves + fresh per-character components (`ProgressPools`, `Attributes`, `UnlockedSkills`, `RoleAffinity`, `GrantedAbilities`). It's live-wired: `AwardKillXp` fires from the shared monster-defeat branch for both melee and ability kills, `UnlockSkillAsync` gates on prerequisites and pool level then grants the skill's ability and re-derives attributes. Character progression is explicitly the *within-run* layer, joined to the pre-existing `MetaProgression` cross-world layer as §4.4 specified.
 
-**Evidence.** `Aetherium.Server/Entities/Monster.cs`, `Snake.cs`, `Zombie.cs` are stubs with elementary `Heartbeat`-style movement (the crash trace in `Goals.txt:69` refers to `Monster.GetValidDirections`). The rich agent tool system in `Aetherium.Server/Agents/` targets LLM-driven agents for training/benchmarks, not the thousands of routine mobs a live world needs. There is **no behavior tree, no GOAP, no utility-AI evaluator, no shared blackboard, no perception→decision→action loop** for cheap NPCs.
+### 3.4 Abilities / spells — IMPLEMENTED (2026-07-09)
 
-### 3.6 Party gameplay — SCAFFOLDED, NOT WIRED
+**Original evidence.** Search for `Ability|Spell|Cooldown|Mana|Stamina|Talent|Experience` matched only irrelevant occurrences. No ability registry, no cooldown tracker, no resource pool component, no cast/channel/instant taxonomy.
 
-`Aetherium.Server/Groups/PartyGrain.cs` and `RaidGrain.cs` exist as Orleans grains with persistence, but there are no gameplay rules attached: no shared loot, no revive, no aggro sharing, no party-scoped quest state, no party-visible affordances in Perception.
+**Correction.** §4.3 shipped. `Aetherium.Model` defines `AbilityDefinition`/`AbilityEffectDescriptor` (kind + per-kind fields) and `ResourcePoolDefinition`, bundled per-world as `AbilityConfig` — pure serializable data, genre-neutral (a campaign can define `mana`, `battery`, `oxygen`, whatever it wants as pools). `AbilityCompiler` compiles definitions into a runtime `AbilityCatalog` bound to the map's `DamagePipeline`/`IHitResolver`, plus per-caster `AbilityCooldowns` and `ResourcePools`. It's live: `UseAbilityAsync` gates in order on actionable state, catalog membership, cooldown, resource affordability, reach, and `ActionSpeed` budget (§4.1), then applies effects through the same live `DamagePipeline`/`StatusEffects`/pool systems combat uses, and derives world deltas so a damaging cast that kills drops loot and records analytics identically to a melee `AttackAsync`. Cast execution is instant this slice — the definition's charge/cast/recover-phase fields exist but aren't consumed yet (phased casting is deferred, not shipped).
 
-### 3.7 Economy simulation — REFERENCED, NOT BUILT
+### 3.5 Behavior-driven NPC AI — IMPLEMENTED (2026-07-09), minus GOAP
 
-Cluster / multi-world proposals mention markets, trade routes, transport schedules. The implementation has `ContentCatalogGrain` and cluster infrastructure, but no supply/demand model, no price signals, no caravan agents, no scarcity engine driving quests or population movements.
+**Original evidence.** `Aetherium.Server/Entities/Monster.cs`, `Snake.cs`, `Zombie.cs` were stubs with elementary `Heartbeat`-style movement. No behavior tree, no GOAP, no utility-AI evaluator, no shared blackboard, no perception→decision→action loop.
 
-### 3.8 Live world events — SEEDED, NOT ORCHESTRATED
+**Correction.** §4.5's core recommendation shipped, matching the design sketch closely: `BehaviorNode`/`BehaviorStatus` (Success/Failure/Running) + `Blackboard`, leaves (`ConditionNode`/`ActionNode`/`WaitNode`), and composites (`SequenceNode`/`SelectorNode`/`ParallelNode`/`RandomSelectorNode`/`UtilitySelectorNode` — the utility-AI node §4.5 asked for). This replaced the old hardcoded "attack if adjacent, else wander" rule: `GameMapGrain.StepNpcsAsync` now ticks one cached `BehaviorTree` per live monster, targets are blackboard-scoped to joined players only (fixing a latent bug where monsters could attack each other), and NPC action cadence is gated on the shared `ActionSpeed` budget from §4.1 as §4.5 specified ("an AI does not attack; it enqueues an action, competes for its actor's budget"). **Still absent:** GOAP, which §4.5 always scoped as an optional off-by-default overlay for heavier planners (settlement builders, heist bosses) — no evidence this exists yet, and that's consistent with the original design priority.
 
-`EventSeedPass`, `SpawnControllerGrain`, `ProceduralEvents.cs`, and `SeasonManager` exist. What's missing is a **live-ops event orchestrator** that reacts to aggregate player behavior across a cluster: invasions triggered by faction defeats, plagues that spread on movement graphs, festivals timed to real-world dates, world bosses that scale to online population.
+### 3.6 Party gameplay — SCAFFOLDED, NOT WIRED (design vision written 2026-07-09)
 
-### 3.9 Death, permadeath, and respawn semantics — UNSPECIFIED
+`Aetherium.Server/Groups/PartyGrain.cs` and `RaidGrain.cs` exist as Orleans grains with persistence, but there are no gameplay rules attached: no shared loot, no revive, no aggro sharing, no party-scoped quest state, no party-visible affordances in Perception. Implementation status unchanged, but §4.7 now has a full living design doc — [docs/party-shared-play.md](../../party-shared-play.md) — laying out presence-as-gift credit sharing at the existing kill chokepoints, pings as perception events (screen-reader/LLM-companion-friendly by construction), shared senses via semantic perception, and a T0–T5 maturity ladder. Nothing in that doc is wired yet; it sets the target for the implementation this section still calls missing.
 
-No spec of what dying costs, whether corpses persist as retrievable objects, whether characters have lives or delete, whether hardcore modes exist, or how party revive interacts with permadeath.
+### 3.7 Economy simulation — REFERENCED, NOT BUILT (design vision written 2026-07-09)
+
+Cluster / multi-world proposals mention markets, trade routes, transport schedules. The implementation has `ContentCatalogGrain` and cluster infrastructure, but no supply/demand model, no price signals, no caravan agents, no scarcity engine driving quests or population movements. §4.8 now has a living design doc — [docs/economy-simulation.md](../../economy-simulation.md) — but no code has landed against it.
+
+### 3.8 Live world events — SEEDED, NOT ORCHESTRATED (design vision written 2026-07-09)
+
+`EventSeedPass`, `SpawnControllerGrain`, `ProceduralEvents.cs`, and `SeasonManager` exist. What's missing is a **live-ops event orchestrator** that reacts to aggregate player behavior across a cluster: invasions triggered by faction defeats, plagues that spread on movement graphs, festivals timed to real-world dates, world bosses that scale to online population. §4.9 now has a living design doc — [docs/live-events.md](../../live-events.md) — but the orchestrator itself is unimplemented.
+
+### 3.9 Death, permadeath, and respawn semantics — IMPLEMENTED (2026-07-09)
+
+**Original evidence.** No spec of what dying costs, whether corpses persist as retrievable objects, whether characters have lives or delete, whether hardcore modes exist, or how party revive interacts with permadeath.
+
+**Correction.** §4.11's `DeathPolicy` shipped as per-world data (`{permadeath, corpseRetention, dropOnDeath, respawnPoint, xpLoss, downState, reviveWindow}`-shaped config) and is live-wired end to end: `PlayerDeathResolver` is a pure `Permadeath × DownStateEnabled → outcome` mapping (instant respawn / enter Downed / instant permadeath, plus the Downed-expiry respawn-or-permadeath split); `Downed`/`RespawnInvulnerable` components track a player's recovery window distinct from the monster `Dying`/`Corpse` lifecycle (a player is recovered or, under permadeath, becomes a `Corpse` — not converted into a creature-death artifact); `RespawnPlayer`/`ResolveRespawnLocation` implement `RespawnLocationPolicy` (`DeathLocation`/`EntryLocation`/`FixedCoordinates`/`OffsetFromCoordinates`). This closes the asymmetry the design doc flagged implicitly: monsters got a real death lifecycle from §4.2/§3.1's `DeathSystem` first, players were stuck permanently inert at 0 HP until this slice. Party-revive-interacts-with-permadeath (§4.7) is still open since party gameplay itself remains unwired (§3.6).
 
 ### 3.10 Save/migration semantics for generator changes — UNSPECIFIED
 
@@ -95,25 +107,29 @@ PCG is deterministic per `(seed, generator-version)`, which is right. What's mis
 
 ManagementHub uses B2C for admin/CI. There is no unified player identity for gameplay: no profile, cosmetics, friends list, presence indicator, blocklist, mute.
 
-### 3.12 Gameplay telemetry pipeline — MISSING (distinct from dev monitoring)
+### 3.12 Gameplay telemetry pipeline — MISSING (design vision written 2026-07-09; distinct from dev monitoring)
 
-The monitoring WebSocket at `/monitor` is a dev inspector. Production games need a structured, aggregated pipeline: deaths/hour by zone, drop-rate histograms, funnel completion, exploration heatmaps, retention cohorts. The agent-training telemetry is close in shape but is scoped to agent skill, not game balance.
+The monitoring WebSocket at `/monitor` is a dev inspector. Production games need a structured, aggregated pipeline: deaths/hour by zone, drop-rate histograms, funnel completion, exploration heatmaps, retention cohorts. The agent-training telemetry is close in shape but is scoped to agent skill, not game balance. §4.12 now has a living design doc — [docs/gameplay-telemetry.md](../../gameplay-telemetry.md) — proposing `GameplayEvent` records as one-line emissions at existing chokepoints with pluggable, drop-tolerant (local-first, no mandated cloud) sinks. No pipeline code has landed.
 
-### 3.13 Accessibility surface — MISSING
+### 3.13 Accessibility surface — PARTIALLY IMPLEMENTED (2026-07-09)
 
-Ironically, the Perception DTO is *already* the ideal accessibility abstraction — it describes the world semantically — but there is no screen-reader-friendly client that reads it, no colorblind palette contract for renderers, no sonification of perception events, no rebindable-input contract.
+**Original evidence.** The Perception DTO is *already* the ideal accessibility abstraction, but there is no screen-reader-friendly client that reads it, no colorblind palette contract for renderers, no sonification of perception events, no rebindable-input contract.
 
-### 3.14 Localization — MISSING
+**Correction.** §4.13's input contract shipped and is live. `ActionIntent`/`SemanticDistinction` live in `Aetherium.Model.Accessibility` (moved there from the server project specifically so the console client can reference them without a server dependency — a real layering fix). `ConsoleActionIntentBinding` resolves the 5 currently-seeded intents (move/pickup/drop/interact_open/interact_close); every keypress is validated against the catalog. This live-wiring pass also found and fixed a real colorblind violation: item key-colors (red/blue/green/yellow) were color-only, and now each color also gets a distinct first-letter glyph. **Still missing**, matching the original list: no dedicated screen-reader companion client (the contract now exists for one to consume, per §4.13's design sketch, but it isn't built), no sonification/`AudioCueTag` consumer, and the colorblind fix so far covers one console-client code path, not a systematic lint pass across all renderer bindings.
 
-Lore fragments, procedural quest text, NPC dialogue, and item names are all English strings. No i18n resource system, no translator-facing catalog, no glyph/font agnosticism for CJK/RTL scripts (which matters even more for the Unity/Unreal clients).
+### 3.14 Localization — MISSING (design vision written 2026-07-09)
+
+Lore fragments, procedural quest text, NPC dialogue, and item names are all English strings. No i18n resource system, no translator-facing catalog, no glyph/font agnosticism for CJK/RTL scripts (which matters even more for the Unity/Unreal clients). §4.14 now has a living design doc — [docs/localization.md](../../localization.md) — which cataloged every English leak in the DTOs and interpolated narrative generators as its T0 seed list. No i18n code has landed.
 
 ### 3.15 Modding / content SDK — IMPLIED, NOT SHIPPED
 
 Prefabs, JSON audio profiles, and OpenSpec together suggest a modding culture. What's missing is a public, versioned content schema; a sandboxed scripting hook (Roslyn scripting, Lua, or WASM); and a delivery pipeline. Given Aetherium's LLM-agent bones, **LLM-authored content packs** would be a genuinely differentiating first product for this SDK.
 
-### 3.16 Render-agnostic contract — PARTIALLY THERE, NOT ENFORCED
+### 3.16 Render-agnostic contract — PARTIALLY THERE, NOT ENFORCED (schema landed 2026-07-09, wiring still open)
 
-`TileTypeDto` and `VisualDto` are already semantic-ish (`TileTypeDto` is `{Name, Settings<string,string>}`), but the `Settings` dictionary is untyped, and the console client's rendering assumptions have leaked into naming and structure over time. There is no **content atlas** that clients register against, no versioned tile/entity vocabulary, no orientation/animation-cue schema, no light-color/intensity model that a sprite renderer can use.
+`TileTypeDto` and `VisualDto` are already semantic-ish (`TileTypeDto` is `{Name, Settings<string,string>}`), but the `Settings` dictionary is untyped, and the console client's rendering assumptions have leaked into naming and structure over time.
+
+**Update.** §4.10's `ContentAtlas` schema now exists in `Aetherium.Model`: `TerrainTag`/`EntityKindTag`/`MaterialTag`/`LightSourceTag`/`AnimationCueTag`/`EffectTag`/`AudioTag`, string-id-keyed with semver client-compatibility checking, plus a real `DefaultContentAtlas` v1.0.0 seed covering `TorusWorldBuilder`'s terrain types, with a coverage test pinning the seed to the live terrain vocabulary. This is schema-and-seed only (explicitly Phase 1) — `TileTypeDto`/`VisualDto` and both renderers (console, Unity) are untouched, so perception frames still don't reference atlas ids, and there is no "null renderer" enforcement test yet. Treat this as "the vocabulary now exists," not "the leak is closed."
 
 ---
 
@@ -369,30 +385,32 @@ Each subsystem below is written to become its own OpenSpec proposal. Every one i
 
 The recommendations above collapse into four waves. Each wave is roughly one OpenSpec proposal plus prerequisites.
 
-### Wave 0 — Foundations (P0)
+**Status update (2026-07-09):** Waves 0 and 1 have shipped in full — see the corrected §3.x entries above for what actually landed and what's still genuinely open within each item (e.g. combat's live path still pins `AlwaysHitResolver` and monster retaliation isn't rerouted; NPC AI has no GOAP overlay; the content atlas is schema-only, not wired into perception frames or renderers). Wave 2 has moved from "unstarted" to "fully designed" — all five items now have living design docs (`docs/party-shared-play.md`, `docs/economy-simulation.md`, `docs/live-events.md`, `docs/gameplay-telemetry.md`, `docs/localization.md`) in the same template as `docs/factions-reputation.md`, but none has implementation yet.
+
+### Wave 0 — Foundations (P0) — ✅ SHIPPED 2026-07-08
 
 Ship these first; every later system depends on them.
 
-1. **Content atlas & render contract** (§4.10). Sets the semantic vocabulary before we grow gameplay events that would leak ASCII assumptions.
-2. **Continuous action pipeline** (§4.1). The `ActionSpeed`/`ActionQueue`/`ActionSystem` triad. Cheap to spec, everything else stands on it.
-3. **Combat model** (§4.2). Deepen the existing melee-only MVP into a real damage/mitigation/status system.
-4. **Behavior-driven NPC AI** (§4.5). Combat needs opponents.
+1. **Content atlas & render contract** (§4.10) — ✅ schema + seed landed; wiring into `TileTypeDto`/`VisualDto`/renderers still open (see §3.16).
+2. **Continuous action pipeline** (§4.1) — ✅ `ActionSpeed`/`ActionQueue`/`ActionSystem` triad landed and live (NPC AI and abilities both consume it).
+3. **Combat model** (§4.2) — ✅ deepened and live-wired for player-vs-monster and ability casts (see §3.1's second correction for the two remaining gaps).
+4. **Behavior-driven NPC AI** (§4.5) — ✅ behavior-tree engine landed and live-wired into the monster tick (see §3.5).
 
-### Wave 1 — Character depth (P1)
+### Wave 1 — Character depth (P1) — ✅ SHIPPED 2026-07-08/09
 
-5. **Abilities & resource pools** (§4.3). The genre-agnostic replacement for "spells."
-6. **Character progression** (§4.4). Joins to existing meta-progression.
-7. **Factions & reputation** (§4.6). Turns the relationship matrix into a full social sim.
-8. **Death / respawn policy** (§4.11). Formalizes what dying means.
-9. **Accessibility contract** (§4.13). Screen-reader client is a genuine differentiator; enabled by §4.10.
+5. **Abilities & resource pools** (§4.3) — ✅ live cast path (see §3.4).
+6. **Character progression** (§4.4) — ✅ live XP→level→skill loop, joined to existing meta-progression (see §3.3).
+7. **Factions & reputation** (§4.6) — ✅ live kill→standing→rank loop (see §3.2).
+8. **Death / respawn policy** (§4.11) — ✅ live for both monsters and players (see §3.9).
+9. **Accessibility contract** (§4.13) — ◑ input-intent contract live for the console client; screen-reader companion client itself not built (see §3.13).
 
-### Wave 2 — Living cluster (P2)
+### Wave 2 — Living cluster (P2) — design docs written 2026-07-09, implementation not started
 
-10. **Party & shared play** (§4.7). Cashes in the multiplayer investment.
-11. **Economy simulation** (§4.8). Makes the cluster feel like a world.
-12. **Live event orchestrator** (§4.9). Turns players into narrative pressure.
-13. **Gameplay telemetry pipeline** (§4.12). Balance and live-ops.
-14. **Localization** (§4.14). Enables international launch.
+10. **Party & shared play** (§4.7). Cashes in the multiplayer investment. Design: [docs/party-shared-play.md](../../party-shared-play.md).
+11. **Economy simulation** (§4.8). Makes the cluster feel like a world. Design: [docs/economy-simulation.md](../../economy-simulation.md).
+12. **Live event orchestrator** (§4.9). Turns players into narrative pressure. Design: [docs/live-events.md](../../live-events.md).
+13. **Gameplay telemetry pipeline** (§4.12). Balance and live-ops. Design: [docs/gameplay-telemetry.md](../../gameplay-telemetry.md).
+14. **Localization** (§4.14). Enables international launch. Design: [docs/localization.md](../../localization.md).
 
 ### Wave 3 — Platform maturity
 

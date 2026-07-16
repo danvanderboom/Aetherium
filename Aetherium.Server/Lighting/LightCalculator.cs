@@ -45,11 +45,13 @@ namespace Aetherium.Lighting
                     if (target == sourceLocation)
                         continue;
 
-                    // Check range
-                    var dx = bx - sourceLocation.X;
-                    var dy = by - sourceLocation.Y;
+                    // Euclidean falloff in the topology's local embedding (Delta) —
+                    // on square, exactly the raw coordinate difference used before.
+                    var (dx, dy) = world.Topology.Delta(
+                        Aetherium.Topology.GridCoord.From(sourceLocation),
+                        Aetherium.Topology.GridCoord.From(target));
                     var distance = Math.Sqrt(dx * dx + dy * dy);
-                    
+
                     if (distance > maxRange)
                         continue;
 
@@ -83,12 +85,21 @@ namespace Aetherium.Lighting
             if (distanceAttenuation <= 0.0)
                 return 0.0;
 
-            // Calculate opacity blocking along the ray
+            // Calculate opacity blocking along the ray. The topology's line (square:
+            // Bresenham) includes the source cell, which the old EnumerateLine excluded
+            // — but the source cell carries no opacity toward its own light, so skipping
+            // it keeps the accumulation identical to before.
             double cumulativeOpacity = 0.0;
             bool reachedTarget = false;
+            var sourceCell = Aetherium.Topology.GridCoord.From(source);
 
-            foreach (var step in EnumerateLine(source, target))
+            foreach (var cell in world.Topology.Line(sourceCell, Aetherium.Topology.GridCoord.From(target)))
             {
+                if (cell == sourceCell)
+                    continue;
+
+                var step = cell.ToWorldLocation();
+
                 // Accumulate opacity from terrain and entities
                 cumulativeOpacity += GetCellOpacity(world, step);
 
@@ -157,48 +168,6 @@ namespace Aetherium.Lighting
 
             // Cap to [0,1]
             return Math.Max(0.0, Math.Min(1.0, opacity));
-        }
-
-        /// <summary>
-        /// Enumerates cells along a line from start to end (Bresenham's algorithm).
-        /// Includes the end cell, excludes the start cell.
-        /// </summary>
-        private static IEnumerable<WorldLocation> EnumerateLine(WorldLocation start, WorldLocation end)
-        {
-            int x0 = start.X;
-            int y0 = start.Y;
-            int x1 = end.X;
-            int y1 = end.Y;
-
-            int dx = Math.Abs(x1 - x0);
-            int dy = -Math.Abs(y1 - y0);
-            int sx = x0 < x1 ? 1 : -1;
-            int sy = y0 < y1 ? 1 : -1;
-            int err = dx + dy;
-
-            int x = x0;
-            int y = y0;
-
-            while (true)
-            {
-                if (!(x == x0 && y == y0))
-                    yield return new WorldLocation(x, y, start.Z);
-
-                if (x == x1 && y == y1)
-                    break;
-
-                int e2 = 2 * err;
-                if (e2 >= dy)
-                {
-                    err += dy;
-                    x += sx;
-                }
-                if (e2 <= dx)
-                {
-                    err += dx;
-                    y += sy;
-                }
-            }
         }
 
         private static double Clamp01(double value) => value < 0 ? 0 : (value > 1 ? 1 : value);

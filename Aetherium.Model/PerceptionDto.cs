@@ -25,6 +25,22 @@ namespace Aetherium.Model
         /// </summary>
         public int FieldOfViewDegrees { get; set; } = 120;
         
+        /// <summary>
+        /// The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri" |
+        /// (later) "h3". The client picks its cell-layout math from this. Relative coordinate
+        /// keys, <see cref="VisibleBounds"/>, and <see cref="RelativeDirection"/> are unchanged
+        /// on every topology; only the client-side axial→screen transform differs.
+        /// </summary>
+        public string Topology { get; set; } = "square";
+
+        /// <summary>
+        /// On a triangular world, whether the perceiver's own cell points up (0) or down (1) —
+        /// its <c>(X+Y)&amp;1</c> parity. Relative deltas alone can't tell the client which way its
+        /// triangle faces, and absolute coordinates are deliberately hidden, so this one bit is
+        /// surfaced explicitly. Null on non-triangular worlds (square/hex cells have no parity).
+        /// </summary>
+        public int? SelfCellParity { get; set; }
+
         public Dictionary<string, VisualDto> Visuals { get; set; } = new Dictionary<string, VisualDto>();
         public RectangleDto VisibleBounds { get; set; } = new RectangleDto();
         public Guid UpdateTimestamp { get; set; } = Guid.NewGuid();

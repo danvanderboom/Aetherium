@@ -1,0 +1,39 @@
+# Emberfall abilities section (binds to AbilityConfig).
+characterResourcePools:
+  - tag: mana
+    max: 100
+    regenPerTick: 2
+    regenPolicy: Continuous
+  - tag: stamina
+    max: 50
+    regenPerTick: 5
+    regenPolicy: OutOfCombat
+
+abilities:
+  - id: fireball
+    resourcePoolTag: mana
+    resourceCost: 25
+    cooldown: 3
+    range: 6
+    targetShape: single
+    effects:
+      - kind: DealDamage
+        damageType: fire
+        amount: 40
+      - kind: ApplyStatus
+        statusId: burning
+        durationTicks: 3
+        magnitude: 5
+    tags: [spell, fire]
+
+  - id: heavy_strike
+    resourcePoolTag: stamina
+    resourceCost: 15
+    cooldown: 2
+    range: 1
+    targetShape: single
+    effects:
+      - kind: DealDamage
+        damageType: physical
+        amount: 30
+    tags: [martial]

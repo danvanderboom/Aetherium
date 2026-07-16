@@ -11,6 +11,15 @@ namespace Aetherium.Core
 {
     public class World
     {
+        /// <summary>
+        /// This world's tiling (docs/grid-topologies.md) — how cells connect, measure,
+        /// and face. Resolved once from the per-world <c>topology</c> config at map-grain
+        /// init; defaults to square, byte-identically to the pre-seam engine. All
+        /// adjacency/distance/line/facing math must route through this, never inline
+        /// ±1 offsets or Manhattan sums.
+        /// </summary>
+        public Aetherium.Topology.IGridTopology Topology { get; set; } = Aetherium.Topology.SquareTopology.Instance;
+
         public Dictionary<string, TileType> TileTypes { get; protected set; }
         public Dictionary<string, TerrainType> TerrainTypes { get; protected set; }
 
@@ -280,18 +289,17 @@ namespace Aetherium.Core
             if (location == null)
                 throw new InvalidOperationException("Character is missing WorldLocation");
 
-            // Canonical engine convention: North = -Y, South = +Y, East = +X, West = -X.
-            // This matches GameSession.MoveView and the rest of the perception stack.
+            // Horizontal moves resolve through the topology (WorldDirection is
+            // square-legacy cosmetics; its cardinal headings match the engine
+            // convention North = -Y, South = +Y — the same as GameSession.MoveView
+            // and the rest of the perception stack). Vertical stays engine-level.
             switch (direction)
             {
                 case WorldDirection.North:
-                    return TryMove(character, location.FromDelta(0, -1, 0));
                 case WorldDirection.South:
-                    return TryMove(character, location.FromDelta(0, +1, 0));
                 case WorldDirection.West:
-                    return TryMove(character, location.FromDelta(-1, 0, 0));
                 case WorldDirection.East:
-                    return TryMove(character, location.FromDelta(+1, 0, 0));
+                    return TryMove(character, StepToward(location, CardinalDegrees(direction)));
                 case WorldDirection.Up:
                     return TryMove(character, location.FromDelta(0, 0, +1));
                 case WorldDirection.Down:
@@ -299,6 +307,25 @@ namespace Aetherium.Core
                 default:
                     return false;
             }
+        }
+
+        /// <summary>The heading, in degrees, of a horizontal <see cref="WorldDirection"/>.
+        /// Degrees are the engine-wide facing source of truth; the enum is square-legacy.</summary>
+        private static int CardinalDegrees(WorldDirection direction) => direction switch
+        {
+            WorldDirection.North => 0,
+            WorldDirection.East => 90,
+            WorldDirection.South => 180,
+            WorldDirection.West => 270,
+            _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, "Not a horizontal direction"),
+        };
+
+        /// <summary>The neighbor across the outgoing edge nearest <paramref name="headingDegrees"/>.</summary>
+        private WorldLocation StepToward(WorldLocation location, int headingDegrees)
+        {
+            var cell = Aetherium.Topology.GridCoord.From(location);
+            var index = Topology.HeadingToDirectionIndex(cell, headingDegrees);
+            return index is null ? location : Topology.GetStep(cell, index.Value).Target.ToWorldLocation();
         }
 
         public bool TryMove(Character character, WorldLocation location)
@@ -437,16 +464,33 @@ namespace Aetherium.Core
             if (distance < 1)
                 return MoveOutcome.Blocked(location, "Distance must be at least 1");
 
-            var (dx, dy) = direction switch
-            {
-                WorldDirection.North => (0, -1),
-                WorldDirection.South => (0, +1),
-                WorldDirection.East => (+1, 0),
-                WorldDirection.West => (-1, 0),
-                _ => (0, 0),
-            };
-            if (dx == 0 && dy == 0)
+            if (direction is not (WorldDirection.North or WorldDirection.South
+                or WorldDirection.East or WorldDirection.West))
                 return MoveOutcome.Blocked(location, "Vertical movement goes through TryChangeLevel");
+
+            // A cardinal move is "face that heading, step forward" — on square this is
+            // the exact (dx, dy) table this method used to inline.
+            return TryMoveSteps(character, CardinalDegrees(direction), Aetherium.Model.RelativeDirection.Forward, distance);
+        }
+
+        /// <summary>
+        /// Moves <paramref name="character"/> up to <paramref name="distance"/> steps by
+        /// resolving <paramref name="move"/> against <paramref name="headingDegrees"/> at
+        /// each cell along the way (<see cref="Aetherium.Topology.IGridTopology.ResolveRelative"/>
+        /// — per-cell because non-uniform topologies change direction sets cell to cell).
+        /// The actor's heading is not updated — rotation is a separate action. Every step
+        /// is validated via <see cref="MovementBlocker"/>; a multi-cell request can succeed
+        /// partially — check <see cref="MoveOutcome.StepsTaken"/> and
+        /// <see cref="MoveOutcome.BlockedReason"/>.
+        /// </summary>
+        public MoveOutcome TryMoveSteps(Character character, int headingDegrees, Aetherium.Model.RelativeDirection move, int distance)
+        {
+            var location = character.Get<WorldLocation>();
+            if (location == null)
+                return MoveOutcome.Blocked(null, "Character has no location");
+
+            if (distance < 1)
+                return MoveOutcome.Blocked(location, "Distance must be at least 1");
 
             var current = location;
             var steps = 0;
@@ -454,7 +498,15 @@ namespace Aetherium.Core
 
             for (int i = 0; i < distance; i++)
             {
-                var next = current.FromDelta(dx, dy, 0);
+                var resolution = Topology.ResolveRelative(
+                    Aetherium.Topology.GridCoord.From(current), headingDegrees, move);
+                if (!resolution.Success)
+                {
+                    blocked = resolution.FailReason ?? "No path in that direction";
+                    break;
+                }
+
+                var next = resolution.Step.Target.ToWorldLocation();
                 blocked = MovementBlocker(character, next);
                 if (blocked != null)
                     break;

@@ -181,6 +181,77 @@ namespace Aetherium.Server.Controllers
         }
 
         /// <summary>
+        /// Lists the game definitions loaded from YAML bundles (add-game-definition-loader).
+        /// </summary>
+        [HttpGet("games")]
+        public async Task<ActionResult<List<Aetherium.Model.Games.GameDefinitionSummaryDto>>> GetGameDefinitions()
+        {
+            try
+            {
+                var mgmt = GetManagementGrain();
+                return Ok(await mgmt.ListGameDefinitionsAsync());
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = $"Failed to list game definitions: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// Lists the running instances of one game definition.
+        /// </summary>
+        [HttpGet("games/{gameId}/instances")]
+        public async Task<ActionResult<List<WorldInfoDto>>> GetGameInstances(string gameId)
+        {
+            try
+            {
+                var mgmt = GetManagementGrain();
+                var worlds = await mgmt.ListGameInstancesAsync(gameId);
+
+                var dtos = worlds.Select(w => new WorldInfoDto
+                {
+                    WorldId = w.WorldId,
+                    Name = w.Name,
+                    Description = w.Description,
+                    State = w.State.ToString(),
+                    PlayerCount = w.PlayerCount,
+                    MaxPlayers = w.MaxPlayers,
+                    CreatedAt = w.CreatedAt,
+                    LastActivityAt = w.LastActivityAt,
+                    NarrativeId = w.NarrativeId,
+                    MapIds = w.MapIds ?? new List<string>(),
+                    ClusterId = w.ClusterId
+                }).ToList();
+
+                return Ok(dtos);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = $"Failed to list game instances: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// Creates a new running instance of a game definition.
+        /// </summary>
+        [HttpPost("games/{gameId}/instances")]
+        public async Task<ActionResult<Aetherium.Model.Games.GameInstanceResult>> CreateGameInstance(string gameId, [FromQuery] string? name = null)
+        {
+            try
+            {
+                var mgmt = GetManagementGrain();
+                var result = await mgmt.CreateGameInstanceAsync(gameId, name);
+                if (!result.Success)
+                    return NotFound(result);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = $"Failed to create game instance: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
         /// Gets all sessions.
         /// </summary>
         [HttpGet("sessions")]

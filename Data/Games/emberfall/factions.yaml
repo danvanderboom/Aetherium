@@ -1,0 +1,25 @@
+# Emberfall factions section (binds to FactionConfig).
+# Two factions judging the same acts by opposite values — the wire-factions-live pattern.
+factions:
+  - id: town
+    name: Rivertown
+    tags: [settlement]
+    doctrineDeltas:
+      "kill:wolf": 10
+      "kill:townsfolk": -50
+    rankRules:
+      - { minStanding: 100, rankId: friend }
+      - { minStanding: 500, rankId: champion }
+  - id: cult
+    name: Cult of the Fang
+    tags: [cult]
+    doctrineDeltas:
+      "kill:wolf": -15
+
+relations:
+  - { fromFactionId: town, toFactionId: cult, disposition: War, mutual: true }
+
+bands:
+  - { id: hostile, minStanding: -1000 }
+  - { id: neutral, minStanding: -100 }
+  - { id: friendly, minStanding: 100 }

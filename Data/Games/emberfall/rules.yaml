@@ -1,0 +1,28 @@
+# Emberfall reactive rules (binds to EcaConfig — add-eca-scripting).
+# The world reacts to creature deaths: the cult's fallen are avenged, a wolf's death bites back.
+# Every referenced creature (wolf, cult_acolyte) is defined in content.yaml.
+rules:
+  # When a cult acolyte falls, a wolf appears to avenge it — the cult reveres wolves.
+  - id: acolyte-summons-wolf
+    when: creature_died
+    if:
+      - kind: creature_type_is
+        creatureType: cult_acolyte
+      - kind: chance
+        probability: 0.5
+    do:
+      - kind: spawn_creature
+        creatureId: wolf
+
+  # A slain wolf's dying snarl slows whoever killed it.
+  - id: wolf-dying-snarl
+    when: creature_died
+    if:
+      - kind: creature_type_is
+        creatureType: wolf
+    do:
+      - kind: apply_status
+        target: Killer
+        statusId: slowed
+        durationTicks: 10
+        magnitude: 0.5

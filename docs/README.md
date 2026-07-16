@@ -32,6 +32,10 @@ The console/terminal client is the reference renderer — ASCII, with dynamic li
 - **[Live event orchestrator](live-events.md)** — design vision: pressure signals, intensity-budget direction, persistent outcomes, the LLM game-master
 - **[Gameplay telemetry](gameplay-telemetry.md)** — design vision: event records at chokepoints, rollups/heatmaps/funnels, synthetic playtesting, the LLM analyst
 - **[Localization](localization.md)** — design vision: TextRef ids, per-locale catalogs and grammars, native procedural prose, LLM locale packs
+- **[ECA scripting](eca-scripting.md)** — shipped T0 runtime: when/if/do rules as data, `creature_died` trigger, reflectable vocabulary registry, `rules.yaml` bundle section
+- **[Grid topologies](grid-topologies.md)** — **built (P0–P3):** pluggable per-world tilings (square/hex/triangle) behind an `IGridTopology` seam with per-cell direction sets, threaded via `world.topology`; shaped for Uber's H3 hierarchical planetary grids
+- **[H3 topology](h3-topology.md)** — **built:** Uber's H3 (planetary/lunar hexagons + 12 pentagons, nested resolutions) as a registered `IGridTopology`/`IHierarchicalGridTopology` on `pocketken.H3` — `WorldLocation` index packing, `Delta`-as-azimuthal-projection, invariant-green incl. pentagons; the sphere-aware perception keys + h3 generator remain the last mile for a playable planetary world
+- **[Hexagonal tiles](hexagonal-tiles.md)** — the hexagon deep-dive behind the grid-topologies design: hex-specific FOV/worldgen analysis and the hex asset landscape
 - **[Multi-world ecosystems](multiworld-ecosystems.md)** — clusters, portals, cross-world economy, meta-progression, hub worlds
 - **[Instances](instances.md)** — dungeon instances, lockouts, party/raid grains
 - **[Procedural audio](PROCEDURAL_AUDIO_IMPLEMENTATION.md)** — biome audio profiles and the audio generation pass
@@ -40,7 +44,8 @@ The console/terminal client is the reference renderer — ASCII, with dynamic li
 - **[Agent training](training/README.md)** — telemetry, curricula, benchmarks, and the training dashboard
 
 ### Clients
-- **[Unity 2D client](unity/README.md)** — tilemap rendering, Xbox controller support · **[Unity testing](unity/testing.md)**
+- **[Unity client library & Aphelion sample — design suite](design/unity-sample/README.md)** — proposed design: reusable `com.aetherium.unity` package, `samples/` layout, and a co-op sci-fi station-crawler sample game
+- **[Unity 2D client](unity/README.md)** — legacy tilemap scaffold (superseded by the design suite above) · **[Unity testing](unity/testing.md)**
 - **[Unreal client guide](clients/unreal-client-guide.md)** — forward-looking migration guide (client not yet built)
 
 ## Audits & status

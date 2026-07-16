@@ -1,0 +1,42 @@
+# Trigrove — the triangle-topology sample bundle (docs/grid-topologies.md P2).
+# Open Perlin terrain read as a triangular lattice: up- and down-pointing cells
+# alternate by (x+y) parity, movement has three ways per cell, and Backward from
+# an up-cell resolves by the documented clockwise tie-break. Terrain comes from
+# PerlinTerrainGenerator, whose continuous noise is lattice-agnostic.
+id: trigrove
+name: Trigrove
+version: 0.1.0
+description: A wind-combed steppe where every path forks three ways.
+tags: [fantasy, triangle, sample]
+
+world:
+  generatorType: perlin-terrain
+  topology: tri
+  size: { width: 48, height: 48, depth: 1 }
+  maxPlayers: 20
+
+content:
+  creatures:
+    - id: shard_hare
+      name: Shard Hare
+      description: A skittish grazer that zigzags the lattice in three-way bounds.
+      glyph: h
+      color: Gray
+      health: 8
+      attackPower: 1
+      speed: 1.5
+      behavior: wander-melee
+    - id: delta_stalker
+      name: Delta Stalker
+      description: A patient predator that corners prey where the triangles pinch.
+      glyph: D
+      color: DarkRed
+      health: 35
+      attackPower: 7
+      speed: 1.0
+      behavior: wander-melee
+  spawns:
+    - creatureId: shard_hare
+      weight: 4
+    - creatureId: delta_stalker
+      weight: 1

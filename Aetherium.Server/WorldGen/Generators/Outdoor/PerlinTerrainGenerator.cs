@@ -10,8 +10,15 @@ namespace Aetherium.WorldGen.Generators.Outdoor
     /// Generates outdoor terrain using Perlin noise for natural-looking landscapes.
     /// Uses threshold-based terrain assignment for different biomes.
     /// </summary>
-    public class PerlinTerrainGenerator : IMapGenerator
+    public class PerlinTerrainGenerator : IMapGenerator, ITopologyAwareGenerator
     {
+        // Continuous noise sampled at integer (x, y) is the free any-lattice terrain: the same
+        // threshold assignment is meaningful whether those coordinates are read as square cells,
+        // hex axial, or triangle lattice positions. Declaring support lets a hex/triangle world
+        // pick this generator without a topology-specific variant (docs/grid-topologies.md P2).
+        public System.Collections.Generic.IReadOnlyCollection<string> SupportedTopologies { get; }
+            = new[] { "square", "hex", "tri" };
+
         private readonly WorldBuilder _baseBuilder;
 
         public PerlinTerrainGenerator()
