@@ -17,6 +17,7 @@ namespace Aphelion
     {
         private AetheriumClientBehaviour _behaviour;
         private bool _busy;
+        private bool _sunlight;
 
         private void Awake()
         {
@@ -33,6 +34,19 @@ namespace Aphelion
             else if (Input.GetKeyDown(KeyCode.A)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.West));
             else if (Input.GetKeyDown(KeyCode.D)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.East));
             else if (Input.GetKeyDown(KeyCode.Space)) AttackNearestAdjacent();
+            else if (Input.GetKeyDown(KeyCode.L)) ToggleLighting();
+        }
+
+        /// <summary>
+        /// Debug: the world is dark by design (suit lamp, range ~6 cells) — sight is gated
+        /// by light, not line of sight. L flips to server-side sunlight to see the layout.
+        /// </summary>
+        private void ToggleLighting()
+        {
+            _sunlight = !_sunlight;
+            Debug.Log($"[Aphelion] Lighting: {(_sunlight ? "Sunlight (debug)" : "Torch (suit lamp)")}");
+            Fire(_behaviour.Client.Tools.SetLightingModeAsync(
+                _sunlight ? LightingMode.Sunlight : LightingMode.Torch));
         }
 
         private void AttackNearestAdjacent()
