@@ -27,12 +27,47 @@ namespace Aphelion
         private float _yaw;
         private bool _yawSeeded;
 
+        // Optimistic heading: a turn's only visible effect is the camera orbit, and perception
+        // frames (which carry the authoritative HeadingDegrees) arrive on the server's tick
+        // cadence — so waiting for one before sweeping makes a turn lag ~1-2s while movement,
+        // which advances the anchor client-side, feels instant. We predict the turn locally the
+        // moment a key is pressed (PredictTurn/PredictHeadingTo) and hold that target until the
+        // authoritative frame catches up, then resume following it. This mirrors the anchor
+        // optimism in ToolClient.AdvanceAnchorForMove.
+        private float _targetHeading;
+        private int _pendingTurns; // optimistic turns the server hasn't confirmed yet
+
         private void Start()
         {
             _behaviour = FindAnyObjectByType<AetheriumClientBehaviour>();
             if (_behaviour == null)
                 Debug.LogWarning("[Aphelion] Camera rig found no AetheriumClientBehaviour in the scene.");
         }
+
+        /// <summary>Optimistically turn 90° now (arrow keys). Roll back with the opposite turn
+        /// if the server rejects the rotate.</summary>
+        public void PredictTurn(bool clockwise)
+        {
+            _targetHeading = NormalizeHeading(_targetHeading + (clockwise ? 90f : -90f));
+            _pendingTurns++;
+        }
+
+        /// <summary>Undo an optimistic <see cref="PredictTurn"/> (rotate was rejected).</summary>
+        public void RollbackTurn(bool clockwise)
+        {
+            _targetHeading = NormalizeHeading(_targetHeading - (clockwise ? 90f : -90f));
+            _pendingTurns = Mathf.Max(0, _pendingTurns - 1);
+        }
+
+        /// <summary>Optimistically face an absolute compass heading now (WASD composes a
+        /// rotate+step; the rotate always lands even if the step is blocked, so no rollback).</summary>
+        public void PredictHeadingTo(float absoluteHeading)
+        {
+            _targetHeading = NormalizeHeading(absoluteHeading);
+            _pendingTurns++;
+        }
+
+        private static float NormalizeHeading(float degrees) => Mathf.Repeat(degrees, 360f);
 
         private void LateUpdate()
         {
@@ -41,13 +76,22 @@ namespace Aphelion
 
             // HeadingDegrees is compass-clockwise (0=N, 90=E); in the scene north is +Z and
             // east is +X, so a positive Unity yaw equal to the heading keeps forward up-screen.
-            float targetYaw = _behaviour.Store.LatestFrame?.HeadingDegrees ?? 0f;
+            float serverHeading = _behaviour.Store.LatestFrame?.HeadingDegrees ?? 0f;
             if (!_yawSeeded)
             {
-                _yaw = targetYaw; // don't sweep from north on the first frame after a join
+                _targetHeading = serverHeading;
+                _yaw = serverHeading; // don't sweep from north on the first frame after a join
                 _yawSeeded = true;
             }
-            _yaw = Mathf.LerpAngle(_yaw, targetYaw, 1f - Mathf.Exp(-turnSharpness * Time.deltaTime));
+            // Reconcile: once the authoritative frame reports the heading we predicted, stop
+            // overriding. While idle (nothing pending) follow the server exactly, so a
+            // server-driven heading change (forced rotation, respawn) still shows.
+            if (_pendingTurns > 0 && Mathf.Abs(Mathf.DeltaAngle(_targetHeading, serverHeading)) < 1f)
+                _pendingTurns = 0;
+            if (_pendingTurns == 0)
+                _targetHeading = serverHeading;
+
+            _yaw = Mathf.LerpAngle(_yaw, _targetHeading, 1f - Mathf.Exp(-turnSharpness * Time.deltaTime));
 
             // Grid +Y is south; scene -Z is south (same mapping as the bundled views).
             var anchor = _behaviour.Store.Anchor;

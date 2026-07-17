@@ -14,6 +14,15 @@ namespace Aetherium.Server
 	public class GameSession
 	{
 		public string SessionId { get; set; } = Guid.NewGuid().ToString();
+
+		/// <summary>
+		/// Secret issued to the owning client at join (rides ReceiveGameState) and required
+		/// to rebind this session to a new connection via GameHub.ResumeSession. SessionId
+		/// alone is not sufficient — it doubles as the visible PlayerId, so without the
+		/// token any client that ever saw a player could hijack their session.
+		/// </summary>
+		public string ResumeToken { get; } = Guid.NewGuid().ToString("N");
+
 		public string ConnectionId { get; set; } = string.Empty;
 		public string? WorldId { get; set; } // Multi-world support - which world is this session in?
 		public string? MapId { get; set; }  // Phase 2c: which map within that world
@@ -435,8 +444,13 @@ namespace Aetherium.Server
 		World.MoveEntity(delta.EntityId, new WorldLocation(delta.NewX, delta.NewY, delta.NewZ));
 
 		// If this delta concerns the player Character, keep ViewLocation in sync.
+		// This is the grain-routed session's own-move path, so it advances the move
+		// sequence exactly like local MoveView does.
 		if (Player is not null && delta.EntityId == Player.EntityId)
+		{
 			ViewLocation = new WorldLocation(delta.NewX, delta.NewY, delta.NewZ);
+			_moveSequence++;
+		}
 	}
 
 	private void ApplyEntityRemoved(Aetherium.Server.MultiWorld.EntityRemovedDelta delta)
@@ -585,6 +599,16 @@ namespace Aetherium.Server
 			return action();
 	}
 
+	// Monotonic count of the player's own successful anchor-changing moves (steps and
+	// level changes), stamped on every perception frame as MoveSequence. Starts at 1 so
+	// a real frame can never carry 0 (0 = legacy/unsequenced). This is what lets a
+	// client order frames against its own movement: a frame computed before a move but
+	// delivered after its response (tick/tool races share one connection) carries the
+	// old count and can be recognized as stale instead of corrupting client-side
+	// position-anchored state. Always mutated under _stateLock, the same lock that
+	// guards ViewLocation and GetPerception — (location, sequence) stay consistent.
+	private long _moveSequence = 1;
+
 	public Aetherium.Model.PerceptionDto GetPerception()
 	{
 		lock (_stateLock)
@@ -610,7 +634,7 @@ namespace Aetherium.Server
 			// agent path has. For local sessions the World is authoritative; for grain-bound
 			// sessions the mirror player's Health stays current via ("Health","Level") deltas
 			// in ApplyDelta (statuses/pools mirror as those deltas are added).
-			return perceptionService.ComputePerception(
+			var perception = perceptionService.ComputePerception(
 				World,
 				ViewLocation,
 				Heading,
@@ -623,6 +647,8 @@ namespace Aetherium.Server
 				DirectionalVisionMode ? (int?)HeadingDegrees : null,
 				fovDegrees,
 				self: Player);
+			perception.MoveSequence = _moveSequence;
+			return perception;
 		}
 	}
 
@@ -678,6 +704,8 @@ namespace Aetherium.Server
 					if (outcome.FinalLocation != null)
 						ViewLocation = new WorldLocation(
 							outcome.FinalLocation.X, outcome.FinalLocation.Y, outcome.FinalLocation.Z);
+					if (outcome.Success)
+						_moveSequence++;
 					return outcome;
 				}
 
@@ -691,6 +719,7 @@ namespace Aetherium.Server
 					Aetherium.WorldDirection.West => ViewLocation.FromDelta(-distance, 0, 0),
 					_ => ViewLocation
 				};
+				_moveSequence++;
 				return new Aetherium.Core.MoveOutcome
 				{
 					Success = true,
@@ -769,11 +798,14 @@ namespace Aetherium.Server
 					if (outcome.FinalLocation != null)
 						ViewLocation = new WorldLocation(
 							outcome.FinalLocation.X, outcome.FinalLocation.Y, outcome.FinalLocation.Z);
+					if (outcome.Success)
+						_moveSequence++;
 					return outcome;
 				}
 
 				// Observer session: free camera, no validation.
 				ViewLocation = ViewLocation.FromDelta(0, 0, deltaZ);
+				_moveSequence++;
 				return new Aetherium.Core.MoveOutcome
 				{
 					Success = true,

@@ -81,6 +81,16 @@ namespace Aetherium.Model
         /// </summary>
         public InteroceptionDto? Interoception { get; set; }
 
+        /// <summary>
+        /// Monotonic count of the perceiving player's own successful anchor-changing moves
+        /// (steps + level changes) at the moment this frame was computed. Starts at 1; a
+        /// value of 0 means an unsequenced legacy producer. Lets clients order frames
+        /// against their own movement: a frame carrying an older count than the client's
+        /// move tally is stale (computed pre-move, delivered post-response) and must not
+        /// be folded into position-anchored state.
+        /// </summary>
+        public long MoveSequence { get; set; }
+
         public PerceptionDto()
         {
         }

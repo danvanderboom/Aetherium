@@ -100,18 +100,24 @@ namespace Aetherium.Lighting
 
                 var step = cell.ToWorldLocation();
 
-                // Accumulate opacity from terrain and entities
-                cumulativeOpacity += GetCellOpacity(world, step);
-
-                // If fully blocked, no light reaches target
-                if (cumulativeOpacity >= 1.0 - 1e-9)
-                    return 0.0;
-
+                // The target's own opacity must NOT block light arriving at it: you see a
+                // lit wall because light hits its face. Opacity only attenuates light
+                // passing THROUGH a cell toward cells beyond it. (Charging the target its
+                // own opacity made every wall permanently unlit, so the vision system's
+                // darkness filter culled walls beyond ~2 cells while floors lit to full
+                // lamp range — the "why can I see floors farther than walls" asymmetry.)
                 if (step == target)
                 {
                     reachedTarget = true;
                     break;
                 }
+
+                // Accumulate opacity from intervening terrain and entities
+                cumulativeOpacity += GetCellOpacity(world, step);
+
+                // If fully blocked, no light reaches target
+                if (cumulativeOpacity >= 1.0 - 1e-9)
+                    return 0.0;
             }
 
             if (!reachedTarget)

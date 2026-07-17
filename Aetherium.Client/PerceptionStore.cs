@@ -68,6 +68,10 @@ namespace Aetherium.Client
         private PerceptionDto? _latest;
         private int _holds;
         private PerceptionDto? _heldFrame;
+        // The server MoveSequence our anchor corresponds to (null until the first sequenced
+        // frame or move establishes a baseline). Frames carrying an older count are stale —
+        // computed before a move we've already folded — and are dropped, never applied.
+        private long? _expectedSequence;
 
         /// <summary>The most recent raw frame (player-relative, exactly as received).</summary>
         public PerceptionDto? LatestFrame { get { lock (_gate) return _latest; } }
@@ -102,7 +106,12 @@ namespace Aetherium.Client
         public void AdvanceAnchor(int dx, int dy, int dz)
         {
             lock (_gate)
+            {
                 _anchor = _anchor.Offset(dx, dy, dz);
+                // Our anchor now corresponds to one more successful move. The server counts
+                // from 1 (pre-first-move), so an unknown baseline starts there.
+                _expectedSequence = (_expectedSequence ?? 1) + 1;
+            }
         }
 
         /// <summary>
@@ -121,6 +130,9 @@ namespace Aetherium.Client
                 // A frame held during an in-flight move was computed before the discontinuity;
                 // applying it after the wipe would pollute the fresh epoch with stale geometry.
                 _heldFrame = null;
+                // Sequencing resyncs from the next frame: the server's count survives a
+                // respawn/portal, and adopting it fresh re-establishes the baseline.
+                _expectedSequence = null;
             }
             Reanchored?.Invoke(reason);
         }
@@ -207,8 +219,28 @@ namespace Aetherium.Client
             {
                 if (_holds > 0)
                 {
-                    _heldFrame = frame;
+                    // Higher MoveSequence wins, not later arrival: a stale tick frame can be
+                    // SENT after the post-move frame (different server flows, one connection).
+                    if (_heldFrame is null || frame.MoveSequence >= _heldFrame.MoveSequence)
+                        _heldFrame = frame;
                     return;
+                }
+
+                if (frame.MoveSequence > 0)
+                {
+                    if (_expectedSequence is null || frame.MoveSequence > _expectedSequence)
+                    {
+                        // First sequenced frame, or our baseline is behind (e.g. resync after
+                        // a discontinuity): adopt the server's count as the new baseline.
+                        _expectedSequence = frame.MoveSequence;
+                    }
+                    else if (frame.MoveSequence < _expectedSequence)
+                    {
+                        // Computed before a move whose effect we already folded — stale.
+                        // Folding it would shift every cell by that move's delta (the
+                        // tick-race variant of the wall-memory eater).
+                        return;
+                    }
                 }
             }
 

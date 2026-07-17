@@ -21,6 +21,12 @@ namespace Aetherium.Unity
         [Range(0f, 1f)]
         [Tooltip("Brightness multiplier for remembered (out-of-view) cells.")]
         [SerializeField] private float memoryDim = 0.35f;
+        [Range(0f, 1f)]
+        [Tooltip("Brightness of the dimmest in-view cell. In-view brightness scales with the " +
+                 "server's light level between this and 1, so the lamp pool renders as a " +
+                 "gradient instead of a hard-edged disc (shadow clipping then reads as " +
+                 "lighting, not a malformed circle).")]
+        [SerializeField] private float inViewFloor = 0.3f;
 
         private readonly Dictionary<GridPoint, CellView> _cells = new Dictionary<GridPoint, CellView>();
         private AetheriumClientBehaviour _client;
@@ -29,8 +35,8 @@ namespace Aetherium.Unity
         {
             public GameObject GameObject;
             public string TerrainName;
-            public bool Dimmed;
-            /// <summary>Original material colors, captured at creation so dim/undim is
+            public float Brightness = -1f; // unset; first sync always applies
+            /// <summary>Original material colors, captured at creation so brightness is
             /// an absolute assignment (multiplying in place could never brighten back).</summary>
             public List<(Material Material, Color BaseColor)> BaseColors;
         }
@@ -78,11 +84,18 @@ namespace Aetherium.Unity
                     _cells[remembered.Position] = cell = Materialize(remembered.Position, terrainName);
                 }
 
-                bool shouldDim = !remembered.InView;
-                if (cell.Dimmed != shouldDim)
+                // In view: brightness follows the server's light level linearly — light
+                // already attenuates linearly server-side, and a flatter curve here made
+                // the gradient too subtle to read (the pool looked binary again, so
+                // occlusion notches read as a broken disc instead of shadows). Out of
+                // view: the flat memory dim.
+                float target = remembered.InView
+                    ? Mathf.Lerp(inViewFloor, 1f, Mathf.Clamp01((float)remembered.LastLightLevel))
+                    : memoryDim;
+                if (Mathf.Abs(cell.Brightness - target) > 0.02f)
                 {
-                    cell.Dimmed = shouldDim;
-                    ApplyDim(cell, shouldDim ? memoryDim : 1f);
+                    cell.Brightness = target;
+                    ApplyDim(cell, target);
                 }
             }
         }

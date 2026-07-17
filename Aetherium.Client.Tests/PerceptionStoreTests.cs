@@ -365,6 +365,75 @@ namespace Aetherium.Client.Tests
             Assert.That(store.Entities.Single().WasDefeated, Is.False, "fresh tracking, no stale kill mark");
         }
 
+        [Test]
+        public void SequencedFrames_StaleAfterMove_IsDropped()
+        {
+            // The tick-race variant of the wall-eater: a frame computed BEFORE our move can
+            // be delivered AFTER the move's response (tick and tool flows share the server
+            // connection). MoveSequence orders frames against our own movement: anything
+            // older than the anchor's count must be dropped, not folded one cell off.
+            var store = new PerceptionStore();
+            var received = 0;
+            store.FrameReceived += _ => received++;
+
+            store.ApplyFrame(Frame(f =>
+            {
+                f.MoveSequence = 1;
+                f.Visuals["0,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
+            }));
+            Assert.That(received, Is.EqualTo(1));
+
+            store.AdvanceAnchor(1, 0, 0); // stepped east: anchor now corresponds to count 2
+
+            // Stale pre-move frame arrives late: floor where (folded at the new anchor) the
+            // wall lives. Must be dropped entirely.
+            store.ApplyFrame(Frame(f =>
+            {
+                f.MoveSequence = 1;
+                f.Visuals["-1,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+            }));
+            Assert.That(received, Is.EqualTo(1), "stale frame must not raise FrameReceived");
+            Assert.That(store.Memory.Single().Terrain!.Name, Is.EqualTo("Wall"), "memory untouched by the stale frame");
+
+            // The genuine post-move frame folds normally.
+            store.ApplyFrame(Frame(f =>
+            {
+                f.MoveSequence = 2;
+                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+            }));
+            Assert.That(received, Is.EqualTo(2));
+            Assert.That(store.Memory.Single(c => c.Position == new GridPoint(1, 0, 0)).Terrain!.Name, Is.EqualTo("Floor"));
+        }
+
+        [Test]
+        public void HeldFrames_PreferHigherSequence_NotLaterArrival()
+        {
+            // During a move's hold, a stale tick frame can be SENT after the post-move frame.
+            // The stash must keep the highest MoveSequence, not the latest arrival.
+            var store = new PerceptionStore();
+
+            var postMove = Frame(f =>
+            {
+                f.MoveSequence = 2;
+                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+            });
+            var staleTick = Frame(f =>
+            {
+                f.MoveSequence = 1;
+                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
+            });
+
+            using (store.HoldFrames())
+            {
+                store.ApplyFrame(postMove);   // push beat the response…
+                store.ApplyFrame(staleTick);  // …then a stale tick lands even later
+                store.AdvanceAnchor(1, 0, 0); // response resolves the move
+            }
+
+            Assert.That(store.LatestFrame, Is.SameAs(postMove),
+                "the post-move frame survives the stash; the stale tick is discarded");
+        }
+
         // ---- parsing helpers ----
 
         [Test]
