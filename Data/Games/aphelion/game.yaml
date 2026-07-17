@@ -12,8 +12,12 @@ description: A co-op salvage crawl through hibernating mega-stations at the cold
 tags: [scifi, station-crawler, coop, sample]
 
 world:
-  generatorType: maze
-  size: { width: 72, height: 72, depth: 3 }   # three decks
+  # M0 diagnostic layout: one wide-open hall so illumination/perception can be tested in
+  # the clear (no nearby geometry to confuse a light-pool reading). Optional generator
+  # param `pillars: <n>` scatters spawn-clear pillars back in for occlusion tests. The real
+  # "station" generator (proposed engine slice) supersedes this; maze was the prior stand-in.
+  generatorType: arena
+  size: { width: 48, height: 48, depth: 3 }   # three decks
   maxPlayers: 8
 
 death:

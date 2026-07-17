@@ -21,6 +21,15 @@ namespace Aetherium.Server
         private readonly PerceptionService? perceptionService;
         private readonly IHubContext<GameHub>? hubContext;
 
+        // Perception-push debounce (see NotifyMapMutationAsync): connectionIds whose mirror
+        // changed since their last push, and a 0/1 flag for whether a flush is scheduled.
+        // Deltas are applied immediately; frames are coalesced to at most one per session per
+        // window, so a map full of wandering NPCs can't turn every tick into hundreds of
+        // raycast perception computes inside the grain's message loop.
+        private readonly ConcurrentDictionary<string, byte> dirtyPerception = new ConcurrentDictionary<string, byte>();
+        private int perceptionFlushScheduled;
+        private const int PerceptionFlushWindowMs = 100;
+
         public GameSessionManager(PerceptionService? perceptionService = null, IHubContext<GameHub>? hubContext = null)
         {
             this.perceptionService = perceptionService;
@@ -94,9 +103,9 @@ namespace Aetherium.Server
             }
         }
 
-        public async Task NotifyMapMutationAsync(string mapId, MapDelta delta)
+        public Task NotifyMapMutationAsync(string mapId, MapDelta delta)
         {
-            if (string.IsNullOrEmpty(mapId) || delta is null) return;
+            if (string.IsNullOrEmpty(mapId) || delta is null) return Task.CompletedTask;
 
             // Snapshot the affected sessions first so we don't hold the dictionary
             // enumerator while doing I/O.
@@ -108,18 +117,17 @@ namespace Aetherium.Server
             {
                 try
                 {
+                    // Apply immediately — the mirror must never lag the authoritative
+                    // stream — but DON'T compute/push perception per delta. A tick's worth
+                    // of NPC movement is dozens-to-hundreds of deltas; computing a full
+                    // raycast perception frame for each one (as this method originally did)
+                    // multiplied tick cost by the delta count, snowballed the grain's
+                    // message loop into multi-second stalls, and firehosed clients with
+                    // hundreds of frames per second until the connection starved and died.
                     session.ApplyDelta(delta);
 
-                    // Each session computes its own perception against its updated
-                    // mirror and ships the result. FOV filtering, lighting, vision-mode
-                    // application all happen here — same code path as a player-initiated
-                    // perception update.
-                    if (hubContext is not null && !string.IsNullOrEmpty(session.ConnectionId))
-                    {
-                        var perception = session.GetPerception();
-                        await hubContext.Clients.Client(session.ConnectionId)
-                            .SendAsync("ReceivePerceptionUpdate", perception);
-                    }
+                    if (!string.IsNullOrEmpty(session.ConnectionId))
+                        dirtyPerception[session.ConnectionId] = 1;
                 }
                 catch (Exception ex)
                 {
@@ -127,6 +135,60 @@ namespace Aetherium.Server
                     Console.WriteLine($"[GameSessionManager] Delta application failed for session {session.SessionId}: {ex.Message}");
                 }
             }
+
+            SchedulePerceptionFlush();
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Debounced perception fan-out: at most one frame per dirty session per
+        /// <see cref="PerceptionFlushWindowMs"/> window, coalescing however many deltas
+        /// landed in between. Each flush computes perception fresh (FOV filtering,
+        /// lighting, vision-mode application — the same code path as a player-initiated
+        /// update), so the client always receives current state; the client's
+        /// MoveSequence staleness handling covers any interleaving with tool-response
+        /// pushes. Reschedules itself if new deltas arrive while a flush is running.
+        /// </summary>
+        private void SchedulePerceptionFlush()
+        {
+            if (hubContext is null || dirtyPerception.IsEmpty)
+                return;
+            if (System.Threading.Interlocked.Exchange(ref perceptionFlushScheduled, 1) == 1)
+                return; // a flush is already pending; it will pick these sessions up
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(PerceptionFlushWindowMs);
+
+                    foreach (var connectionId in dirtyPerception.Keys.ToList())
+                    {
+                        if (!dirtyPerception.TryRemove(connectionId, out _))
+                            continue;
+                        if (!sessions.TryGetValue(connectionId, out var session))
+                            continue;
+
+                        try
+                        {
+                            var perception = session.GetPerception();
+                            await hubContext.Clients.Client(connectionId)
+                                .SendAsync("ReceivePerceptionUpdate", perception);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[GameSessionManager] Perception flush failed for session {session.SessionId}: {ex.Message}");
+                        }
+                    }
+                }
+                finally
+                {
+                    System.Threading.Interlocked.Exchange(ref perceptionFlushScheduled, 0);
+                    // Deltas that arrived after the key snapshot above stay dirty — kick
+                    // another window so they aren't stranded until the next mutation.
+                    SchedulePerceptionFlush();
+                }
+            });
         }
 
         /// <summary>
@@ -177,6 +239,7 @@ namespace Aetherium.Server
 
         public bool RemoveSession(string connectionId)
         {
+            dirtyPerception.TryRemove(connectionId, out _);
             return sessions.TryRemove(connectionId, out _);
         }
 

@@ -17,13 +17,24 @@ namespace Aphelion
     public sealed class AphelionPlayerController : MonoBehaviour
     {
         private AetheriumClientBehaviour _behaviour;
+        private AphelionCameraRig _cameraRig;
         private bool _busy;
         private bool _sunlight;
 
         private void Awake()
         {
             _behaviour = GetComponent<AetheriumClientBehaviour>();
+            _cameraRig = FindAnyObjectByType<AphelionCameraRig>();
         }
+
+        private static float HeadingFor(WorldDirection direction) => direction switch
+        {
+            WorldDirection.North => 0f,
+            WorldDirection.East => 90f,
+            WorldDirection.South => 180f,
+            WorldDirection.West => 270f,
+            _ => 0f,
+        };
 
         private void Update()
         {
@@ -31,13 +42,15 @@ namespace Aphelion
                 return;
 
             // WASD: absolute compass moves (the client composes the rotate+step for you).
-            if (Input.GetKeyDown(KeyCode.W)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.North));
-            else if (Input.GetKeyDown(KeyCode.S)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.South));
-            else if (Input.GetKeyDown(KeyCode.A)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.West));
-            else if (Input.GetKeyDown(KeyCode.D)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.East));
+            // Predict the facing locally so the camera orbits instantly instead of waiting for
+            // the authoritative frame (the WASD rotate always lands, so no rollback).
+            if (Input.GetKeyDown(KeyCode.W)) MoveCompass(WorldDirection.North);
+            else if (Input.GetKeyDown(KeyCode.S)) MoveCompass(WorldDirection.South);
+            else if (Input.GetKeyDown(KeyCode.A)) MoveCompass(WorldDirection.West);
+            else if (Input.GetKeyDown(KeyCode.D)) MoveCompass(WorldDirection.East);
             // Arrows: the engine's native relative verbs — turn 90° and step along your heading.
-            else if (Input.GetKeyDown(KeyCode.LeftArrow)) Fire(_behaviour.Client.Tools.RotateAsync(clockwise: false));
-            else if (Input.GetKeyDown(KeyCode.RightArrow)) Fire(_behaviour.Client.Tools.RotateAsync(clockwise: true));
+            else if (Input.GetKeyDown(KeyCode.LeftArrow)) TurnInPlace(clockwise: false);
+            else if (Input.GetKeyDown(KeyCode.RightArrow)) TurnInPlace(clockwise: true);
             else if (Input.GetKeyDown(KeyCode.UpArrow)) Fire(_behaviour.Client.Tools.MoveForwardAsync());
             else if (Input.GetKeyDown(KeyCode.DownArrow)) Fire(_behaviour.Client.Tools.MoveBackwardAsync());
             else if (Input.GetKeyDown(KeyCode.Space)) AttackNearestAdjacent();
@@ -157,6 +170,48 @@ namespace Aphelion
 
             if (target != null)
                 Fire(_behaviour.Client.Tools.AttackAsync(target.Id));
+        }
+
+        /// <summary>Arrow turn: predict the 90° orbit immediately, roll back if rejected.</summary>
+        private async void TurnInPlace(bool clockwise)
+        {
+            _busy = true;
+            _cameraRig?.PredictTurn(clockwise);
+            try
+            {
+                var result = await _behaviour.Client.Tools.RotateAsync(clockwise);
+                if (!result.Success)
+                    _cameraRig?.RollbackTurn(clockwise);
+            }
+            catch (System.Exception exception)
+            {
+                _cameraRig?.RollbackTurn(clockwise);
+                Debug.LogWarning($"[Aphelion] Rotate failed: {exception.Message}");
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+
+        /// <summary>WASD move: predict the compass facing immediately (the composite move's
+        /// rotate always lands, so no rollback), then issue the real rotate+step.</summary>
+        private async void MoveCompass(WorldDirection direction)
+        {
+            _busy = true;
+            _cameraRig?.PredictHeadingTo(HeadingFor(direction));
+            try
+            {
+                await _behaviour.Client.Tools.MoveAsync(direction);
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogWarning($"[Aphelion] Move failed: {exception.Message}");
+            }
+            finally
+            {
+                _busy = false;
+            }
         }
 
         private async void Fire<T>(Task<T> request)
