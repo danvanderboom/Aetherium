@@ -2,12 +2,16 @@
 
 A co-op sci-fi salvage crawl through hibernating mega-stations at the cold end of a decades-long orbit. This is the Unity presentation half of the game; the meaning half will be the `Data/Games/aphelion/` YAML bundle. Full design: [docs/design/unity-sample/](../../../docs/design/unity-sample/README.md) (game design, art/audio direction, client library, milestones).
 
-## Current state: project skeleton + asset slice
+## Current state: First Light wiring + asset slice
 
-This is a **Unity 6 (6000.4) URP project skeleton** — openable in Unity, but there are no scenes or scripts yet (those arrive with the `com.aetherium.unity` client library per [milestone M0](../../../docs/design/unity-sample/milestones.md)). What's here now:
+A **Unity 6 (6000.5) URP project** referencing the [`com.aetherium.unity`](../../../clients/unity/com.aetherium.unity/) package, with a one-click scene bootstrap. What's here now:
 
 ```
 Assets/
+├─ Editor/                    AphelionSceneBootstrap — menu "Aetherium → Build First Light Scene"
+│                             (stand-in prefabs, ThemeAsset, wired scene; safe to re-run)
+├─ Scripts/                   AphelionPlayerController (WASD + Space attack),
+│                             AphelionCameraRig (follows the perception anchor)
 ├─ ThirdParty/Quaternius/     14 CC0 models — the full creature cast (Reclaimer, Scrap Mite,
 │                             Custodian, Sentinel, Vent Lurker, Overseer), props, two planets
 ├─ ThirdParty/Quaternius/Animated/  4 CC0 rigged characters with full skeletal clip sets —
@@ -25,12 +29,33 @@ Tools~/AudioGen/              Deterministic C# synthesizer for everything in Ass
 
 Licensing: **everything committed is CC0 or generated in-repo** — per-asset provenance in [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
 
-## Opening the project
+## Running First Light
 
-1. Unity Hub → Add project from disk → this folder (Unity 6000.4.x; Hub offers an upgrade if you're newer).
-2. First open: Unity resolves packages (glTFast imports the `.glb` files) and generates `Library/` (gitignored).
-3. There's no scene to press Play in yet — browse the models/audio, or listen to the theme at `Assets/Audio/Music/aphelion-theme.wav`.
+1. **Vendor the client DLLs** (once, and after any `Aetherium.Client` change) — from the repo root:
+   ```powershell
+   .\scripts\pack-unity-client.ps1
+   ```
+2. **Start the server** — from the repo root:
+   ```powershell
+   dotnet run --project Aetherium.Server
+   ```
+   It listens on `http://localhost:50310`.
+3. **Open the project** (Unity Hub → this folder, Unity 6000.5.x) and run the menu item
+   **Aetherium → Build First Light Scene**. It creates `Assets/Scenes/FirstLight.unity`,
+   stand-in primitive prefabs, and a ThemeAsset — all rewireable in the Inspector.
+4. **Press Play.** The client connects, joins the server's default session, and the maze
+   reveals as you explore: **WASD** to move (world directions — the client composes the
+   rotate-then-step the server requires), **Space** to attack an adjacent creature.
+   Remembered-but-out-of-view cells dim; anything without a prefab binding renders as a
+   bright magenta capsule (loud beats invisible).
+5. **To play the `aphelion` bundle** instead of the default world, create an instance and
+   paste its world id into the `AetheriumClientBehaviour` inspector field:
+   ```powershell
+   Invoke-RestMethod -Method Post "http://localhost:50310/api/management/games/aphelion/instances"
+   ```
 
 ## What lands next (M0)
 
-Connection to a live Aetherium server via the `com.aetherium.unity` package, the graybox station kit, movement/combat against the `aphelion` bundle, and the first beauty pass — tracked in [milestones.md](../../../docs/design/unity-sample/milestones.md).
+The graybox station kit replacing the primitive stand-ins, damage numbers, pickups/doors,
+death/respawn UI, extraction + score screen, and the first beauty pass — tracked in
+[milestones.md](../../../docs/design/unity-sample/milestones.md).

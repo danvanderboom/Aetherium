@@ -11,7 +11,7 @@ presentation (prefabs, VFX, audio) through a `ThemeAsset`. Full design:
 **In-repo (the Aphelion sample):** reference by relative path in `Packages/manifest.json`:
 
 ```json
-"com.aetherium.unity": "file:../../../clients/unity/com.aetherium.unity"
+"com.aetherium.unity": "file:../../../../clients/unity/com.aetherium.unity"
 ```
 
 **External games:** install via git URL with a path query (no registry needed):

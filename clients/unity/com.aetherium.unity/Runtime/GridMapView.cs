@@ -95,10 +95,12 @@ namespace Aetherium.Unity
             instance.SetActive(true);
 
             // Capture base colors once so dim/undim assigns absolute values.
+            // URP/HDRP shaders name the main color _BaseColor, Built-in names it _Color;
+            // Material.color maps to whichever is the shader's [MainColor], so accept both.
             var baseColors = new List<(Material, Color)>();
             foreach (var renderer in instance.GetComponentsInChildren<Renderer>())
                 foreach (var material in renderer.materials) // per-instance; fine at M0 scale
-                    if (material.HasProperty("_Color"))
+                    if (material.HasProperty("_BaseColor") || material.HasProperty("_Color"))
                         baseColors.Add((material, material.color));
 
             return new CellView { GameObject = instance, TerrainName = terrainName, BaseColors = baseColors };
