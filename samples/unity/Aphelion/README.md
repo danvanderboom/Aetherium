@@ -44,10 +44,17 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
    **Aetherium → Build First Light Scene**. It creates `Assets/Scenes/FirstLight.unity`,
    stand-in primitive prefabs, and a ThemeAsset — all rewireable in the Inspector.
 4. **Press Play.** The client connects, joins the server's default session, and the maze
-   reveals as you explore: **WASD** to move (world directions — the client composes the
-   rotate-then-step the server requires), **Space** to attack an adjacent creature.
-   Remembered-but-out-of-view cells dim; anything without a prefab binding renders as a
-   bright magenta capsule (loud beats invisible).
+   reveals around your cyan avatar as you explore. Controls:
+   - **WASD** — move by compass (the client composes the rotate-then-step the server requires)
+   - **← / →** — turn 90°; the map sweeps to keep your heading up-screen
+   - **↑ / ↓** — step forward / backward along your heading (the engine's native verbs)
+   - **Space** — attack an adjacent creature
+   - **L** — toggle the suit lamp vs. debug sunlight (sight is gated by light, range ~6 cells)
+
+   Creatures render as their own Quaternius models (scrap-mite, custodian, sentinel,
+   vent-lurker, overseer-node), each falling back to a distinct-colored capsule if a model
+   has not imported. Remembered-but-out-of-view cells dim; anything without a binding
+   renders as a bright magenta capsule (loud beats invisible).
 5. **To play the `aphelion` bundle** instead of the default world, create an instance and
    paste its world id into the `AetheriumClientBehaviour` inspector field:
    ```powershell
