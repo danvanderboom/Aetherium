@@ -69,6 +69,8 @@ StyleCopReport.xml
 # *.meta rule above is for VS-generated metas in non-Unity contexts; this
 # exception keeps every meta under the Unity asset tree under version control.
 !Aetherium.Unity/**/*.meta
+!samples/unity/*/**/*.meta
+!clients/unity/*/**/*.meta
 *.obj
 *.iobj
 *.pch
