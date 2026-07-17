@@ -81,7 +81,43 @@ namespace Aphelion
                       $"brightest=({brightest.Position.X},{brightest.Position.Y}) light={brightest.LastLightLevel:F2} {verdict} | " +
                       $"in-view extent W{west} E{east} N{north} S{south} | " +
                       $"seq={store.LatestFrame.MoveSequence} heading={store.LatestFrame.HeadingDegrees} " +
-                      $"inViewCount={inView.Count}");
+                      $"inViewCount={inView.Count}\n" + LocalLightMap(store, 6));
+        }
+
+        /// <summary>
+        /// ASCII map of the anchor's neighborhood from the store: light level as a digit
+        /// (0–9, in-view), 'o' remembered-but-out-of-view, '#' walls, '.' unknown. When a
+        /// light-dead collapse happens, this shows whether adjacent cells are lit (~7 =
+        /// vision problem) or dark (light problem), and what the terrain there is called.
+        /// </summary>
+        private static string LocalLightMap(PerceptionStore store, int radius)
+        {
+            var anchor = store.Anchor;
+            var byPos = store.Memory
+                .Where(c => c.Position.Z == anchor.Z)
+                .ToDictionary(c => (c.Position.X, c.Position.Y));
+
+            var rows = new System.Text.StringBuilder();
+            var terrains = new System.Collections.Generic.HashSet<string>();
+            for (var y = anchor.Y - radius; y <= anchor.Y + radius; y++)
+            {
+                for (var x = anchor.X - radius; x <= anchor.X + radius; x++)
+                {
+                    if (!byPos.TryGetValue((x, y), out var cell) || cell.Terrain == null)
+                    {
+                        rows.Append('.');
+                        continue;
+                    }
+                    terrains.Add(cell.Terrain.Name);
+                    if (cell.Terrain.Name == "Wall") { rows.Append('#'); continue; }
+                    if (!cell.InView) { rows.Append('o'); continue; }
+                    var digit = Mathf.Clamp(Mathf.RoundToInt((float)cell.LastLightLevel * 9f), 0, 9);
+                    rows.Append(x == anchor.X && y == anchor.Y ? '@' : (char)('0' + digit));
+                }
+                rows.Append('\n');
+            }
+            rows.Append("terrains seen: " + string.Join(", ", terrains));
+            return rows.ToString();
         }
 
         /// <summary>
