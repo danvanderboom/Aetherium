@@ -257,7 +257,7 @@ namespace Aphelion.EditorTools
         private static GameObject NormalizedModelPrefab(string name, GameObject model, float footprint, Color fallbackColor)
         {
             var root = new GameObject(name);
-            var instance = (GameObject)Instantiate(model);
+            var instance = Object.Instantiate(model);
             instance.transform.SetParent(root.transform, worldPositionStays: false);
 
             var renderers = instance.GetComponentsInChildren<Renderer>();
