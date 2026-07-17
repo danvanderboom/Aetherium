@@ -2,6 +2,8 @@ using Aetherium.Unity;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace Aphelion.EditorTools
@@ -29,6 +31,7 @@ namespace Aphelion.EditorTools
             EnsureFolder(MaterialsFolder);
             EnsureFolder(PrefabsFolder);
             EnsureFolder(ScenesFolder);
+            EnsureUrpActive();
 
             // --- Stand-in prefabs (primitive geometry, URP Lit materials). ---
             var wall = CubePrefab("Wall", new Color(0.33f, 0.38f, 0.44f), height: 1f);
@@ -99,6 +102,38 @@ namespace Aphelion.EditorTools
             AssetDatabase.SaveAssets();
 
             Debug.Log("[Aphelion] First Light scene built. Start the Aetherium server, then press Play.");
+        }
+
+        /// <summary>
+        /// A regenerated project ships with no render pipeline asset assigned, which means
+        /// Built-in RP — and every URP-shader material renders the classic error magenta.
+        /// Create + assign a URP asset so the project actually runs the pipeline it imports.
+        /// </summary>
+        private static void EnsureUrpActive()
+        {
+            if (GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset)
+                return;
+
+            var rendererPath = $"{RootFolder}/UniversalRenderer.asset";
+            var rendererData = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(rendererPath);
+            if (rendererData == null)
+            {
+                rendererData = ScriptableObject.CreateInstance<UniversalRendererData>();
+                AssetDatabase.CreateAsset(rendererData, rendererPath);
+            }
+
+            var pipelinePath = $"{RootFolder}/UniversalRP.asset";
+            var pipeline = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
+            if (pipeline == null)
+            {
+                pipeline = UniversalRenderPipelineAsset.Create(rendererData);
+                AssetDatabase.CreateAsset(pipeline, pipelinePath);
+            }
+
+            GraphicsSettings.defaultRenderPipeline = pipeline;
+            QualitySettings.renderPipeline = pipeline;
+            AssetDatabase.SaveAssets();
+            Debug.Log("[Aphelion] Assigned URP pipeline asset (project was running Built-in RP).");
         }
 
         private static void EnsureFolder(string path)
