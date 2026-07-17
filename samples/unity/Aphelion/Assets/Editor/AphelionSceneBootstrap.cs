@@ -105,6 +105,23 @@ namespace Aphelion.EditorTools
         }
 
         /// <summary>
+        /// Runs after every domain reload so the URP repair can't be missed by menu-click
+        /// timing: if the project has no pipeline asset, it gets one as soon as scripts
+        /// finish compiling. Idempotent and a no-op once URP is assigned.
+        /// </summary>
+        [InitializeOnLoadMethod]
+        private static void EnsureUrpOnLoad()
+        {
+            EditorApplication.delayCall += () =>
+            {
+                if (EditorApplication.isPlayingOrWillChangePlaymode)
+                    return;
+                EnsureFolder(RootFolder);
+                EnsureUrpActive();
+            };
+        }
+
+        /// <summary>
         /// A regenerated project ships with no render pipeline asset assigned, which means
         /// Built-in RP — and every URP-shader material renders the classic error magenta.
         /// Create + assign a URP asset so the project actually runs the pipeline it imports.
