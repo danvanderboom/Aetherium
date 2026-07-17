@@ -175,6 +175,188 @@ namespace Aetherium.Client.Tests
         }
 
         [Test]
+        public async Task WalkedPath_WallMemory_SurvivesManySteps()
+        {
+            // The live regression for the wall-memory eater (the hub pushes the post-move
+            // frame before the response; unheld it folded one cell off and each step erased
+            // the walls just walked past). Terrain never changes by itself in these worlds,
+            // so every cell EVER remembered as Wall must still read Wall after a long walk —
+            // corruption compounds with steps, which is why a single-step test missed it.
+            await using var client = NewClient();
+            var firstFrame = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            client.Connection.PerceptionReceived += _ => firstFrame.TrySetResult(true);
+            await client.ConnectAsync();
+            await WaitFor(firstFrame, "first perception frame");
+
+            // Fingerprint: the FIRST non-null terrain name each client-space cell was seen
+            // with. The world is static during the walk, so that identity may never change —
+            // whatever the world calls its tiles. (An anchor smear rewrites trailing cells
+            // with data belonging one step over, which flips identities en masse.)
+            var firstSeen = new Dictionary<GridPoint, string>();
+            void RecordTerrain()
+            {
+                foreach (var cell in client.Store.Memory)
+                    if (cell.Terrain is { Name: { Length: > 0 } name } && !firstSeen.ContainsKey(cell.Position))
+                        firstSeen[cell.Position] = name;
+            }
+            RecordTerrain();
+
+            var steps = 0;
+            var stepFns = new Func<Task<ClientContracts.ToolExecutionResultDto>>[]
+            {
+                () => client.Tools.MoveForwardAsync(),
+                () => client.Tools.MoveRightAsync(),
+                () => client.Tools.MoveLeftAsync(),
+                () => client.Tools.MoveBackwardAsync(),
+            };
+            for (var attempt = 0; attempt < 40 && steps < 12; attempt++)
+            {
+                var result = await stepFns[attempt % stepFns.Length]();
+                if (!result.Success)
+                    continue;
+                steps++;
+                RecordTerrain();
+            }
+
+            if (steps < 3)
+                Assert.Inconclusive($"only {steps} walkable steps from this spawn — path too short to exercise memory.");
+
+            Assert.That(firstSeen, Is.Not.Empty, "the walk must have revealed terrain");
+            var memoryNow = client.Store.Memory.ToDictionary(c => c.Position, c => c.Terrain?.Name);
+            foreach (var (cell, originalName) in firstSeen)
+            {
+                Assert.That(memoryNow.ContainsKey(cell), Is.True,
+                    $"cell {cell} ('{originalName}') fell out of memory entirely after {steps} steps");
+                Assert.That(memoryNow[cell], Is.EqualTo(originalName),
+                    $"cell {cell} changed identity '{originalName}' → '{memoryNow[cell]}' after {steps} steps — the anchor smeared");
+            }
+        }
+
+        [Test]
+        public async Task BlockedMove_LeavesAnchorAndMemoryUntouched()
+        {
+            // Walking into a wall must be a rendering no-op: failed move, unchanged anchor,
+            // and the frame pushed after the attempt folds at the unchanged anchor without
+            // rewriting a single remembered cell.
+            await using var client = NewClient();
+            var firstFrame = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            client.Connection.PerceptionReceived += _ => firstFrame.TrySetResult(true);
+            await client.ConnectAsync();
+            await WaitFor(firstFrame, "first perception frame");
+
+            var stepFns = new Func<Task<ClientContracts.ToolExecutionResultDto>>[]
+            {
+                () => client.Tools.MoveForwardAsync(),
+                () => client.Tools.MoveRightAsync(),
+                () => client.Tools.MoveLeftAsync(),
+                () => client.Tools.MoveBackwardAsync(),
+            };
+            foreach (var step in stepFns)
+            {
+                var anchorBefore = client.Store.Anchor;
+                var memoryBefore = client.Store.Memory
+                    .Where(c => c.Terrain != null)
+                    .ToDictionary(c => c.Position, c => c.Terrain!.Name);
+
+                var result = await step();
+                if (result.Success)
+                    continue; // walkable that way; we want a wall
+
+                Assert.That(client.Store.Anchor, Is.EqualTo(anchorBefore), "a blocked move must not advance the anchor");
+                foreach (var (cell, terrain) in memoryBefore)
+                {
+                    var now = client.Store.Memory.SingleOrDefault(c => c.Position == cell);
+                    Assert.That(now?.Terrain?.Name, Is.EqualTo(terrain),
+                        $"blocked move rewrote remembered terrain at {cell}");
+                }
+                return;
+            }
+
+            Assert.Inconclusive("Every direction from this spawn was walkable — no wall to bump.");
+        }
+
+        [Test]
+        public async Task RotatingInPlace_LeavesMemoryUntouched()
+        {
+            // Four quarter-turns = a full revolution of pushed frames with changing heading.
+            // Relative offsets are world-axis-aligned, so not one remembered cell may move,
+            // change identity, or appear from nowhere. If turning churned memory, the map
+            // would visibly smear every time the player looks around.
+            await using var client = NewClient();
+            var firstFrame = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            client.Connection.PerceptionReceived += _ => firstFrame.TrySetResult(true);
+            await client.ConnectAsync();
+            await WaitFor(firstFrame, "first perception frame");
+
+            var memoryBefore = client.Store.Memory
+                .Where(c => c.Terrain != null)
+                .ToDictionary(c => c.Position, c => c.Terrain!.Name);
+            var anchorBefore = client.Store.Anchor;
+
+            for (var i = 0; i < 4; i++)
+            {
+                var frameAfterTurn = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                client.Connection.PerceptionReceived += _ => frameAfterTurn.TrySetResult(true);
+                var rotate = await client.Tools.RotateAsync(clockwise: true);
+                Assert.That(rotate.Success, Is.True);
+                await WaitFor(frameAfterTurn, $"frame after quarter-turn {i + 1}");
+            }
+
+            Assert.That(client.Store.Anchor, Is.EqualTo(anchorBefore), "turning in place must not move the anchor");
+            foreach (var (cell, terrain) in memoryBefore)
+                Assert.That(client.Store.Memory.SingleOrDefault(c => c.Position == cell)?.Terrain?.Name,
+                    Is.EqualTo(terrain), $"turning in place rewrote remembered terrain at {cell}");
+        }
+
+        [Test]
+        public async Task WireContract_EveryVisual_IsRenderable_AndSelfIsNeverListed()
+        {
+            // The renderability contract a client depends on to draw EVERYTHING it is sent:
+            // every visual's terrain has a non-empty name (ThemeAsset keys on names), every
+            // such name also appears in the frame's TileTypes catalog, and the perceiving
+            // player is never among VisibleCharacters (the client renders self at the anchor;
+            // a self entry would double-render the player).
+            await using var client = NewClient();
+            var frames = new List<ClientContracts.PerceptionDto>();
+            var firstFrame = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            client.Connection.PerceptionReceived += f => { lock (frames) frames.Add(f); firstFrame.TrySetResult(true); };
+            await client.ConnectAsync();
+            await WaitFor(firstFrame, "first perception frame");
+
+            // Provoke a few more frames: a turn and a step (whichever direction works).
+            await client.Tools.RotateAsync(clockwise: true);
+            foreach (var step in new Func<Task<ClientContracts.ToolExecutionResultDto>>[]
+                     { () => client.Tools.MoveForwardAsync(), () => client.Tools.MoveRightAsync() })
+                if ((await step()).Success)
+                    break;
+
+            List<ClientContracts.PerceptionDto> snapshot;
+            lock (frames) snapshot = frames.ToList();
+            Assert.That(snapshot, Is.Not.Empty);
+
+            foreach (var frame in snapshot)
+            {
+                foreach (var (key, visual) in frame.Visuals)
+                {
+                    if (visual.Terrain is null)
+                        continue; // bare-light cell: renderers skip it by design
+                    Assert.That(visual.Terrain.Name, Is.Not.Null.And.Not.Empty,
+                        $"unnameable terrain at {key} cannot be theme-bound");
+                    Assert.That(frame.TileTypes.ContainsKey(visual.Terrain.Name), Is.True,
+                        $"terrain '{visual.Terrain.Name}' at {key} is missing from the frame's TileTypes catalog");
+                }
+
+                foreach (var character in frame.VisibleCharacters)
+                {
+                    Assert.That(character.Location, Is.Not.Null);
+                    Assert.That((character.Location!.X, character.Location.Y, character.Location.Z),
+                        Is.Not.EqualTo((0, 0, 0)),
+                        "the perceiving player must never appear in VisibleCharacters — self renders at the anchor");
+                }
+            }
+        }
+
+        [Test]
         public async Task CompositeMove_RotatesAndSteps_LikeAnyAgentWould()
         {
             await using var client = NewClient();

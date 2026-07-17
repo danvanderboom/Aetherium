@@ -118,6 +118,9 @@ namespace Aetherium.Client
                 _entities.Clear();
                 _memory.Clear();
                 _latest = null;
+                // A frame held during an in-flight move was computed before the discontinuity;
+                // applying it after the wipe would pollute the fresh epoch with stale geometry.
+                _heldFrame = null;
             }
             Reanchored?.Invoke(reason);
         }

@@ -257,6 +257,114 @@ namespace Aetherium.Client.Tests
                 Is.EqualTo("Floor"), "the player's new cell folded at the settled anchor");
         }
 
+        [Test]
+        public void Discontinuity_DuringHold_DropsTheHeldFrame()
+        {
+            // Respawn/portal while a move is in flight: the held frame was computed in the
+            // pre-discontinuity epoch; applying it after the wipe would pollute fresh memory
+            // with stale geometry folded at the reset anchor.
+            var store = new PerceptionStore();
+
+            using (store.HoldFrames())
+            {
+                store.ApplyFrame(Frame(f =>
+                    f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "PreDeathFloor" } }));
+                store.NoteDiscontinuity(ReanchorReason.Respawned);
+            }
+
+            Assert.That(store.Memory, Is.Empty, "the stale held frame must not leak into the new epoch");
+            Assert.That(store.LatestFrame, Is.Null);
+            Assert.That(store.Anchor, Is.EqualTo(GridPoint.Origin));
+        }
+
+        [Test]
+        public void TerrainChange_InView_UpdatesRememberedIdentity()
+        {
+            // The render contract for doors and breached walls: when a cell's terrain
+            // legitimately changes, memory must adopt the new identity (views re-materialize
+            // from memory, so a stale name would leave a closed door on screen forever).
+            var store = new PerceptionStore();
+
+            store.ApplyFrame(Frame(f =>
+                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Door" } }));
+            store.ApplyFrame(Frame(f =>
+                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "OpenDoor" } }));
+
+            var cell = store.Memory.Single(c => c.Position == new GridPoint(1, 0, 0));
+            Assert.That(cell.Terrain!.Name, Is.EqualTo("OpenDoor"));
+        }
+
+        [Test]
+        public void RotationOnlyFrames_DoNotChurnMemoryOrEntities()
+        {
+            // Relative offsets are world-axis-aligned, never heading-rotated: a frame that
+            // differs only in HeadingDegrees must not move a single cell or entity. If this
+            // churns, every turn would smear the map (the store-level face of the invariant
+            // the in-proc rotate-then-step test pins live).
+            var store = new PerceptionStore();
+            PerceptionDto WithHeading(int heading) => Frame(f =>
+            {
+                f.HeadingDegrees = heading;
+                f.Visuals["0,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
+                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.VisibleCharacters.Add(Npc("npc-1", 1, -1));
+            });
+
+            store.ApplyFrame(WithHeading(0));
+            var wallBefore = store.Memory.Single(c => c.Terrain!.Name == "Wall").Position;
+            var npcBefore = store.Entities.Single().Position;
+
+            var moves = 0;
+            store.EntityMoved += (_, _, _) => moves++;
+
+            foreach (var heading in new[] { 90, 180, 270, 0 })
+                store.ApplyFrame(WithHeading(heading));
+
+            Assert.That(store.Memory.Single(c => c.Terrain!.Name == "Wall").Position, Is.EqualTo(wallBefore));
+            Assert.That(store.Entities.Single().Position, Is.EqualTo(npcBefore));
+            Assert.That(moves, Is.Zero, "rotation alone must never read as entity motion");
+            Assert.That(store.Memory, Has.Count.EqualTo(2), "no phantom cells from turning in place");
+        }
+
+        [Test]
+        public void ChangeLevel_MemoryIsPerDeck_NotOverwrittenAcrossZ()
+        {
+            // Multi-deck stations: the same X,Y on different decks are different cells. A
+            // client rendering deck 1 must not inherit deck 0's geometry.
+            var store = new PerceptionStore();
+
+            store.ApplyFrame(Frame(f =>
+                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } }));
+
+            store.AdvanceAnchor(0, 0, 1); // took the stairs up
+            store.ApplyFrame(Frame(f =>
+                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Vent" } }));
+
+            Assert.That(store.Memory.Single(c => c.Position == new GridPoint(1, 0, 0)).Terrain!.Name,
+                Is.EqualTo("Wall"), "deck 0 geometry survives");
+            Assert.That(store.Memory.Single(c => c.Position == new GridPoint(1, 0, 1)).Terrain!.Name,
+                Is.EqualTo("Vent"), "deck 1 revealed at its own Z");
+        }
+
+        [Test]
+        public void ReappearingEntity_IsFreshTracking_KillMarkDoesNotLinger()
+        {
+            // An entity that vanished and later re-enters perception is a NEW sighting: if
+            // the old WasDefeated flag lingered, its next vanish would wrongly play death VFX.
+            var store = new PerceptionStore();
+
+            store.ApplyFrame(Frame(f => f.VisibleCharacters.Add(Npc("npc-1", 1, 0))));
+            store.NoteAttackResult("npc-1", remainingHealth: 0, defeated: true);
+            store.ApplyFrame(Frame(_ => { })); // vanishes (marked as a kill)
+
+            var appearances = 0;
+            store.EntityAppeared += _ => appearances++;
+            store.ApplyFrame(Frame(f => f.VisibleCharacters.Add(Npc("npc-1", 2, 0)))); // same id returns
+
+            Assert.That(appearances, Is.EqualTo(1), "re-entry raises EntityAppeared");
+            Assert.That(store.Entities.Single().WasDefeated, Is.False, "fresh tracking, no stale kill mark");
+        }
+
         // ---- parsing helpers ----
 
         [Test]
