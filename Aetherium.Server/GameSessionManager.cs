@@ -21,6 +21,45 @@ namespace Aetherium.Server
         private readonly PerceptionService? perceptionService;
         private readonly IHubContext<GameHub>? hubContext;
 
+        // Sessions whose connection dropped but whose state is being kept alive for the
+        // resume grace window, keyed by SessionId. A reconnecting client presenting the
+        // matching resume token rebinds to the entry; entries older than
+        // ResumeGraceWindow are cleaned up (SessionExpired) and become unresumable.
+        private readonly ConcurrentDictionary<string, DetachedSession> detached = new ConcurrentDictionary<string, DetachedSession>();
+
+        private sealed class DetachedSession
+        {
+            public DetachedSession(GameSession session, DateTime detachedAtUtc)
+            {
+                Session = session;
+                DetachedAtUtc = detachedAtUtc;
+            }
+            public GameSession Session { get; }
+            public DateTime DetachedAtUtc { get; }
+        }
+
+        /// <summary>
+        /// How long a disconnected session stays resumable. Mutable so tests can shrink
+        /// it; ops can override the default via AETHERIUM_RESUME_GRACE_SECONDS.
+        /// </summary>
+        public TimeSpan ResumeGraceWindow { get; set; } = ResolveDefaultGraceWindow();
+
+        private static TimeSpan ResolveDefaultGraceWindow()
+        {
+            var raw = Environment.GetEnvironmentVariable("AETHERIUM_RESUME_GRACE_SECONDS");
+            if (int.TryParse(raw, out var seconds) && seconds >= 0)
+                return TimeSpan.FromSeconds(seconds);
+            return TimeSpan.FromSeconds(90);
+        }
+
+        /// <summary>
+        /// Deferred disconnect cleanup, run once per session when its grace window lapses
+        /// without a resume (or when a resume arrives too late). Wired in Program.cs to
+        /// the grain-side teardown (management-grain unregister + map-grain LeavePlayer)
+        /// that used to run inline in GameHub.OnDisconnectedAsync.
+        /// </summary>
+        public Func<GameSession, Task>? SessionExpired { get; set; }
+
         // Perception-push debounce (see NotifyMapMutationAsync): connectionIds whose mirror
         // changed since their last push, and a 0/1 flag for whether a flush is scheduled.
         // Deltas are applied immediately; frames are coalesced to at most one per session per
@@ -241,6 +280,116 @@ namespace Aetherium.Server
         {
             dirtyPerception.TryRemove(connectionId, out _);
             return sessions.TryRemove(connectionId, out _);
+        }
+
+        /// <summary>
+        /// Moves the session bound to <paramref name="connectionId"/> into the detached
+        /// (resumable) set instead of destroying it, and schedules its expiry. Returns the
+        /// detached session, or null when the connection had no session — e.g. it was
+        /// already rebound to a newer connection by <see cref="TryResumeSession"/>.
+        /// </summary>
+        public GameSession? DetachSession(string connectionId)
+        {
+            dirtyPerception.TryRemove(connectionId, out _);
+            if (!sessions.TryRemove(connectionId, out var session))
+                return null;
+
+            var entry = new DetachedSession(session, DateTime.UtcNow);
+            detached[session.SessionId] = entry;
+            ScheduleExpiry(session.SessionId, entry, ResumeGraceWindow);
+            return session;
+        }
+
+        /// <summary>
+        /// Rebinds the session identified by <paramref name="sessionId"/> to
+        /// <paramref name="newConnectionId"/> when the caller presents the matching
+        /// <paramref name="resumeToken"/> and the grace window hasn't lapsed. Handles both
+        /// the normal case (session detached by a prior disconnect) and the race where the
+        /// old connection hasn't been torn down yet (session still active) — the later
+        /// OnDisconnectedAsync for the old connection then finds nothing to detach.
+        /// Returns null on unknown session, bad token, or expiry (expiry cleanup runs).
+        /// </summary>
+        public GameSession? TryResumeSession(string sessionId, string resumeToken, string newConnectionId)
+        {
+            if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(resumeToken) || string.IsNullOrEmpty(newConnectionId))
+                return null;
+
+            if (detached.TryGetValue(sessionId, out var entry))
+            {
+                if (!TokenMatches(entry.Session, resumeToken))
+                    return null; // leave the entry for its rightful owner
+
+                if (DateTime.UtcNow - entry.DetachedAtUtc > ResumeGraceWindow)
+                {
+                    _ = ExpireNow(sessionId);
+                    return null;
+                }
+
+                if (!detached.TryRemove(sessionId, out entry))
+                    return null; // lost a race with expiry or another resume
+
+                return Rebind(entry.Session, newConnectionId);
+            }
+
+            // Still-active session (server never saw the old connection drop): steal it.
+            var active = sessions.Values.FirstOrDefault(s => s.SessionId == sessionId);
+            if (active is null || !TokenMatches(active, resumeToken))
+                return null;
+            if (active.ConnectionId == newConnectionId)
+                return active; // idempotent re-resume on the same connection
+
+            sessions.TryRemove(active.ConnectionId, out _);
+            dirtyPerception.TryRemove(active.ConnectionId, out _);
+            return Rebind(active, newConnectionId);
+        }
+
+        private static bool TokenMatches(GameSession session, string resumeToken)
+            => string.Equals(session.ResumeToken, resumeToken, StringComparison.Ordinal);
+
+        private GameSession Rebind(GameSession session, string newConnectionId)
+        {
+            session.ConnectionId = newConnectionId;
+            sessions[newConnectionId] = session;
+            return session;
+        }
+
+        private void ScheduleExpiry(string sessionId, DetachedSession entry, TimeSpan delay)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay);
+                    // Only expire the same detach epoch: if the session was resumed and
+                    // detached again since, the current entry differs and its own timer
+                    // is running.
+                    if (detached.TryGetValue(sessionId, out var current) && ReferenceEquals(current, entry))
+                        await ExpireNow(sessionId);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[GameSessionManager] Expiry sweep for {sessionId} failed: {ex.Message}");
+                }
+            });
+        }
+
+        private async Task ExpireNow(string sessionId)
+        {
+            if (!detached.TryRemove(sessionId, out var entry))
+                return;
+
+            Console.WriteLine($"[GameSessionManager] Session {sessionId} grace window lapsed; running deferred cleanup");
+            var cleanup = SessionExpired;
+            if (cleanup is null)
+                return;
+            try
+            {
+                await cleanup(entry.Session);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameSessionManager] Expiry cleanup for {sessionId} failed: {ex.Message}");
+            }
         }
 
         /// <summary>

@@ -231,6 +231,20 @@ namespace Aetherium.Client.Contracts
         public string PlayerId { get; set; } = string.Empty;
         public WorldDirection PlayerHeading { get; set; } = WorldDirection.North;
         public Dictionary<string, TileTypeDto> TileTypes { get; set; } = new Dictionary<string, TileTypeDto>();
+
+        /// <summary>Secret presented to ResumeSession after a reconnect to rebind to this
+        /// session instead of starting over as a fresh spawn.</summary>
+        public string ResumeToken { get; set; } = string.Empty;
+    }
+
+    /// <summary>Mirror of the server's ResumeSessionResultDto. On success,
+    /// <see cref="Perception"/> is the resumed session's current frame — applied in place
+    /// of the fresh-session frames the reconnect handshake pushed (those are discarded).</summary>
+    public class ResumeSessionResultDto
+    {
+        public bool Success { get; set; }
+        public string? Reason { get; set; }
+        public PerceptionDto? Perception { get; set; }
     }
 
     /// <summary>A player's own life-state, pushed to the owning session only via

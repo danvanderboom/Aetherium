@@ -14,6 +14,15 @@ namespace Aetherium.Server
 	public class GameSession
 	{
 		public string SessionId { get; set; } = Guid.NewGuid().ToString();
+
+		/// <summary>
+		/// Secret issued to the owning client at join (rides ReceiveGameState) and required
+		/// to rebind this session to a new connection via GameHub.ResumeSession. SessionId
+		/// alone is not sufficient — it doubles as the visible PlayerId, so without the
+		/// token any client that ever saw a player could hijack their session.
+		/// </summary>
+		public string ResumeToken { get; } = Guid.NewGuid().ToString("N");
+
 		public string ConnectionId { get; set; } = string.Empty;
 		public string? WorldId { get; set; } // Multi-world support - which world is this session in?
 		public string? MapId { get; set; }  // Phase 2c: which map within that world

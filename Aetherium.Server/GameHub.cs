@@ -138,7 +138,10 @@ namespace Aetherium.Server
             {
                 PlayerId = session.SessionId,
                 // DO NOT send PlayerLocation - client should not know absolute world coordinates
-                PlayerHeading = session.Heading.ToDto()
+                PlayerHeading = session.Heading.ToDto(),
+                // Secret the client presents to ResumeSession after a reconnect to rebind
+                // to this session instead of playing on as a fresh spawn.
+                ResumeToken = session.ResumeToken
             };
 
             await Clients.Caller.SendAsync("ReceiveGameState", initialState);
@@ -178,46 +181,99 @@ namespace Aetherium.Server
         {
             Console.WriteLine($"Client disconnected: {Context.ConnectionId}");
             
-            // Get session ID before removing
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            var sessionId = session?.SessionId;
+            // Session-resume: don't tear the session down yet. Detach it into the
+            // manager's grace-window set so a reconnecting client can rebind via
+            // ResumeSession with its position, inventory, and server-side mirror
+            // intact. The old inline teardown (management-grain unregister +
+            // map-grain LeavePlayer) now runs as the manager's SessionExpired
+            // cleanup — wired in Program.cs — only when the window lapses without
+            // a resume. DetachSession is a no-op when this connection's session
+            // was already rebound to a newer connection.
+            sessionManager.DetachSession(Context.ConnectionId);
+            await base.OnDisconnectedAsync(exception);
+        }
 
-            // Unregister from management grain
-            if (sessionId != null)
+        /// <summary>
+        /// Rebinds the caller's connection to a previous session within the resume grace
+        /// window, preserving position, inventory, health, and the server-side world
+        /// mirror. The caller must present the session id AND the resume token issued to
+        /// it in ReceiveGameState. On success the fresh session OnConnectedAsync just
+        /// created for this connection is unwound (it was never the player's real state)
+        /// and the current perception frame of the resumed session is returned so the
+        /// client can continue without a memory wipe. On failure (unknown id, bad token,
+        /// window lapsed) the caller keeps its fresh session — the fresh-join fallback.
+        /// </summary>
+        public async Task<ResumeSessionResultDto> ResumeSession(string sessionId, string resumeToken)
+        {
+            try
             {
+                if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(resumeToken))
+                    return new ResumeSessionResultDto { Success = false, Reason = "sessionId and resumeToken required" };
+
+                // Grab the fresh session BEFORE the rebind overwrites this connection's slot.
+                var freshSession = sessionManager.GetSession(Context.ConnectionId);
+                if (freshSession != null && freshSession.SessionId == sessionId)
+                    return new ResumeSessionResultDto { Success = true, Perception = freshSession.GetPerception() };
+
+                var resumed = sessionManager.TryResumeSession(sessionId, resumeToken, Context.ConnectionId);
+                if (resumed == null)
+                    return new ResumeSessionResultDto { Success = false, Reason = "Session expired or unknown" };
+
+                Console.WriteLine($"[GameHub] Session {sessionId} resumed on connection {Context.ConnectionId}");
+
+                // Unwind the throwaway session this connection got on reconnect: it was
+                // registered with the management grain and — if the client auto-joined via
+                // query string — spawned a player Character on the map grain.
+                if (freshSession != null)
+                {
+                    try
+                    {
+                        var managementGrain = GetManagementGrain();
+                        if (managementGrain != null)
+                            await managementGrain.UnregisterSessionAsync(freshSession.SessionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[GameHub] Failed to unregister throwaway session: {ex.Message}");
+                    }
+
+                    if (freshSession.MapId != null && clusterClient != null)
+                    {
+                        try
+                        {
+                            var mapGrain = clusterClient.GetGrain<IGameMapGrain>(freshSession.MapId);
+                            await mapGrain.LeavePlayerAsync(freshSession.SessionId);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[GameHub] Failed to unwind throwaway map join: {ex.Message}");
+                        }
+                    }
+                }
+
+                // Re-point the management grain's session→connection mapping at us.
                 try
                 {
                     var managementGrain = GetManagementGrain();
                     if (managementGrain != null)
-                    {
-                        await managementGrain.UnregisterSessionAsync(sessionId);
-                    }
+                        await managementGrain.RegisterSessionAsync(resumed.SessionId, Context.ConnectionId);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[GameHub] Failed to unregister session from grain: {ex.Message}");
+                    Console.WriteLine($"[GameHub] Failed to re-register resumed session: {ex.Message}");
                 }
-            }
 
-            // Phase 2c: if the session was grain-bound, tell the map grain to drop
-            // the player Character and emit an EntityRemovedDelta so other joined
-            // sessions see them leave. Phase-2 player persistence (deferred) will
-            // replace this with a snapshot-and-detach flow that lets players resume.
-            if (sessionId != null && session?.MapId != null && clusterClient != null)
+                return new ResumeSessionResultDto
+                {
+                    Success = true,
+                    Perception = resumed.GetPerception()
+                };
+            }
+            catch (Exception ex)
             {
-                try
-                {
-                    var mapGrain = clusterClient.GetGrain<IGameMapGrain>(session.MapId);
-                    await mapGrain.LeavePlayerAsync(sessionId);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[GameHub] Failed to leave map grain: {ex.Message}");
-                }
+                Console.WriteLine($"[GameHub] ResumeSession threw: {ex}");
+                return new ResumeSessionResultDto { Success = false, Reason = "Resume failed" };
             }
-
-            sessionManager.RemoveSession(Context.ConnectionId);
-            await base.OnDisconnectedAsync(exception);
         }
 
         // ----------------------------------------------------------------
