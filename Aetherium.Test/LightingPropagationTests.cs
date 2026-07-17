@@ -104,6 +104,34 @@ namespace Aetherium.Test
         }
 
         [Test]
+        public void WallFace_ReceivesLight_EvenThoughItBlocksCellsBeyond()
+        {
+            // You see a lit wall because light hits its face: a cell's own opacity blocks
+            // light passing THROUGH it, never light ARRIVING at it. When the target was
+            // charged its own opacity, every wall was permanently unlit, so the vision
+            // system's darkness filter culled walls beyond ~2 cells while floors lit to
+            // full lamp range — walls "invisible until you're next to them" in the client.
+            var world = CreateWorldWithTiles();
+            for (int x = 0; x < 5; x++)
+                world.SetTerrain("Indoors", new WorldLocation(x, 0, 0));
+            world.SetTerrain("Wall", new WorldLocation(5, 0, 0));
+
+            var calculator = new LightCalculator();
+            var frame = new LightFrame();
+            var bounds = new Rectangle(0, -1, 8, 3);
+            var source = new WorldLocation(0, 0, 0);
+
+            calculator.ComputeLightFromSource(world, source, 0.9, 6, bounds, frame);
+
+            var wallFace = frame.GetLightLevel(new WorldLocation(5, 0, 0));
+            Assert.Greater(wallFace, 0.0, "a wall at the lamp's edge must be lit (its face catches the light)");
+
+            // And the wall still shadows everything past it.
+            Assert.AreEqual(0.0, frame.GetLightLevel(new WorldLocation(6, 0, 0)), 0.001,
+                "cells beyond the wall stay dark");
+        }
+
+        [Test]
         public void ClosedDoor_BlocksLight()
         {
             var world = CreateWorldWithTiles();

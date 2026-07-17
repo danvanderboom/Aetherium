@@ -209,6 +209,11 @@ namespace Aetherium.Client.Contracts
 
         /// <summary>Own body state; null from pre-interoception servers.</summary>
         public InteroceptionDto? Interoception { get; set; }
+
+        /// <summary>Server count of this player's successful anchor-changing moves when the
+        /// frame was computed (starts at 1; 0 = unsequenced legacy). The store uses it to
+        /// drop stale frames and defer ahead-of-anchor ones.</summary>
+        public long MoveSequence { get; set; }
     }
 
     /// <summary>Mirror of the server's <c>(double r, double g, double b)</c> ambient-tint
