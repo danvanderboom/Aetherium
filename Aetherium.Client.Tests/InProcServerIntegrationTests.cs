@@ -309,6 +309,35 @@ namespace Aetherium.Client.Tests
         }
 
         [Test]
+        public async Task Rotation_BumpsMoveSequence_SoStaleFramesCannotRegressHeading()
+        {
+            // Rotations must rank frames exactly like moves do. The server's debounced tick
+            // flush computes frames off the grain's ordering — if a rotate didn't bump
+            // MoveSequence, a flush frame computed before the rotate could arrive after it
+            // with an equal (undropped) sequence and the OLD heading, visibly snapping the
+            // camera back. Observed live as "I can move but not rotate".
+            await using var client = NewClient();
+            var firstFrame = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            client.Connection.PerceptionReceived += _ => firstFrame.TrySetResult(true);
+            await client.ConnectAsync();
+            await WaitFor(firstFrame, "first perception frame");
+
+            var headingBefore = client.Store.LatestFrame!.HeadingDegrees;
+            var seqBefore = client.Store.LatestFrame!.MoveSequence;
+
+            var frameAfterTurn = new TaskCompletionSource<Aetherium.Client.Contracts.PerceptionDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+            client.Connection.PerceptionReceived += f => frameAfterTurn.TrySetResult(f);
+            var rotate = await client.Tools.RotateAsync(clockwise: true);
+            Assert.That(rotate.Success, Is.True);
+            var frame = await WaitFor(frameAfterTurn, "frame after rotate");
+
+            Assert.That(frame.MoveSequence, Is.GreaterThan(seqBefore),
+                "a successful rotation must advance MoveSequence so pre-rotate frames rank stale");
+            Assert.That(frame.HeadingDegrees, Is.EqualTo((headingBefore + 90) % 360),
+                "the post-rotate frame must carry the new heading");
+        }
+
+        [Test]
         public async Task WireContract_EveryVisual_IsRenderable_AndSelfIsNeverListed()
         {
             // The renderability contract a client depends on to draw EVERYTHING it is sent:

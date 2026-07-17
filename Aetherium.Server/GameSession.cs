@@ -470,6 +470,14 @@ namespace Aetherium.Server
 		var heading = entity.Get<HasHeading>();
 		if (heading is not null)
 			heading.Heading = delta.Degrees;
+
+		// A rotation is an embodied state change exactly like a move: bump the
+		// sequence so frames computed before the rotate (e.g. the debounced tick
+		// flush, which runs off the grain's ordering) rank stale and get dropped
+		// by the client instead of racing the rotate's own frame and visibly
+		// snapping the camera back to the old heading.
+		if (Player is not null && delta.EntityId == Player.EntityId)
+			_moveSequence++;
 	}
 
 	private void ApplyDoorStateChanged(Aetherium.Server.MultiWorld.DoorStateChangedDelta delta)
@@ -590,14 +598,16 @@ namespace Aetherium.Server
 			return action();
 	}
 
-	// Monotonic count of the player's own successful anchor-changing moves (steps and
-	// level changes), stamped on every perception frame as MoveSequence. Starts at 1 so
-	// a real frame can never carry 0 (0 = legacy/unsequenced). This is what lets a
-	// client order frames against its own movement: a frame computed before a move but
-	// delivered after its response (tick/tool races share one connection) carries the
-	// old count and can be recognized as stale instead of corrupting client-side
-	// position-anchored state. Always mutated under _stateLock, the same lock that
-	// guards ViewLocation and GetPerception — (location, sequence) stay consistent.
+	// Monotonic count of the player's own successful embodied state changes — steps,
+	// level changes, AND rotations — stamped on every perception frame as MoveSequence.
+	// Starts at 1 so a real frame can never carry 0 (0 = legacy/unsequenced). This is
+	// what lets a client order frames against its own actions: a frame computed before
+	// a move/rotate but delivered after its response (tick flushes and tool responses
+	// share one connection but not one ordering) carries the old count and can be
+	// recognized as stale instead of corrupting client-side position- or
+	// heading-anchored state. Always mutated under _stateLock, the same lock that
+	// guards ViewLocation/HeadingDegrees and GetPerception — (location, heading,
+	// sequence) stay consistent.
 	private long _moveSequence = 1;
 
 	public Aetherium.Model.PerceptionDto GetPerception()
@@ -737,6 +747,9 @@ namespace Aetherium.Server
 				HeadingDegrees = (HeadingDegrees + degrees) % 360;
 				if (HeadingDegrees < 0)
 					HeadingDegrees += 360;
+				// Same sequencing contract as the grain-routed path (ApplyHeadingChanged):
+				// rotations rank frames just like moves do.
+				_moveSequence++;
 			}
 		}
 
