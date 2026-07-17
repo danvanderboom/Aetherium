@@ -189,6 +189,74 @@ namespace Aetherium.Client.Tests
             Assert.That(origin.InView, Is.True);
         }
 
+        // ---- frame holds (the move/push anchor race) ----
+
+        [Test]
+        public void HoldFrames_DefersApplication_LatestWins_AppliedOnRelease()
+        {
+            var store = new PerceptionStore();
+            var received = new List<PerceptionDto>();
+            store.FrameReceived += received.Add;
+
+            var first = Frame(f => f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Cave" } });
+            var second = Frame(f => f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } });
+
+            using (store.HoldFrames())
+            {
+                store.ApplyFrame(first);
+                store.ApplyFrame(second);
+                Assert.That(store.LatestFrame, Is.Null, "held frames must not apply inside the scope");
+                Assert.That(received, Is.Empty);
+            }
+
+            // Only the latest held frame applies (frames are full snapshots).
+            Assert.That(received, Has.Count.EqualTo(1));
+            Assert.That(store.LatestFrame, Is.SameAs(second));
+            Assert.That(store.Memory.Single().Terrain!.Name, Is.EqualTo("Wall"));
+        }
+
+        [Test]
+        public void HoldFrames_MoveRace_WallBehindYouSurvivesTheMove()
+        {
+            // The live bug: the hub pushes the post-move frame BEFORE the move response
+            // arrives. Unheld, that frame folds against the old anchor — the floor now one
+            // step behind the player overwrites the remembered wall you just walked past.
+            var store = new PerceptionStore();
+
+            // Standing at origin: wall visible one cell north (rel 0,-1).
+            store.ApplyFrame(Frame(f =>
+            {
+                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["0,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
+                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+            }));
+
+            // Player steps east. Post-move frame (computed at the new location: the wall is
+            // now rel -1,-1; old cell rel -1,0) arrives while the move is still in flight.
+            var postMove = Frame(f =>
+            {
+                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["-1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["-1,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
+                // Floor one cell north of the NEW position. Folded at the OLD anchor this
+                // rel lands exactly on the remembered wall's cell — the corrupting write.
+                f.Visuals["0,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+            });
+
+            using (store.HoldFrames())
+            {
+                store.ApplyFrame(postMove);      // push beats the response…
+                store.AdvanceAnchor(1, 0, 0);    // …then the response advances the anchor
+            }
+
+            // The wall's client-space cell (0,-1) must still be a wall. Without the hold it
+            // would have been overwritten by the post-move frame's floor at old-anchor rel.
+            var wall = store.Memory.Single(c => c.Position == new GridPoint(0, -1, 0));
+            Assert.That(wall.Terrain!.Name, Is.EqualTo("Wall"));
+            Assert.That(store.Memory.Single(c => c.Position == new GridPoint(1, 0, 0)).Terrain!.Name,
+                Is.EqualTo("Floor"), "the player's new cell folded at the settled anchor");
+        }
+
         // ---- parsing helpers ----
 
         [Test]

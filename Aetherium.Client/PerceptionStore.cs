@@ -66,6 +66,8 @@ namespace Aetherium.Client
         private readonly Dictionary<GridPoint, RememberedCell> _memory = new Dictionary<GridPoint, RememberedCell>();
         private GridPoint _anchor = GridPoint.Origin;
         private PerceptionDto? _latest;
+        private int _holds;
+        private PerceptionDto? _heldFrame;
 
         /// <summary>The most recent raw frame (player-relative, exactly as received).</summary>
         public PerceptionDto? LatestFrame { get { lock (_gate) return _latest; } }
@@ -139,13 +141,73 @@ namespace Aetherium.Client
         }
 
         /// <summary>
+        /// Defers frame application until the returned scope is disposed. Held frames are
+        /// coalesced (latest wins — frames are full snapshots) and the survivor is applied on
+        /// release, after the anchor has settled.
+        ///
+        /// Why this exists: the hub pushes the post-move perception frame <em>before</em> the
+        /// move's response reaches the caller (SignalR delivers in order on one connection),
+        /// so without a hold the store would fold a frame computed at the new location against
+        /// the old anchor — writing every cell one step off and corrupting the memory of
+        /// whatever you just walked past. The ToolClient wraps every anchor-changing call
+        /// (move/changelevel) in a hold; rotations and other tools don't shift cell keys and
+        /// need none.
+        /// </summary>
+        public IDisposable HoldFrames()
+        {
+            lock (_gate)
+                _holds++;
+            return new FrameHold(this);
+        }
+
+        private sealed class FrameHold : IDisposable
+        {
+            private PerceptionStore? _store;
+            public FrameHold(PerceptionStore store) => _store = store;
+
+            public void Dispose()
+            {
+                var store = _store;
+                _store = null; // dispose is idempotent
+                store?.ReleaseHold();
+            }
+        }
+
+        private void ReleaseHold()
+        {
+            PerceptionDto? pending = null;
+            lock (_gate)
+            {
+                _holds--;
+                if (_holds == 0)
+                {
+                    pending = _heldFrame;
+                    _heldFrame = null;
+                }
+            }
+            if (pending != null)
+                ApplyFrame(pending);
+        }
+
+        /// <summary>
         /// Applies an incoming frame: updates memory, diffs entities against the previous
         /// frame, and raises lifecycle events (outside the lock, in a deterministic order:
         /// cells, then appears, moves, vanishes, then <see cref="FrameReceived"/>).
+        /// While a <see cref="HoldFrames"/> scope is open the frame is stashed instead
+        /// (latest wins) and applied when the scope closes.
         /// </summary>
         public void ApplyFrame(PerceptionDto frame)
         {
             if (frame is null) throw new ArgumentNullException(nameof(frame));
+
+            lock (_gate)
+            {
+                if (_holds > 0)
+                {
+                    _heldFrame = frame;
+                    return;
+                }
+            }
 
             var revealed = new List<RememberedCell>();
             var appeared = new List<TrackedEntity>();

@@ -64,16 +64,22 @@ namespace Aetherium.Client
 
         private async Task<ToolExecutionResultDto> MoveRelativeAsync(string direction, int distance)
         {
-            int headingAtCall = CurrentHeadingDegrees();
-            var result = await ExecuteToolAsync("move", new Dictionary<string, object>
+            // Hold frames for the whole call: the hub pushes the post-move frame before the
+            // response arrives, and folding it against the not-yet-advanced anchor would
+            // shift every cell one step and corrupt memory (see PerceptionStore.HoldFrames).
+            using (_connection.Store.HoldFrames())
             {
-                ["direction"] = direction,
-                ["distance"] = distance,
-            }).ConfigureAwait(false);
+                int headingAtCall = CurrentHeadingDegrees();
+                var result = await ExecuteToolAsync("move", new Dictionary<string, object>
+                {
+                    ["direction"] = direction,
+                    ["distance"] = distance,
+                }).ConfigureAwait(false);
 
-            if (result.Success)
-                AdvanceAnchorForMove(headingAtCall, direction, distance);
-            return result;
+                if (result.Success)
+                    AdvanceAnchorForMove(headingAtCall, direction, distance);
+                return result;
+            }
         }
 
         /// <summary>Rotate by ±90° (square-grid preset).</summary>
@@ -113,25 +119,33 @@ namespace Aetherium.Client
                     return rotate;
             }
 
-            var move = await ExecuteToolAsync("move", new Dictionary<string, object>
+            // Same anchor-race hold as MoveRelativeAsync (see PerceptionStore.HoldFrames).
+            using (_connection.Store.HoldFrames())
             {
-                ["direction"] = "FORWARD",
-                ["distance"] = distance,
-            }).ConfigureAwait(false);
+                var move = await ExecuteToolAsync("move", new Dictionary<string, object>
+                {
+                    ["direction"] = "FORWARD",
+                    ["distance"] = distance,
+                }).ConfigureAwait(false);
 
-            if (move.Success)
-                AdvanceAnchorForMove(target, "FORWARD", distance);
-            return move;
+                if (move.Success)
+                    AdvanceAnchorForMove(target, "FORWARD", distance);
+                return move;
+            }
         }
 
-        public Task<ToolExecutionResultDto> ChangeLevelAsync(int delta)
-            => ExecuteToolAsync("changelevel", new Dictionary<string, object> { ["delta"] = delta })
-                .ContinueWith(t =>
-                {
-                    if (t.Result.Success)
-                        _connection.Store.AdvanceAnchor(0, 0, delta);
-                    return t.Result;
-                }, TaskContinuationOptions.OnlyOnRanToCompletion);
+        public async Task<ToolExecutionResultDto> ChangeLevelAsync(int delta)
+        {
+            // Same anchor-race hold as MoveRelativeAsync (see PerceptionStore.HoldFrames).
+            using (_connection.Store.HoldFrames())
+            {
+                var result = await ExecuteToolAsync("changelevel", new Dictionary<string, object> { ["delta"] = delta })
+                    .ConfigureAwait(false);
+                if (result.Success)
+                    _connection.Store.AdvanceAnchor(0, 0, delta);
+                return result;
+            }
+        }
 
         // ---- combat / interaction ----
 
