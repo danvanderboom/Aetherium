@@ -18,9 +18,14 @@ namespace Aetherium.Unity
         [SerializeField] private float cellSize = 1f;
         [Tooltip("Seconds an entity slide takes; roughly the server NPC step interval.")]
         [SerializeField] private float tweenSeconds = 0.6f;
+        [Tooltip("Render a player avatar pinned to the anchor. The local player is never a " +
+                 "tracked entity (they are the perception origin), so without this you cannot " +
+                 "see yourself.")]
+        [SerializeField] private bool showPlayerAtAnchor = true;
 
         private readonly Dictionary<string, EntityView> _views = new Dictionary<string, EntityView>();
         private AetheriumClientBehaviour _client;
+        private GameObject _playerAvatar;
 
         private sealed class EntityView
         {
@@ -54,11 +59,12 @@ namespace Aetherium.Unity
 
         private void OnAppeared(TrackedEntity entity)
         {
+            // A tracked character is always someone/something else — the local player is the
+            // perception origin, rendered separately at the anchor. A character with no
+            // Creature:<id> identity falls back to the creature default, not the player prefab.
             var prefab = entity.IsItem
                 ? theme.ResolveItem(entity.Item != null ? entity.Item.Id : "")
-                : entity.CreatureTypeId != null
-                    ? theme.ResolveCreature(entity.CreatureTypeId)
-                    : theme.ResolvePlayer();
+                : theme.ResolveCreature(entity.CreatureTypeId ?? string.Empty);
 
             var instance = Instantiate(prefab, CellToWorld(entity.Position), Quaternion.identity, transform);
             instance.name = $"{(entity.IsItem ? "item" : "entity")}:{entity.Id}";
@@ -106,6 +112,31 @@ namespace Aetherium.Unity
                 float t = tweenSeconds <= 0f ? 1f : Mathf.Clamp01((Time.time - view.TweenStartTime) / tweenSeconds);
                 view.GameObject.transform.position = Vector3.Lerp(view.From, view.To, t);
             }
+
+            UpdatePlayerAvatar();
+        }
+
+        /// <summary>
+        /// Keep a player avatar glued to the anchor and facing the current heading. The local
+        /// player is the perception origin — never in the frame's entity list — so this is the
+        /// only thing that shows you where you are.
+        /// </summary>
+        private void UpdatePlayerAvatar()
+        {
+            var store = _client.Store;
+            if (!showPlayerAtAnchor || theme == null || store == null || store.LatestFrame == null)
+                return;
+
+            if (_playerAvatar == null)
+            {
+                _playerAvatar = Instantiate(theme.ResolvePlayer(), transform);
+                _playerAvatar.name = "player:self";
+                _playerAvatar.SetActive(true);
+            }
+
+            _playerAvatar.transform.position = CellToWorld(store.Anchor);
+            // HeadingDegrees is compass-clockwise; scene north=+Z east=+X, so Unity yaw = heading.
+            _playerAvatar.transform.rotation = Quaternion.Euler(0f, store.LatestFrame.HeadingDegrees, 0f);
         }
     }
 }
