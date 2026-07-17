@@ -29,10 +29,16 @@ namespace Aphelion
             if (_busy || _behaviour.Client == null)
                 return;
 
+            // WASD: absolute compass moves (the client composes the rotate+step for you).
             if (Input.GetKeyDown(KeyCode.W)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.North));
             else if (Input.GetKeyDown(KeyCode.S)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.South));
             else if (Input.GetKeyDown(KeyCode.A)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.West));
             else if (Input.GetKeyDown(KeyCode.D)) Fire(_behaviour.Client.Tools.MoveAsync(WorldDirection.East));
+            // Arrows: the engine's native relative verbs — turn 90° and step along your heading.
+            else if (Input.GetKeyDown(KeyCode.LeftArrow)) Fire(_behaviour.Client.Tools.RotateAsync(clockwise: false));
+            else if (Input.GetKeyDown(KeyCode.RightArrow)) Fire(_behaviour.Client.Tools.RotateAsync(clockwise: true));
+            else if (Input.GetKeyDown(KeyCode.UpArrow)) Fire(_behaviour.Client.Tools.MoveForwardAsync());
+            else if (Input.GetKeyDown(KeyCode.DownArrow)) Fire(_behaviour.Client.Tools.MoveBackwardAsync());
             else if (Input.GetKeyDown(KeyCode.Space)) AttackNearestAdjacent();
             else if (Input.GetKeyDown(KeyCode.L)) ToggleLighting();
         }
