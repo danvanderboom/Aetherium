@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -690,6 +691,19 @@ namespace Aetherium.Server
 
 		var memory = Player.Get<Memory>();
 
+		// Fold this character's MemoryProfile (if any) into the world policy for this pass.
+		// Dynamics off ⇒ the profile is ignored and this is the exact legacy path.
+		var profile = Player.Has<MemoryProfile>() ? Player.Get<MemoryProfile>() : null;
+		var dynamics = policy.ResolveDynamics(
+			profile?.HalfLifeMultiplier ?? 1.0,
+			profile?.StabilityGrowthMultiplier ?? 1.0,
+			profile?.MaxLocationsOverride);
+
+		var now = DateTime.Now;
+		var touched = dynamics.Enabled && dynamics.ForgetThreshold > 0
+			? new HashSet<WorldLocation>()
+			: null;
+
 		foreach (var key in perception.Visuals.Keys)
 		{
 			// Visuals keys are relative "x,y,z" offsets from the player; convert to absolute.
@@ -704,7 +718,10 @@ namespace Aetherium.Server
 
 			var terrainName = World.GetTerrain(loc)?.Type?.Name;
 			if (terrainName != null)
-				memory.Remember(loc, "terrain", terrainName);
+			{
+				memory.Remember(loc, "terrain", terrainName, dynamics);
+				touched?.Add(loc);
+			}
 
 			if (World.EntitiesByLocation.TryGetValue(loc, out var atLoc))
 			{
@@ -712,25 +729,55 @@ namespace Aetherium.Server
 				{
 					if (entity is Aetherium.Entities.Terrain || entity.EntityId == Player.EntityId)
 						continue;
-					memory.Remember(loc, "entity", $"{entity.GetType().Name}:{entity.EntityId}");
+					memory.Remember(loc, "entity", $"{entity.GetType().Name}:{entity.EntityId}", dynamics);
+					touched?.Add(loc);
 				}
 			}
 		}
 
-		// Enforce the per-character location cap: prune whole locations oldest-first
-		// (by that location's most recent memory activity).
-		if (memory.LocationsTracked > policy.MaxLocations)
+		// Write-time forgetting (add-memory-dynamics): cull sub-threshold entries at the locations
+		// this pass touched. Reads stay pure; cold locations elsewhere are swept by the cap below.
+		if (touched != null)
 		{
-			var oldestFirst = memory.SpaceTimeMemories
-				.OrderBy(kvp => kvp.Value.Count == 0 ? DateTime.MinValue : kvp.Value.Max(m => m.LastEventTime))
-				.Select(kvp => kvp.Key)
-				.ToList();
+			foreach (var loc in touched)
+				memory.CullForgotten(loc, dynamics.ForgetThreshold, dynamics.BaseHalfLifeSeconds, now);
+		}
 
-			foreach (var loc in oldestFirst)
+		// Enforce the per-character location cap. When dynamics culling is active, drop
+		// fully-forgotten locations first, then fall back to oldest-first (by that location's most
+		// recent memory activity). Locations holding a permanent memory are never "all-forgotten"
+		// but remain eligible for the oldest-first pass — a hard resource bound outranks fidelity.
+		var maxLocations = dynamics.MaxLocations;
+		if (memory.LocationsTracked > maxLocations)
+		{
+			if (dynamics.Enabled && dynamics.ForgetThreshold > 0)
 			{
-				if (memory.LocationsTracked <= policy.MaxLocations)
-					break;
-				memory.SpaceTimeMemories.TryRemove(loc, out _);
+				foreach (var kvp in memory.SpaceTimeMemories.ToList())
+				{
+					if (memory.LocationsTracked <= maxLocations)
+						break;
+					var list = kvp.Value;
+					var allForgotten = list.Count > 0 && list.All(m => !m.Permanent
+						&& MemoryPolicy.EffectiveStrength(m.Strength, now - m.LastEventTime,
+							m.StabilitySeconds, m.Permanent, dynamics.BaseHalfLifeSeconds) < dynamics.ForgetThreshold);
+					if (allForgotten)
+						memory.SpaceTimeMemories.TryRemove(kvp.Key, out _);
+				}
+			}
+
+			if (memory.LocationsTracked > maxLocations)
+			{
+				var oldestFirst = memory.SpaceTimeMemories
+					.OrderBy(kvp => kvp.Value.Count == 0 ? DateTime.MinValue : kvp.Value.Max(m => m.LastEventTime))
+					.Select(kvp => kvp.Key)
+					.ToList();
+
+				foreach (var loc in oldestFirst)
+				{
+					if (memory.LocationsTracked <= maxLocations)
+						break;
+					memory.SpaceTimeMemories.TryRemove(loc, out _);
+				}
 			}
 		}
 	}

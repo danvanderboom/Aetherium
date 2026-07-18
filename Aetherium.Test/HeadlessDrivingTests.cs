@@ -780,6 +780,204 @@ namespace Aetherium.Test
             Assert.That(await mgmt.GetMemoryAsync(session.SessionId!), Is.Not.Null);
         }
 
+        // ---- Memory dynamics (change: add-memory-dynamics) ----
+
+        // Spec: character-memory / Memory Dynamics Opt-In — Scenario "Default off preserves legacy behavior"
+        [Test]
+        public async Task MemoryDynamics_DefaultOff_WritesNoStabilityOrPermanence()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync(); // no dynamics parameters ⇒ default off
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // Two perceptions: without dynamics, a re-encounter must not write stability/permanence.
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            var memories = doc.RootElement.GetProperty("Memories").EnumerateArray().ToList();
+            Assert.That(memories.Count, Is.GreaterThan(0));
+            Assert.That(memories.All(m => m.GetProperty("StabilitySeconds").GetDouble() == 0),
+                Is.True, "dynamics off ⇒ no stability is ever written");
+            Assert.That(memories.All(m => !m.GetProperty("Permanent").GetBoolean()),
+                Is.True, "dynamics off ⇒ nothing becomes permanent");
+        }
+
+        // Spec: character-memory / Memory Stability and Reinforcement — Scenario "Spaced re-encounter grows
+        //       stability" (observed through the read API; DTO carries the new fields)
+        [Test]
+        public async Task MemoryDynamics_SpacedReencounter_GrowsStability_VisibleViaReadApi()
+        {
+            var mgmt = Mgmt();
+            // Min interval 0 makes every re-encounter count as spaced, so the test needs no wall-clock wait.
+            var request = new CreateWorldRequest
+            {
+                Name = "Dynamics World",
+                Description = "memory dynamics enabled via generator parameters",
+                GeneratorType = "maze",
+                MaxPlayers = 10,
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                GeneratorParameters = new Dictionary<string, object>
+                {
+                    ["MemoryDynamicsEnabled"] = true,
+                    ["MemoryMinReinforcementIntervalSeconds"] = 0,
+                }
+            };
+            var worldId = await mgmt.CreateWorldAsync(request);
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // First pass records; second pass re-encounters the same content and reinforces.
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            var memories = doc.RootElement.GetProperty("Memories").EnumerateArray().ToList();
+            Assert.That(memories.Count, Is.GreaterThan(0));
+
+            // The DTO carries the new fields, and at least one re-encountered memory grew stability.
+            Assert.That(memories[0].TryGetProperty("StabilitySeconds", out _), Is.True, "DTO exposes StabilitySeconds");
+            Assert.That(memories[0].TryGetProperty("Permanent", out _), Is.True, "DTO exposes Permanent");
+            Assert.That(memories.Any(m => m.GetProperty("StabilitySeconds").GetDouble() > 0),
+                Is.True, "a spaced re-encounter grows a memory's stability");
+        }
+
+        // ---- Individual recognition (change: add-identity-recognition) ----
+
+        /// <summary>
+        /// Provisions a recognition encounter: a world (recognition optionally enabled, with a large
+        /// range so two auto-placed characters are always in range), two headless characters, and one
+        /// map-grain tick to run the sweep. Returns the worldId, the player Characters' actual entity
+        /// ids discovered from the world snapshot (a headless character's EntityId is a fresh id, not the
+        /// SessionId — an operator likewise discovers ids via `world dump`), and every entity id in the
+        /// world (players + any generator-placed monster NPCs — the large range sweeps those in too, so
+        /// a recognized individual may legitimately be a monster, not just one of the two players).
+        /// </summary>
+        private async Task<(string worldId, List<string> characterIds, HashSet<string> allEntityIds)> SetUpRecognitionEncounterAsync(bool enabled)
+        {
+            var mgmt = Mgmt();
+            var request = new CreateWorldRequest
+            {
+                Name = "Recognition World",
+                Description = "recognition sweep test",
+                GeneratorType = "maze",
+                MaxPlayers = 10,
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                GeneratorParameters = enabled
+                    ? new Dictionary<string, object> { ["RecognitionEnabled"] = true, ["RecognitionRangeTiles"] = 1000 }
+                    : new Dictionary<string, object>()
+            };
+            var worldId = await mgmt.CreateWorldAsync(request);
+
+            var a = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(a.Success, Is.True, a.Message);
+            var b = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(b.Success, Is.True, b.Message);
+
+            using var sdoc = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var mapId = sdoc.RootElement.GetProperty("MapId").GetString()!;
+            await _cluster.GrainFactory.GetGrain<IGameMapGrain>(mapId).TickAsync(TimeSpan.FromSeconds(1));
+
+            // Re-snapshot after the tick. Type=="Character" isolates the two players (Monster : Character
+            // reports Type "Monster"); the full entity id set covers everything the sweep could recognize.
+            using var after = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var entities = after.RootElement.GetProperty("Entities").EnumerateArray().ToList();
+            var characterIds = entities
+                .Where(e => e.GetProperty("Type").GetString() == "Character")
+                .Select(e => e.GetProperty("EntityId").GetString()!)
+                .ToList();
+            var allEntityIds = entities.Select(e => e.GetProperty("EntityId").GetString()!).ToHashSet();
+
+            return (worldId, characterIds, allEntityIds);
+        }
+
+        // Spec: identity-recognition / Recognition Proximity Sweep ("PCs and NPCs both participate")
+        //       + game-management-grain / Recognition Memory Retrieval ("Read a character's known individuals")
+        [Test]
+        public async Task Recognition_Sweep_RecordsCharacter_ReadableViaApi()
+        {
+            var mgmt = Mgmt();
+            var (worldId, characterIds, allEntityIds) = await SetUpRecognitionEncounterAsync(enabled: true);
+            Assert.That(characterIds.Count, Is.GreaterThanOrEqualTo(2), "two player characters were provisioned");
+
+            // At least one character now recognizes another individual, exposed via the read API with
+            // the recognition fields populated.
+            var withKnown = new List<(string id, JsonElement individual)>();
+            foreach (var id in characterIds)
+            {
+                var json = await mgmt.GetRecognitionAsync(worldId, id);
+                if (string.IsNullOrEmpty(json))
+                    continue;
+                using var doc = JsonDocument.Parse(json);
+                foreach (var ind in doc.RootElement.GetProperty("Individuals").EnumerateArray())
+                    withKnown.Add((id, ind.Clone()));
+            }
+
+            Assert.That(withKnown, Is.Not.Empty, "the sweep should record at least one known individual");
+            var (_, sample) = withKnown[0];
+            Assert.That(sample.GetProperty("Encounters").GetInt32(), Is.GreaterThanOrEqualTo(1));
+            Assert.That(sample.TryGetProperty("EffectiveFamiliarity", out _), Is.True, "DTO exposes EffectiveFamiliarity");
+            Assert.That(sample.TryGetProperty("Permanent", out _), Is.True, "DTO exposes Permanent");
+            // The recognized individual is a real entity in the world — with the range this wide, the
+            // sweep may legitimately recognize a generator-placed monster NPC, not just the two players.
+            Assert.That(allEntityIds, Does.Contain(sample.GetProperty("EntityId").GetString()));
+        }
+
+        // Spec: identity-recognition / Per-World Recognition Configuration — Scenario "Opt-in default off"
+        [Test]
+        public async Task Recognition_DisabledByDefault_NoState()
+        {
+            var mgmt = Mgmt();
+            var (worldId, characterIds, _) = await SetUpRecognitionEncounterAsync(enabled: false);
+            Assert.That(characterIds, Is.Not.Empty);
+
+            foreach (var id in characterIds)
+                Assert.That(await mgmt.GetRecognitionAsync(worldId, id), Is.Null,
+                    "recognition disabled ⇒ no recognition component recorded ⇒ null read");
+        }
+
+        // Spec: game-management-grain / Recognition Memory Retrieval —
+        //       Scenario "Operator gate" + "Unknown world or entity"
+        [Test]
+        public async Task Recognition_OperatorGate_And_Unknown()
+        {
+            var mgmt = Mgmt();
+
+            // Unknown world.
+            Assert.That(await mgmt.GetRecognitionAsync($"nope-{Guid.NewGuid()}", "x"), Is.Null);
+
+            var (worldId, characterIds, _) = await SetUpRecognitionEncounterAsync(enabled: true);
+
+            // Find a character that actually has recognition state.
+            string? known = null;
+            foreach (var id in characterIds)
+            {
+                if (!string.IsNullOrEmpty(await mgmt.GetRecognitionAsync(worldId, id)))
+                {
+                    known = id;
+                    break;
+                }
+            }
+            Assert.That(known, Is.Not.Null, "at least one character should have recognition state");
+
+            // Unknown entity in a real world.
+            Assert.That(await mgmt.GetRecognitionAsync(worldId, $"ghost-{Guid.NewGuid()}"), Is.Null);
+
+            // Operator gate.
+            try
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, "1");
+                Assert.That(await mgmt.GetRecognitionAsync(worldId, known), Is.Null);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, null);
+            }
+
+            Assert.That(await mgmt.GetRecognitionAsync(worldId, known), Is.Not.Null);
+        }
+
         // Spec: game-management-grain / Runtime World Tool Execution — Scenario "Operator gating"
         [Test]
         public async Task WorldTool_OperatorGate_Denies()

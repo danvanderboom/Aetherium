@@ -28,6 +28,18 @@ namespace Aetherium.Server.Eca
             "the killer, and the death location.");
     }
 
+    /// <summary>Raised by the canonical-world recognition sweep when a character recognizes another
+    /// (add-identity-recognition), once per encounter.</summary>
+    public sealed class CharacterRecognizedTrigger : IEcaTile
+    {
+        public const string Id = "character_recognized";
+        public EcaTileDefinition Definition { get; } = new(
+            Id, EcaTileRole.Trigger,
+            "Fires when one character recognizes another within range (once per encounter). Binds the " +
+            "recognizer, the recognized character, both kinds, the effective familiarity, whether this " +
+            "is a first meeting, and the recognizer's location.");
+    }
+
     // --- Conditions ---
 
     /// <summary>True when the dead creature's type equals a given content creature id.</summary>
@@ -57,6 +69,54 @@ namespace Aetherium.Server.Eca
             {
                 new EcaParameter(ProbabilityParam, EcaValueType.Number, required: true,
                     "Probability in [0, 1] that this condition passes."),
+            });
+    }
+
+    /// <summary>True when the recognized character's kind matches (add-identity-recognition).</summary>
+    public sealed class RecognizedKindIsCondition : IEcaTile
+    {
+        public const string Id = "recognized_kind_is";
+        public const string KindParam = "kind";
+        public EcaTileDefinition Definition { get; } = new(
+            Id, EcaTileRole.Condition,
+            "True when the recognized character's kind equals the named kind (creature type, or " +
+            "\"character\" for a player).",
+            new[]
+            {
+                new EcaParameter(KindParam, EcaValueType.Text, required: true,
+                    "The kind to match against the recognized character."),
+            });
+    }
+
+    /// <summary>True when the event's effective familiarity meets a minimum (add-identity-recognition).</summary>
+    public sealed class FamiliarityAtLeastCondition : IEcaTile
+    {
+        public const string Id = "familiarity_at_least";
+        public const string MinParam = "minFamiliarity";
+        public EcaTileDefinition Definition { get; } = new(
+            Id, EcaTileRole.Condition,
+            "True when the recognizer's effective familiarity with the recognized character is at least " +
+            "the given value (0..1).",
+            new[]
+            {
+                new EcaParameter(MinParam, EcaValueType.Number, required: true,
+                    "Minimum effective familiarity in [0, 1]."),
+            });
+    }
+
+    /// <summary>Gates on whether the recognition is a first meeting (add-identity-recognition).</summary>
+    public sealed class FirstMeetingIsCondition : IEcaTile
+    {
+        public const string Id = "first_meeting_is";
+        public const string ValueParam = "firstMeeting";
+        public EcaTileDefinition Definition { get; } = new(
+            Id, EcaTileRole.Condition,
+            "True when the event's first-meeting flag equals the given value — distinguish a stranger " +
+            "(true) from a known individual (false).",
+            new[]
+            {
+                new EcaParameter(ValueParam, EcaValueType.Boolean, required: true,
+                    "Whether the rule fires only on a first meeting (true) or only on a re-encounter (false)."),
             });
     }
 
@@ -100,7 +160,11 @@ namespace Aetherium.Server.Eca
                 new EcaParameter(DamageTypeParam, EcaValueType.Text, required: false,
                     "Damage type tag (campaign-defined; defaults to \"physical\")."),
             },
-            validTargets: new[] { nameof(EcaActionTarget.Killer), nameof(EcaActionTarget.Victim) });
+            validTargets: new[]
+            {
+                nameof(EcaActionTarget.Killer), nameof(EcaActionTarget.Victim),
+                nameof(EcaActionTarget.Recognizer), nameof(EcaActionTarget.Recognized),
+            });
     }
 
     /// <summary>Applies a shipped status effect (burning/slowed/prone) to the killer or victim.</summary>
@@ -129,6 +193,10 @@ namespace Aetherium.Server.Eca
                     "Per-status magnitude: damage-per-tick for burning, speed multiplier for slowed; " +
                     "ignored for prone."),
             },
-            validTargets: new[] { nameof(EcaActionTarget.Killer), nameof(EcaActionTarget.Victim) });
+            validTargets: new[]
+            {
+                nameof(EcaActionTarget.Killer), nameof(EcaActionTarget.Victim),
+                nameof(EcaActionTarget.Recognizer), nameof(EcaActionTarget.Recognized),
+            });
     }
 }

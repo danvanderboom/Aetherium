@@ -546,7 +546,16 @@ namespace Aetherium.Server.Management
             try
             {
                 var memory = player.Get<Aetherium.Components.Memory>();
-                var halfLife = session.World.MemoryPolicy.DecayHalfLifeSeconds;
+
+                // Resolve the character's effective decay fallback (world policy × any MemoryProfile),
+                // so effective strength honors per-memory stability and permanence (add-memory-dynamics).
+                var profile = player.Has<Aetherium.Components.MemoryProfile>()
+                    ? player.Get<Aetherium.Components.MemoryProfile>() : null;
+                var dynamics = session.World.MemoryPolicy.ResolveDynamics(
+                    profile?.HalfLifeMultiplier ?? 1.0,
+                    profile?.StabilityGrowthMultiplier ?? 1.0,
+                    profile?.MaxLocationsOverride);
+                var fallbackHalfLife = dynamics.BaseHalfLifeSeconds;
 
                 var dto = new CharacterMemoryDto
                 {
@@ -564,9 +573,12 @@ namespace Aetherium.Server.Management
                         ContentType = m.ContentType,
                         Content = m.Content,
                         Strength = m.Strength,
-                        EffectiveStrength = Aetherium.Core.MemoryPolicy.EffectiveStrength(m.Strength, m.TimeSinceLastSeen, halfLife),
+                        EffectiveStrength = Aetherium.Core.MemoryPolicy.EffectiveStrength(
+                            m.Strength, m.TimeSinceLastSeen, m.StabilitySeconds, m.Permanent, fallbackHalfLife),
                         Impressions = m.Impressions,
-                        LastEventTime = m.LastEventTime
+                        LastEventTime = m.LastEventTime,
+                        StabilitySeconds = m.StabilitySeconds,
+                        Permanent = m.Permanent
                     });
                 }
 
@@ -575,6 +587,62 @@ namespace Aetherium.Server.Management
             catch (Exception ex)
             {
                 Console.WriteLine($"[GameManagementGrain] Error reading memory for session {sessionId}: {ex.Message}");
+                return Task.FromResult<string?>(null);
+            }
+        }
+
+        public Task<string?> GetRecognitionAsync(string worldId, string entityId)
+        {
+            // Recognition state carries individual identities and absolute knowledge — a god-view read,
+            // gated like absolute perception, world snapshots, and memory.
+            if (!OperatorAccess.IsEnabled())
+                return Task.FromResult<string?>(null);
+
+            if (string.IsNullOrEmpty(worldId) || string.IsNullOrEmpty(entityId))
+                return Task.FromResult<string?>(null);
+
+            var world = _liveWorlds?.Resolve(worldId);
+            if (world == null || !world.Entities.TryGetValue(entityId, out var entity))
+                return Task.FromResult<string?>(null);
+
+            if (!entity.Has<Aetherium.Components.IndividualRecognition>())
+                return Task.FromResult<string?>(null);
+
+            try
+            {
+                var recognition = entity.Get<Aetherium.Components.IndividualRecognition>();
+                var halfLife = world.RecognitionPolicy.FamiliarityHalfLifeSeconds;
+                var now = DateTime.UtcNow;
+
+                var dto = new RecognitionDto
+                {
+                    WorldId = worldId,
+                    EntityId = entityId,
+                    Kind = Aetherium.Components.RecognitionKind.Resolve(entity),
+                    KnownCount = recognition.Count
+                };
+
+                foreach (var k in recognition.KnownIndividuals.Values)
+                {
+                    dto.Individuals.Add(new KnownIndividualDto
+                    {
+                        EntityId = k.EntityId,
+                        Kind = k.Kind,
+                        FirstMet = k.FirstMet,
+                        LastSeen = k.LastSeen,
+                        Encounters = k.Encounters,
+                        Strength = k.Strength,
+                        EffectiveFamiliarity = recognition.EffectiveFamiliarity(k, now, halfLife),
+                        StabilitySeconds = k.StabilitySeconds,
+                        Permanent = k.Permanent
+                    });
+                }
+
+                return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(dto));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error reading recognition for {entityId} in {worldId}: {ex.Message}");
                 return Task.FromResult<string?>(null);
             }
         }

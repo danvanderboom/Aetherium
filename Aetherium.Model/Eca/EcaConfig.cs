@@ -51,6 +51,15 @@ namespace Aetherium.Model.Eca
 
         // chance
         [Id(2)] public double Probability { get; set; }
+
+        // recognized_kind_is (add-identity-recognition)
+        [Id(3)] public string? RecognizedKind { get; set; }
+
+        // familiarity_at_least (add-identity-recognition)
+        [Id(4)] public double MinFamiliarity { get; set; }
+
+        // first_meeting_is (add-identity-recognition)
+        [Id(5)] public bool FirstMeeting { get; set; }
     }
 
     /// <summary>Which entity an action that resolves a target applies to.</summary>
@@ -61,6 +70,10 @@ namespace Aetherium.Model.Eca
         Killer,
         /// <summary>The entity that died (still present as Dying/Corpse at execution time).</summary>
         Victim,
+        /// <summary>The character doing the recognizing (add-identity-recognition).</summary>
+        Recognizer,
+        /// <summary>The character being recognized (add-identity-recognition).</summary>
+        Recognized,
     }
 
     /// <summary>

@@ -62,10 +62,12 @@ namespace Aetherctl.Commands
                             foreach (var m in memories)
                             {
                                 var loc = m.GetProperty("Location");
+                                var permanent = m.TryGetProperty("Permanent", out var permProp) && permProp.GetBoolean();
+                                var stability = m.TryGetProperty("StabilitySeconds", out var stabProp) ? stabProp.GetDouble() : 0;
                                 Console.WriteLine(
                                     $"    ({loc.GetProperty("X").GetInt32()},{loc.GetProperty("Y").GetInt32()},{loc.GetProperty("Z").GetInt32()}) " +
                                     $"{m.GetProperty("ContentType").GetString()}={m.GetProperty("Content").GetString()} " +
-                                    $"eff={m.GetProperty("EffectiveStrength").GetDouble():F2} x{m.GetProperty("Impressions").GetInt32()}");
+                                    $"eff={m.GetProperty("EffectiveStrength").GetDouble():F2} x{m.GetProperty("Impressions").GetInt32()}{FormatDurability(permanent, stability)}");
                             }
                         }
                     }
@@ -78,6 +80,20 @@ namespace Aetherctl.Commands
 
             memoryCmd.AddCommand(getCmd);
             root.AddCommand(memoryCmd);
+        }
+
+        /// <summary>
+        /// Formats a memory's durability suffix for the table view (add-memory-dynamics): a permanent
+        /// memory never fades; otherwise, once reinforcement has grown its stability past the world
+        /// default, its own half-life is shown in hours. A stability-0 memory has no suffix.
+        /// </summary>
+        public static string FormatDurability(bool permanent, double stabilitySeconds)
+        {
+            if (permanent)
+                return " [permanent]";
+            if (stabilitySeconds > 0)
+                return $" stab={stabilitySeconds / 3600.0:F1}h";
+            return string.Empty;
         }
     }
 }

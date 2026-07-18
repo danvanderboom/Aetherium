@@ -268,6 +268,12 @@ namespace Aetherium.Server.Games
                 { [CreatureTypeIsCondition.CreatureTypeParam] = c.CreatureType },
             ChanceCondition.Id => new Dictionary<string, object?>
                 { [ChanceCondition.ProbabilityParam] = c.Probability },
+            RecognizedKindIsCondition.Id => new Dictionary<string, object?>
+                { [RecognizedKindIsCondition.KindParam] = c.RecognizedKind },
+            FamiliarityAtLeastCondition.Id => new Dictionary<string, object?>
+                { [FamiliarityAtLeastCondition.MinParam] = c.MinFamiliarity },
+            FirstMeetingIsCondition.Id => new Dictionary<string, object?>
+                { [FirstMeetingIsCondition.ValueParam] = c.FirstMeeting },
             _ => new Dictionary<string, object?>(),
         };
 

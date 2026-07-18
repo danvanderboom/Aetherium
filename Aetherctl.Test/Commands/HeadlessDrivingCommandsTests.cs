@@ -91,6 +91,33 @@ namespace Aetherctl.Test.Commands
             Assert.Contains(getCmd!.Arguments, a => a.Name == "sessionId");
         }
 
+        // Spec: aetherctl / Recognition Inspection Command (change: add-identity-recognition)
+        [Fact]
+        public void RecognitionGet_ExistsWithWorldIdAndEntityIdArguments()
+        {
+            var root = new RootCommand();
+            RecognitionCommands.AddToRoot(root);
+
+            var recognitionCmd = root.Subcommands.FirstOrDefault(c => c.Name == "recognition");
+            Assert.NotNull(recognitionCmd);
+
+            var getCmd = recognitionCmd!.Subcommands.FirstOrDefault(c => c.Name == "get");
+            Assert.NotNull(getCmd);
+            Assert.Contains(getCmd!.Arguments, a => a.Name == "worldId");
+            Assert.Contains(getCmd.Arguments, a => a.Name == "entityId");
+        }
+
+        // Spec: character-memory / Memory Permanence + Stability display (change: add-memory-dynamics)
+        [Fact]
+        public void MemoryGet_FormatsDurabilitySuffix()
+        {
+            // Permanent wins over stability; grown stability shows the memory's own half-life in hours;
+            // a never-reinforced (stability 0) memory has no suffix.
+            Assert.Equal(" [permanent]", MemoryCommands.FormatDurability(permanent: true, stabilitySeconds: 7200));
+            Assert.Equal(" stab=2.0h", MemoryCommands.FormatDurability(permanent: false, stabilitySeconds: 7200));
+            Assert.Equal(string.Empty, MemoryCommands.FormatDurability(permanent: false, stabilitySeconds: 0));
+        }
+
         // Spec: aetherctl / World Edit Commands — spawn convenience (change: add-aetherctl-runtime-worldbuilding)
         [Fact]
         public void WorldSpawn_ExistsWithRequiredTypeAndAt()
