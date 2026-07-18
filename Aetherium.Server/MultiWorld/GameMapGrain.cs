@@ -808,7 +808,7 @@ namespace Aetherium.Server.MultiWorld
             if (!policy.Enabled)
                 return;
 
-            var characters = _world.Entities.Values.OfType<Character>()
+            var characters = _world.Characters.Values
                 .Where(c => c.Has<Aetherium.Components.WorldLocation>()
                             && !c.Has<Dying>() && !c.Has<Corpse>() && !c.Has<Downed>())
                 .ToList();
@@ -1512,8 +1512,8 @@ namespace Aetherium.Server.MultiWorld
         {
             if (_world is null) return;
 
-            var downedPlayers = _world.Entities.Values.OfType<Character>().Where(c => c.Has<Downed>()).ToList();
-            var invulnerablePlayers = _world.Entities.Values.OfType<Character>().Where(c => c.Has<RespawnInvulnerable>()).ToList();
+            var downedPlayers = _world.Characters.Values.Where(c => c.Has<Downed>()).ToList();
+            var invulnerablePlayers = _world.Characters.Values.Where(c => c.Has<RespawnInvulnerable>()).ToList();
             if (downedPlayers.Count == 0 && invulnerablePlayers.Count == 0)
                 return;
 
