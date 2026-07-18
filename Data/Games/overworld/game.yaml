@@ -1,0 +1,45 @@
+# Overworld — the open-world sandbox sample.
+# A large continent of wilderness (plains, forest, desert, hills, mountains, rivers) with
+# three cities of distinct character joined by roads. Buildings are enterable; some doors
+# lock and their keys are dropped nearby; some walls are windows (see-through, impassable).
+# No monsters: this world exists to exercise the procedural-generation, door/key, and
+# window/lighting systems, not combat. Bright outdoors; interiors want a carried light.
+id: overworld
+name: Overworld
+version: 0.1.0
+description: A large open world of wilderness and three cities — roam the plains and deserts, follow the roads between towns, and let yourself into the buildings.
+# The "daylight" tag makes the engine fix the sun at noon (no day/night cycle) and render
+# under Sunlight — an always-bright outdoor sandbox, so night never collapses the view.
+tags: [openworld, sandbox, sample, daylight]
+
+world:
+  # The overworld generator: two-axis noise terrain (elevation + moisture, so deserts are
+  # real dry regions), rivers, three cities (grid capital, organic town, sparse outpost),
+  # and a road network. See OverworldGenerator.cs.
+  generatorType: overworld
+  size: { width: 384, height: 384, depth: 1 }
+  maxPlayers: 40
+  generatorParameters:
+    seed: 20260717   # fixed for reproducible dev worlds; remove for a random continent
+    # Monster budget for the whole map. The population pass otherwise scales monsters to
+    # passable area (~1 per 50 tiles → ~2,200 on a 384² map), which both overcrowds a
+    # "wilderness to roam" world and pins the sim: every roaming monster fans out a move
+    # delta each tick, and thousands of those starve player input on the single-threaded
+    # map grain. 20 keeps the world calm and responsive; raise it deliberately.
+    enemyCount: 20
+
+# Full 360° sight (no monster tension to warrant a cone), with a wide view horizon so the
+# open world reads — `range` sizes the perception viewport (≈ cells you can see out to).
+player:
+  vision:
+    directional: false
+    fieldOfView: 360
+    range: 18
+
+# No monsters and no combat, so death is effectively unreachable — a gentle policy anyway.
+death:
+  permadeath: false
+  downStateEnabled: false
+  dropOnDeath: None
+  respawnLocation: { mode: WorldSpawn }
+  xpLossPolicy: None

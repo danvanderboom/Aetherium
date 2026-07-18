@@ -180,6 +180,41 @@ namespace Aetherium.Server
         }
 
         /// <summary>
+        /// Batch variant of <see cref="NotifyMapMutationAsync"/>: applies a whole tick's worth of
+        /// deltas (e.g. every roaming monster's move) to each affected session under a single lock
+        /// acquisition, then schedules ONE perception flush. Applying deltas one-at-a-time made the
+        /// NPC tick acquire the session lock once per monster — each contending with the perception
+        /// flush that holds the same lock — which is what pinned the map grain and starved player
+        /// input. The debounced flush already coalesces the frame, so a batch still yields at most
+        /// one pushed frame per window.
+        /// </summary>
+        public Task NotifyMapMutationsAsync(string mapId, System.Collections.Generic.IReadOnlyList<MapDelta> deltas)
+        {
+            if (string.IsNullOrEmpty(mapId) || deltas is null || deltas.Count == 0) return Task.CompletedTask;
+
+            var affected = sessions.Values
+                .Where(s => s.MapId == mapId)
+                .ToList();
+
+            foreach (var session in affected)
+            {
+                try
+                {
+                    session.ApplyDeltas(deltas);
+                    if (!string.IsNullOrEmpty(session.ConnectionId))
+                        dirtyPerception[session.ConnectionId] = 1;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[GameSessionManager] Batch delta application failed for session {session.SessionId}: {ex.Message}");
+                }
+            }
+
+            SchedulePerceptionFlush();
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
         /// Debounced perception fan-out: at most one frame per dirty session per
         /// <see cref="PerceptionFlushWindowMs"/> window, coalescing however many deltas
         /// landed in between. Each flush computes perception fresh (FOV filtering,

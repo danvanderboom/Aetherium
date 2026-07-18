@@ -107,6 +107,34 @@ namespace Aetherium.Test.Games
         }
 
         [Test]
+        public void ApplyCreature_StampsPerTypeVision_OntoHeading()
+        {
+            // Each character type carries its own vision: a directional creature gets a forward
+            // cone on its HasHeading (which the agent-perception path reads to filter sight);
+            // a creature with no vision block stays omnidirectional.
+            var world = NewWorld();
+
+            var seer = new Monster(world);
+            ContentCompiler.ApplyCreature(seer, new Aetherium.Model.Content.CreatureDefinition
+            {
+                Id = "seer", Name = "Seer", Health = 10,
+                Vision = new Aetherium.Model.Content.VisionConfig { Directional = true, FieldOfView = 70, Range = 12 },
+            }, world);
+            var seerHeading = seer.Get<HasHeading>();
+            Assert.That(seerHeading.IsDirectional, Is.True);
+            Assert.That(seerHeading.FieldOfViewDegrees, Is.EqualTo(70));
+            Assert.That(seerHeading.ViewRange, Is.EqualTo(12));
+
+            var blind = new Monster(world);
+            ContentCompiler.ApplyCreature(blind, new Aetherium.Model.Content.CreatureDefinition
+            {
+                Id = "blob", Name = "Blob", Health = 10,
+            }, world);
+            Assert.That(blind.Get<HasHeading>().IsDirectional, Is.False,
+                "a creature with no vision block stays omnidirectional");
+        }
+
+        [Test]
         public void ApplyCreature_PreserveHealthLevel_KeepsCurrentDamage()
         {
             // The snapshot re-hydration path (spec: "Content Survives Reactivation"): a wolf at

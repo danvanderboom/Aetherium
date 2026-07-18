@@ -58,6 +58,16 @@ namespace Aetherium.Server.MultiWorld
         // Pruned in StepNpcsAsync whenever a monster leaves _world.Entities.
         private readonly Dictionary<string, BehaviorTree> _monsterTrees = new();
 
+        // --- opt-in perf instrumentation (set AETHERIUM_PERF=1) ---
+        // Counts NPC steps and the deltas they fan out per window, so we can see how much the
+        // roaming-monster tick is driving the perception-flush load (each moved monster dirties
+        // every co-located session and schedules a fresh FOV perception).
+        private static readonly bool NpcPerfLog = Environment.GetEnvironmentVariable("AETHERIUM_PERF") == "1";
+        private long _npcPerfWindowStartMs = -1;
+        private long _npcPerfTicks;
+        private long _npcPerfMoves;
+        private int _npcPerfLastMonsterCount;
+
         // AP a monster spends per behavior-tree tick in the continuous action pipeline
         // (engine gap-analysis §4.1). A default Monster carries Speed == MaxBudget == this,
         // so it affords an action every eligible tick (parity with pre-pipeline behavior);
@@ -1168,10 +1178,24 @@ namespace Aetherium.Server.MultiWorld
             var bearing = character.Get<Aetherium.Components.HasHeading>()?.ToWorldDirection()
                 ?? Aetherium.WorldDirection.North;
 
+            // Honor the creature's per-type vision (content.yaml `vision:`): a directional
+            // creature only perceives its forward cone, exactly as the human player does when
+            // directional vision is on — so an AI hunter's field of view is a real constraint,
+            // not just a client presentation detail.
+            var heading = character.Get<Aetherium.Components.HasHeading>();
+            bool directional = heading?.IsDirectional ?? false;
+            int? headingDegrees = directional ? heading!.Heading : (int?)null;
+            int? fovDegrees = directional ? heading!.FieldOfViewDegrees : (int?)null;
+
             // Passing the character as `self` populates the interoception channel — the
             // player's own health/statuses/pools/cooldowns (add-interoception-channel).
             var perception = new Aetherium.Server.PerceptionService()
-                .ComputePerception(_world, location, bearing, new System.Drawing.Size(40, 40), self: character);
+                .ComputePerception(
+                    _world, location, bearing, new System.Drawing.Size(40, 40),
+                    Aetherium.Model.LightingMode.Torch, Aetherium.Model.VisionMode.Normal,
+                    heatTracker: null, currentTime: System.DateTime.UtcNow,
+                    directionalVision: directional, headingDegrees: headingDegrees, fovDegrees: fovDegrees,
+                    self: character);
             var json = System.Text.Json.JsonSerializer.Serialize(perception);
             return Task.FromResult<string?>(json);
         }
@@ -1181,12 +1205,17 @@ namespace Aetherium.Server.MultiWorld
             if (_mapState.State == null || _regions == null)
                 return;
 
+            var tickTs0 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
             // Tick all regions in parallel with game time
             var tickTasks = _regions.Values
                 .Select(region => region.TickAsync(gameTimeElapsed))
                 .ToList();
 
             await Task.WhenAll(tickTasks);
+
+            var msRegions = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs0).TotalMilliseconds : 0.0;
+            var tickTs1 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
             // Drive NPC/monster behavior. Runs on the grain's activation turn, so it
             // is serialized with player mutations on the same _world — no cross-thread
@@ -1195,10 +1224,14 @@ namespace Aetherium.Server.MultiWorld
             _tickCounter++;
             await StepNpcsAsync();
 
+            var msNpc = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs1).TotalMilliseconds : 0.0;
+
             // Individual recognition (add-identity-recognition): after positions settle, sweep the
             // canonical world for characters within recognition range and raise character_recognized
             // rules. No-op when the world's RecognitionPolicy is disabled (the default).
             await RunRecognitionSweepAsync();
+
+            var tickTs2 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
             // Death lifecycle bookkeeping (engine gap-analysis §4.2/§4.11): advance every Dying
             // entity's countdown to Corpse, then age/expire corpses per DeathPolicy. Both are
@@ -1218,10 +1251,16 @@ namespace Aetherium.Server.MultiWorld
                 TickAbilityUpkeep();
             }
 
+            var msDeathAbility = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs2).TotalMilliseconds : 0.0;
+            var tickTs3 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
             // Player death lifecycle (engine gap-analysis §4.11, Phase 2 — see
             // wire-death-respawn-live): advance every Downed player's countdown and any
             // post-respawn invulnerability window.
             await TickDownedAndInvulnerablePlayersAsync();
+
+            var msDowned = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs3).TotalMilliseconds : 0.0;
+            var tickTs4 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
             // Heat trail cleanup. Capture which cells had trails before cleanup, run
             // cleanup, then diff to find cells that just lost their last trail. Emit
@@ -1251,6 +1290,16 @@ namespace Aetherium.Server.MultiWorld
             catch (Exception ex)
             {
                 Console.WriteLine($"[GameMapGrain] Heat cleanup failed: {ex.Message}");
+            }
+
+            if (NpcPerfLog)
+            {
+                var msHeat = System.Diagnostics.Stopwatch.GetElapsedTime(tickTs4).TotalMilliseconds;
+                var msTotal = System.Diagnostics.Stopwatch.GetElapsedTime(tickTs0).TotalMilliseconds;
+                var entityCount = _world?.Entities.Count ?? 0;
+                Console.WriteLine(
+                    $"[PERF] tick total={msTotal:F0}ms | regions({_regions.Count})={msRegions:F0} stepNpcs={msNpc:F0} " +
+                    $"deathAbility={msDeathAbility:F0} downed={msDowned:F0} heat={msHeat:F0} | entities={entityCount}");
             }
         }
 
@@ -1385,13 +1434,33 @@ namespace Aetherium.Server.MultiWorld
                 }
             }
 
-            // Phase 2 (async): broadcast. FanOutAsync persists each delta and routes
-            // it through the session manager, which reconciles every co-located
-            // session's mirror and pushes a fresh FOV-filtered perception.
-            foreach (var move in moves)
-                await FanOutAsync(move);
-            foreach (var delta in combatDeltas)
-                await FanOutAsync(delta);
+            if (NpcPerfLog)
+            {
+                var now = Environment.TickCount64;
+                if (_npcPerfWindowStartMs < 0) _npcPerfWindowStartMs = now;
+                _npcPerfTicks++;
+                _npcPerfMoves += moves.Count;
+                _npcPerfLastMonsterCount = monsters.Count;
+                var elapsed = now - _npcPerfWindowStartMs;
+                if (elapsed >= 2000)
+                {
+                    Console.WriteLine(
+                        $"[PERF] npc {this.GetPrimaryKeyString()}: monsters={_npcPerfLastMonsterCount}, " +
+                        $"{_npcPerfTicks} steps in {elapsed}ms, {_npcPerfMoves} moves fanned out " +
+                        $"({_npcPerfMoves * 1000.0 / elapsed:F1}/s)");
+                    _npcPerfTicks = 0; _npcPerfMoves = 0; _npcPerfWindowStartMs = now;
+                }
+            }
+
+            // Phase 2 (async): broadcast the whole tick as ONE batch. The session manager applies
+            // every delta under a single per-session lock and schedules a single perception flush —
+            // instead of one lock acquisition + flush schedule per monster, which contended with the
+            // flush and pinned this single-threaded grain (starving player commands). Moves first,
+            // then combat, preserving the order observers would have seen per-delta.
+            var tickDeltas = new List<MapDelta>(moves.Count + combatDeltas.Count);
+            tickDeltas.AddRange(moves);
+            tickDeltas.AddRange(combatDeltas);
+            await FanOutBatchAsync(tickDeltas);
             foreach (var evt in playerEvents)
                 await SendPlayerEventAsync(evt.SessionId, evt.EventName, evt.Vitals);
         }
@@ -1977,6 +2046,38 @@ namespace Aetherium.Server.MultiWorld
             {
                 // Mutation has already happened; a host-side failure must not roll it back.
                 Console.WriteLine($"[GameMapGrain] FanOut failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Fans out a whole tick's worth of deltas as one batch: sequences and persists each, then
+        /// hands the batch to the session manager, which applies them all under a single per-session
+        /// lock and schedules ONE perception flush. The per-delta <see cref="FanOutAsync"/> path took
+        /// the session lock once per delta — so a 20-monster tick took the lock 20 times, each
+        /// contending with the perception flush, stretching the tick to seconds and starving player
+        /// commands on this single-threaded grain. Used by <see cref="StepNpcsAsync"/>.
+        /// </summary>
+        private async Task FanOutBatchAsync(IReadOnlyList<MapDelta> deltas)
+        {
+            if (_mapState.State is null || deltas is null || deltas.Count == 0) return;
+
+            foreach (var delta in deltas)
+            {
+                delta.MapId = _mapState.State.MapId;
+                delta.Sequence = System.Threading.Interlocked.Increment(ref _nextSequence);
+                await PersistDeltaAsync(delta);
+            }
+
+            var mgr = GetSessionManager();
+            if (mgr is null) return; // not wired (TestingHost path) — no consumers, no problem
+
+            try
+            {
+                await mgr.NotifyMapMutationsAsync(_mapState.State.MapId, deltas);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameMapGrain] Batch FanOut failed: {ex.Message}");
             }
         }
 
@@ -2801,7 +2902,11 @@ namespace Aetherium.Server.MultiWorld
         {
             if (_world is null) return;
 
-            foreach (var entity in _world.Entities.Values)
+            // Ability cooldowns and resource pools live only on characters (players/monsters).
+            // Iterate the Characters index, not world.Entities — on a large outdoor map the latter
+            // is ~150k tile entities, and scanning them all every tick cost ~2.6s and starved player
+            // input on the single-threaded grain (see the death/corpse systems, same fix).
+            foreach (var entity in _world.Characters.Values)
             {
                 if (entity.Has<AbilityCooldowns>())
                     entity.Get<AbilityCooldowns>().Tick();

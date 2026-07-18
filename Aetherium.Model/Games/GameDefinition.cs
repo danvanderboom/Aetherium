@@ -52,6 +52,23 @@ namespace Aetherium.Model.Games
         [Id(9)] public FactionConfig? Factions { get; set; }
         [Id(10)] public Aetherium.Model.Content.ContentConfig? Content { get; set; }
         [Id(11)] public Aetherium.Model.Eca.EcaConfig? Rules { get; set; }
+
+        /// <summary>The human player's own character-type config (currently just vision). The
+        /// YAML `player:` section binds here. Null keeps the engine default: omnidirectional
+        /// sight with a 120° FOV that only matters if a game turns directional vision on.</summary>
+        [Id(12)] public GamePlayerDefinition? Player { get; set; }
+    }
+
+    /// <summary>
+    /// The player-as-a-character-type section of a <see cref="GameDefinition"/>. The player isn't
+    /// a content-catalog creature, so its per-type traits (vision today; loadout/attributes later)
+    /// live here. The YAML `player:` section binds here.
+    /// </summary>
+    [GenerateSerializer]
+    public class GamePlayerDefinition
+    {
+        /// <summary>The player's vision cone/range. Null = the engine default (omnidirectional).</summary>
+        [Id(0)] public Aetherium.Model.Content.VisionConfig? Vision { get; set; }
     }
 
     [GenerateSerializer]

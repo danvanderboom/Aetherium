@@ -113,6 +113,31 @@ namespace Aetherium.Server.Content
             entity.Set(new ActionSpeed(speed: definition.Speed, maxBudget: 1.0));
             entity.Set(new Tile { Type = EnsureTileType(world, definition) });
             entity.Set(new Aetherium.Components.CreatureTypeTag(definition.Id));
+            ApplyVision(entity, definition.Vision);
+        }
+
+        /// <summary>
+        /// Stamps a creature's per-type vision (directionality/FOV/range) onto its
+        /// <see cref="Aetherium.Components.HasHeading"/> — get-or-create so callers needn't
+        /// pre-add it. A null config leaves the creature omnidirectional (legacy default). This
+        /// is what makes each character type able to perceive differently; the agent-perception
+        /// path reads these fields to filter what an AI creature can see.
+        /// </summary>
+        public static void ApplyVision(Entity entity, Aetherium.Model.Content.VisionConfig? vision)
+        {
+            if (vision is null)
+                return;
+
+            var heading = entity.Has<Aetherium.Components.HasHeading>()
+                ? entity.Get<Aetherium.Components.HasHeading>()
+                : new Aetherium.Components.HasHeading();
+
+            heading.IsDirectional = vision.Directional;
+            if (vision.Directional)
+                heading.FieldOfViewDegrees = System.Math.Clamp(vision.FieldOfView, 1, 360);
+            heading.ViewRange = vision.Range;
+
+            entity.Set(heading);
         }
 
         /// <summary>

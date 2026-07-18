@@ -57,6 +57,32 @@ namespace Aetherium.Model.Content
         /// <summary>Item this creature drops on death; null drops nothing. (A victim with no
         /// definition at all keeps the legacy SwordItem drop.)</summary>
         [Id(9)] public string? LootItemId { get; set; }
+
+        /// <summary>Optional per-type vision: directionality, field-of-view span, and range.
+        /// Null leaves the creature omnidirectional (the legacy default).</summary>
+        [Id(10)] public VisionConfig? Vision { get; set; }
+    }
+
+    /// <summary>
+    /// Per-character-type vision: whether sight is a forward cone and how wide/far it reaches.
+    /// Shared by creature definitions and the player definition, so a bundle can give a human a
+    /// ~120° arc, an infrared hunter a wide long-range cone, and a stationary sensor full
+    /// omnidirectional coverage. When <see cref="Directional"/> is true the perception frame is
+    /// genuinely smaller — cells outside the cone are never computed or sent.
+    /// </summary>
+    [GenerateSerializer]
+    public class VisionConfig
+    {
+        /// <summary>True = forward cone (uses <see cref="FieldOfView"/>); false = sees all around.</summary>
+        [Id(0)] public bool Directional { get; set; }
+
+        /// <summary>Cone span in degrees (1–360). Ignored when <see cref="Directional"/> is false.
+        /// ~120 is human-like; wider approaches omnidirectional; 360 is fully around.</summary>
+        [Id(1)] public int FieldOfView { get; set; } = 120;
+
+        /// <summary>Optional hard sight range in cells (null = engine default). In a dark world
+        /// the light radius still governs effective range; this clips independently of light.</summary>
+        [Id(2)] public int? Range { get; set; }
     }
 
     /// <summary>

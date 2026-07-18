@@ -216,9 +216,28 @@ namespace Aetherium.Server
 	public void ApplyDelta(Aetherium.Server.MultiWorld.MapDelta delta)
 	{
 		if (delta is null) return;
-
 		lock (_stateLock)
-		{
+			ApplyDeltaLocked(delta);
+	}
+
+	/// <summary>
+	/// Applies a batch of deltas under a SINGLE lock acquisition. The NPC tick fans out one
+	/// move delta per roaming monster; applying them one-at-a-time meant one lock acquisition
+	/// per monster per tick, each contending with the ~100ms perception flush that holds the
+	/// same lock — which stretched even a 20-monster tick to ~1.7s and starved player input on
+	/// the single-threaded map grain. Batching collapses that to one lock hold per tick.
+	/// </summary>
+	public void ApplyDeltas(System.Collections.Generic.IReadOnlyList<Aetherium.Server.MultiWorld.MapDelta> deltas)
+	{
+		if (deltas is null || deltas.Count == 0) return;
+		lock (_stateLock)
+			foreach (var delta in deltas)
+				if (delta is not null)
+					ApplyDeltaLocked(delta);
+	}
+
+	private void ApplyDeltaLocked(Aetherium.Server.MultiWorld.MapDelta delta)
+	{
 			switch (delta)
 			{
 				case Aetherium.Server.MultiWorld.EntityMovedDelta moved:
@@ -288,7 +307,6 @@ namespace Aetherium.Server
 					Console.WriteLine($"[GameSession] Ignoring unknown delta type {delta.GetType().Name}");
 					break;
 			}
-		}
 	}
 
 	private void ApplyComponentFieldChanged(Aetherium.Server.MultiWorld.ComponentFieldChangedDelta delta)
@@ -498,6 +516,14 @@ namespace Aetherium.Server
 		var heading = entity.Get<HasHeading>();
 		if (heading is not null)
 			heading.Heading = delta.Degrees;
+
+		// A rotation is an embodied state change exactly like a move: bump the
+		// sequence so frames computed before the rotate (e.g. the debounced tick
+		// flush, which runs off the grain's ordering) rank stale and get dropped
+		// by the client instead of racing the rotate's own frame and visibly
+		// snapping the camera back to the old heading.
+		if (Player is not null && delta.EntityId == Player.EntityId)
+			_moveSequence++;
 	}
 
 	private void ApplyDoorStateChanged(Aetherium.Server.MultiWorld.DoorStateChangedDelta delta)
@@ -618,14 +644,16 @@ namespace Aetherium.Server
 			return action();
 	}
 
-	// Monotonic count of the player's own successful anchor-changing moves (steps and
-	// level changes), stamped on every perception frame as MoveSequence. Starts at 1 so
-	// a real frame can never carry 0 (0 = legacy/unsequenced). This is what lets a
-	// client order frames against its own movement: a frame computed before a move but
-	// delivered after its response (tick/tool races share one connection) carries the
-	// old count and can be recognized as stale instead of corrupting client-side
-	// position-anchored state. Always mutated under _stateLock, the same lock that
-	// guards ViewLocation and GetPerception — (location, sequence) stay consistent.
+	// Monotonic count of the player's own successful embodied state changes — steps,
+	// level changes, AND rotations — stamped on every perception frame as MoveSequence.
+	// Starts at 1 so a real frame can never carry 0 (0 = legacy/unsequenced). This is
+	// what lets a client order frames against its own actions: a frame computed before
+	// a move/rotate but delivered after its response (tick flushes and tool responses
+	// share one connection but not one ordering) carries the old count and can be
+	// recognized as stale instead of corrupting client-side position- or
+	// heading-anchored state. Always mutated under _stateLock, the same lock that
+	// guards ViewLocation/HeadingDegrees and GetPerception — (location, heading,
+	// sequence) stay consistent.
 	private long _moveSequence = 1;
 
 	public Aetherium.Model.PerceptionDto GetPerception(bool absoluteCoordinates = false)
@@ -801,6 +829,18 @@ namespace Aetherium.Server
 			return gameTime.TimeOfDay.TotalHours % 24.0;
 		}
 
+		/// <summary>
+		/// Freeze the in-game clock at a fixed hour of day (0-24), disabling the day/night
+		/// cycle. Always-daylight outdoor worlds use this so the sun never sets — otherwise a
+		/// session that happens to start at a night hour renders the whole map dark (sunlight
+		/// intensity is zero below the horizon, which then collapses the visible range).
+		/// </summary>
+		public void SetFixedTimeOfDay(double hourOfDay)
+		{
+			GameStartTime = DateTime.UtcNow.Date.AddHours(((hourOfDay % 24.0) + 24.0) % 24.0);
+			TimeScale = 0.0; // frozen: GetCurrentGameTime now always returns GameStartTime
+		}
+
 		public Aetherium.Core.MoveOutcome MoveView(Aetherium.Model.RelativeDirection direction, int distance = 1)
 		{
 			lock (_stateLock)
@@ -876,6 +916,9 @@ namespace Aetherium.Server
 				HeadingDegrees = (HeadingDegrees + degrees) % 360;
 				if (HeadingDegrees < 0)
 					HeadingDegrees += 360;
+				// Same sequencing contract as the grain-routed path (ApplyHeadingChanged):
+				// rotations rank frames just like moves do.
+				_moveSequence++;
 			}
 		}
 

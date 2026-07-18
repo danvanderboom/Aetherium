@@ -558,6 +558,14 @@ namespace Aetherium.Server
                 sessionManager.ReplaceSessionWorld(
                     session, builder, worldId, resolvedMapId, joinResult.SpawnLocation());
 
+                // Apply the game's player-vision config (game.yaml `player.vision:`) to this
+                // fresh session + its mirror Character. Resolved from the world's source game
+                // definition so it's data-driven per game — a directional bundle makes the
+                // server send a smaller, forward-cone perception frame; an omnidirectional one
+                // (the default) is unchanged. Best-effort: a missing def/registry just leaves
+                // the engine default (omnidirectional).
+                ApplyPlayerVision(session, worldInfo.GameDefinitionId);
+
                 // Phase 2c: swap the session's mutation gateway to a grain-routed one.
                 // From here on, every gameplay verb on this session's tools dispatches
                 // to the grain, which mutates canonical state and pushes deltas back
@@ -587,6 +595,68 @@ namespace Aetherium.Server
                 Console.WriteLine($"[GameHub] JoinWorld({worldId}) threw: {ex}");
                 return JoinWorldResult.Fail("Join failed");
             }
+        }
+
+        /// <summary>
+        /// Applies a game's declared player-vision (game.yaml `player.vision:`) to a freshly
+        /// joined session: sets <see cref="GameSession.DirectionalVisionMode"/> and the mirror
+        /// Character's <see cref="Aetherium.Components.HasHeading"/> FOV/range, which is what
+        /// <see cref="GameSession.GetPerception"/> reads. Resolving from the world's source game
+        /// definition (rather than threading it through the whole grain-config chain) keeps this a
+        /// single host-side lookup. Best-effort: any missing piece leaves the engine default
+        /// (omnidirectional 360° sight), so bundles that declare no vision are unchanged.
+        /// </summary>
+        private void ApplyPlayerVision(GameSession session, string? gameDefinitionId)
+        {
+            if (string.IsNullOrEmpty(gameDefinitionId))
+                return;
+
+            var registry = Context.GetHttpContext()?.RequestServices
+                .GetService<Aetherium.Server.Games.GameDefinitionRegistry>();
+            if (registry is null || !registry.TryGet(gameDefinitionId, out var definition) || definition is null)
+                return;
+
+            var vision = definition.Player?.Vision;
+            // An always-day outdoor world declares the "daylight" tag: fix the sun at noon so
+            // night never collapses the view, and render under Sunlight.
+            bool daylight = definition.Tags != null && definition.Tags.Contains("daylight");
+            if (vision is null && !daylight)
+                return;
+
+            session.WithStateLock(() =>
+            {
+                if (vision is not null)
+                {
+                    session.DirectionalVisionMode = vision.Directional;
+                    if (session.Player is not null)
+                    {
+                        var heading = session.Player.Has<Aetherium.Components.HasHeading>()
+                            ? session.Player.Get<Aetherium.Components.HasHeading>()
+                            : new Aetherium.Components.HasHeading();
+                        heading.IsDirectional = vision.Directional;
+                        if (vision.Directional)
+                            heading.FieldOfViewDegrees = Math.Clamp(vision.FieldOfView, 1, 360);
+                        heading.ViewRange = vision.Range;
+                        session.Player.Set(heading);
+                    }
+
+                    // View distance: size the perception viewport so the horizon ≈ vision.range
+                    // (maxRange is derived from the viewport half-extent). Bundles that omit range
+                    // keep the default console-sized viewport.
+                    if (vision.Range is int r && r > 0)
+                    {
+                        var range = Math.Clamp(r, 4, 30);
+                        session.ViewportSize = new System.Drawing.Size(range * 4, range * 2);
+                    }
+                }
+
+                if (daylight)
+                {
+                    session.CurrentLightingMode = Aetherium.Model.LightingMode.Sunlight;
+                    session.SetFixedTimeOfDay(12.0); // permanent noon — no day/night cycle
+                }
+                return true;
+            });
         }
         
         // ============================================================
@@ -668,7 +738,10 @@ namespace Aetherium.Server
                 };
                 
                 // Execute the tool
+                var _perfHub = Environment.GetEnvironmentVariable("AETHERIUM_PERF") == "1";
+                var _swTool = _perfHub ? System.Diagnostics.Stopwatch.StartNew() : null;
                 var result = await tool.ExecuteAsync(context, args);
+                _swTool?.Stop();
                 
                 // Process narrative consequences for interaction tools
                 if (result.Success && clusterClient != null && session.WorldId != null)
@@ -722,9 +795,14 @@ namespace Aetherium.Server
                 }
                 
                 // Send updated perception to client
+                var _swPerc = _perfHub ? System.Diagnostics.Stopwatch.StartNew() : null;
                 var perception = session.GetPerception();
+                _swPerc?.Stop();
                 await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-                
+
+                if (_perfHub && (toolId == "move" || toolId == "rotate" || toolId == "changelevel"))
+                    Console.WriteLine($"[PERF] hub {toolId}: toolExec(incl. grain)={_swTool?.ElapsedMilliseconds}ms, getPerception={_swPerc?.ElapsedMilliseconds}ms");
+
                 return result.ToDto();
             }
             catch (Exception ex)

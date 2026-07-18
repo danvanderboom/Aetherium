@@ -27,6 +27,24 @@ namespace Aetherium.Components
         public int FieldOfViewDegrees { get; set; } = 120;
 
         /// <summary>
+        /// Whether perception is limited to a forward cone (see <see cref="FieldOfViewDegrees"/>)
+        /// centered on <see cref="Heading"/>. When false the character sees in all directions and
+        /// the FOV is ignored. Per-character-type: a human sees a forward arc, a spider-like
+        /// sensor might be omnidirectional. Drives whether the perception frame omits cells
+        /// behind the character entirely (the frame is genuinely smaller — the server never
+        /// computes or sends what falls outside the cone).
+        /// </summary>
+        public bool IsDirectional { get; set; }
+
+        /// <summary>
+        /// Optional per-character sight range in cells (null = the engine's default range).
+        /// Note: in a dark world the torch/light radius still governs how far a character can
+        /// actually see; this is an additional hard clip for character types that see further
+        /// or shorter than the light allows (e.g. infrared hunters).
+        /// </summary>
+        public int? ViewRange { get; set; }
+
+        /// <summary>
         /// Converts the current heading to the nearest cardinal WorldDirection.
         /// </summary>
         public WorldDirection ToWorldDirection()

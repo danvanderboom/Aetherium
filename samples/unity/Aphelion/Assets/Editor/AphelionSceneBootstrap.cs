@@ -113,6 +113,7 @@ namespace Aphelion.EditorTools
             entitySo.ApplyModifiedPropertiesWithoutUndo();
 
             rig.AddComponent<AphelionPlayerController>();
+            rig.AddComponent<AphelionVitalsHud>();
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };

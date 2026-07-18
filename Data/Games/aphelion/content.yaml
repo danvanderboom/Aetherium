@@ -35,6 +35,8 @@ creatures:
     speed: 0.9
     behavior: wander-melee
     lootItemId: charge-capsule
+    # A focused optical scanner: a narrow, long forward cone it sweeps down corridors.
+    vision: { directional: true, fieldOfView: 70, range: 12 }
 
   - id: vent-lurker
     name: Vent Lurker

@@ -25,6 +25,11 @@ namespace Aphelion
         {
             _behaviour = GetComponent<AetheriumClientBehaviour>();
             _cameraRig = FindAnyObjectByType<AphelionCameraRig>();
+
+            // Self-heal scenes built before the vitals HUD existed — combat must never
+            // be invisible (a lurker outside the FOV can down you with zero feedback).
+            if (GetComponent<AphelionVitalsHud>() == null)
+                gameObject.AddComponent<AphelionVitalsHud>();
         }
 
         private static float HeadingFor(WorldDirection direction) => direction switch

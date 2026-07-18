@@ -55,11 +55,52 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
    vent-lurker, overseer-node), each falling back to a distinct-colored capsule if a model
    has not imported. Remembered-but-out-of-view cells dim; anything without a binding
    renders as a bright magenta capsule (loud beats invisible).
+
+   **Creature memory:** a creature that leaves your view (you turned away, or it slipped
+   past the lamp) lingers as a last-seen impression: the model stays where you saw it and
+   dims, while a translucent circle in the creature's color — starting clear and sharp at
+   the creature's own size — expands smoothly on the floor around it, about one cell of
+   radius per second, dispersing from a crisp disc into a soft diffuse cloud as it grows:
+   a probability waveform spreading as its position grows uncertain. Turn back and you SEE
+   the memory (the circle means "somewhere in here", so an empty spot doesn't erase it);
+   re-spotting the actual creature replaces its ghost instantly, and after ~5 seconds the
+   impression fades out on its own. Tune `ghostSeconds` / `ghostSpreadCellsPerSecond` /
+   `ghostGlowStartCells` / `ghostGlowOpacity` on the EntityViewRegistry component live in
+   Play mode to taste. Vision is directional (a 120° forward arc from `game.yaml`
+   `player.vision`), so minding your back — and remembering what was behind you — matters.
 5. **To play the `aphelion` bundle** instead of the default world, create an instance and
    paste its world id into the `AetheriumClientBehaviour` inspector field:
    ```powershell
    Invoke-RestMethod -Method Post "http://localhost:50310/api/management/games/aphelion/instances"
    ```
+
+## Overworld sandbox scene
+
+This project also hosts the **Overworld** sample — a large open world (no monsters) that
+exercises the procedural-generation, door/key, and window systems. Menu:
+**Aetherium → Build Overworld Scene** creates `Assets/Scenes/Overworld.unity` with primitive
+terrain stand-ins (plains, forest, desert, hills, mountains, water, roads, walls, floors, and
+a **translucent window wall**), an `OverworldTheme`, and the client rig.
+
+To run it:
+
+1. Start the server (it auto-discovers the `overworld` bundle in `Data/Games/`), then create an
+   instance and copy the returned world id:
+   ```powershell
+   Invoke-RestMethod -Method Post "http://localhost:50310/api/management/games/overworld/instances"
+   ```
+2. **Aetherium → Build Overworld Scene**, then paste the world id into the `AetheriumClient`
+   rig's `worldId` field in the Inspector.
+3. Press **Play.** The world defaults to **daylight** (this is a sunlit sandbox). Controls:
+   - **WASD** — move by compass; **← / →** turn; **↑ / ↓** step along your heading
+   - **E** — interact: pick up an adjacent item (e.g. a key), open/close an adjacent door, or
+     unlock a locked door with a key you're carrying
+   - **L** — toggle daylight vs. the carried lamp (interiors are lit through windows and the
+     door you came in by; making walls truly shadow the sun is the next lighting pass)
+
+   Three cities (a grid capital, an organic town, a sparse outpost) sit in the wilderness,
+   joined by roads. One building in the capital is locked — its brass key is on the street
+   nearby. Windows are the pale cyan panes you can see through but not walk through.
 
 ## What lands next (M0)
 
