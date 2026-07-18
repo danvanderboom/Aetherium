@@ -16,9 +16,10 @@ namespace Aetherium.Unity
     /// dimming, while a translucent circle of the creature's color — starting at the
     /// creature's own footprint — expands smoothly outward on the floor (~1 cell of radius
     /// per second). The growing circle IS the positional uncertainty, "by now it could be
-    /// anywhere in here". After a few seconds both dim to nothing and disperse. Looking back
-    /// at the spot and seeing it empty collapses the ghost immediately: observation beats
-    /// memory. A default a game can replace wholesale.</para>
+    /// anywhere in here" — so turning back to look shows you the memory rather than erasing
+    /// it (an empty center cell disproves nothing once the circle outgrows it). Re-seeing
+    /// the actual creature replaces its ghost instantly; otherwise both model and circle dim
+    /// to nothing and disperse. A default a game can replace wholesale.</para>
     /// </summary>
     [RequireComponent(typeof(AetheriumClientBehaviour))]
     public sealed class EntityViewRegistry : MonoBehaviour
@@ -47,9 +48,6 @@ namespace Aetherium.Unity
         [Tooltip("Peak opacity of the uncertainty circle (it dims in lockstep with the " +
                  "fading model).")]
         [SerializeField] private float ghostGlowOpacity = 0.45f;
-        [Tooltip("Seconds for a DISPROVEN ghost to collapse (you looked at the spot and it's " +
-                 "empty). Short: observation beats memory.")]
-        [SerializeField] private float ghostCollapseSeconds = 0.3f;
 
         private readonly Dictionary<string, EntityView> _views = new Dictionary<string, EntityView>();
         private readonly Dictionary<string, GhostView> _ghosts = new Dictionary<string, GhostView>();
@@ -67,17 +65,11 @@ namespace Aetherium.Unity
         private sealed class GhostView
         {
             public GameObject GameObject;       // the dimming last-seen model, in place
-            public GridPoint Cell;              // last-seen client-space cell (for disproof)
-            public float SpawnTime;             // fixed at creation; drives the circle's growth
-            public float StartTime;             // re-based on collapse; drives the fade
-            public float Duration;              // remaining fade window (shrinks on collapse)
-            public float StartFraction;         // fade progress when (re)based, for collapse
-            public bool Collapsing;             // disproven: fade fast, stop expanding
+            public float SpawnTime;             // drives both the fade and the circle's growth
             public List<(Material Material, Color BaseColor)> BaseColors;
             public Color GlowColor;             // the creature's color, for the circle
             public Material GlowMaterial;       // the circle's tint (one color set per frame)
             public GameObject GlowDisc;         // the expanding uncertainty circle
-            public float RadiusCells;           // current circle radius (frozen on collapse)
         }
 
         private void Awake()
@@ -87,7 +79,6 @@ namespace Aetherium.Unity
             _client.EntityMoved += OnMoved;
             _client.EntityVanished += OnVanished;
             _client.Reanchored += OnReanchored;
-            _client.FrameReceived += _ => DisproveGhostsInView();
         }
 
         private Vector3 CellToWorld(GridPoint cell)
@@ -172,16 +163,11 @@ namespace Aetherium.Unity
             _ghosts[entity.Id] = new GhostView
             {
                 GameObject = instance,
-                Cell = entity.Position,
                 SpawnTime = Time.time,
-                StartTime = Time.time,
-                Duration = ghostSeconds,
-                StartFraction = 0f,
                 BaseColors = baseColors,
                 GlowColor = glowColor,
                 GlowMaterial = glowMaterial,
                 GlowDisc = CreateGlowDisc(entity.Position, glowMaterial),
-                RadiusCells = ghostGlowStartCells * 0.5f,
             };
         }
 
@@ -279,51 +265,6 @@ namespace Aetherium.Unity
             return texture;
         }
 
-        /// <summary>Observation beats memory: a ghost whose cell is currently IN VIEW — and
-        /// whose creature demonstrably isn't there — is disproven; collapse it fast.</summary>
-        private void DisproveGhostsInView()
-        {
-            if (_ghosts.Count == 0)
-                return;
-            var store = _client.Store;
-            if (store == null)
-                return;
-
-            List<string> disproven = null;
-            foreach (var (id, ghost) in _ghosts)
-            {
-                if (ghost.Duration <= ghostCollapseSeconds)
-                    continue; // already collapsing
-                foreach (var cell in store.Memory)
-                {
-                    if (cell.Position == ghost.Cell && cell.InView)
-                    {
-                        (disproven ??= new List<string>()).Add(id);
-                        break;
-                    }
-                }
-            }
-            if (disproven == null)
-                return;
-
-            foreach (var id in disproven)
-            {
-                // Re-base the fade so it finishes within the collapse window from HERE,
-                // preserving the current visual state (no pop back to full brightness).
-                var ghost = _ghosts[id];
-                ghost.StartFraction = GhostFraction(ghost);
-                ghost.StartTime = Time.time;
-                ghost.Duration = ghostCollapseSeconds;
-                ghost.Collapsing = true; // a disproven memory stops spreading too
-            }
-        }
-
-        private static float GhostFraction(GhostView ghost)
-        {
-            float t = ghost.Duration <= 0f ? 1f : (Time.time - ghost.StartTime) / ghost.Duration;
-            return Mathf.Clamp01(ghost.StartFraction + (1f - ghost.StartFraction) * Mathf.Clamp01(t));
-        }
-
         private void DestroyGhost(string entityId)
         {
             if (_ghosts.TryGetValue(entityId, out var ghost))
@@ -371,7 +312,8 @@ namespace Aetherium.Unity
             List<string> expired = null;
             foreach (var (id, ghost) in _ghosts)
             {
-                float fraction = GhostFraction(ghost);
+                float elapsed = Time.time - ghost.SpawnTime;
+                float fraction = ghostSeconds <= 0f ? 1f : Mathf.Clamp01(elapsed / ghostSeconds);
                 if (fraction >= 1f)
                 {
                     (expired ??= new List<string>()).Add(id);
@@ -389,11 +331,8 @@ namespace Aetherium.Unity
 
                 // Expand smoothly: the circle gains ~a cell of radius per second (tunable) —
                 // the region the creature could plausibly have reached since you saw it.
-                // A disproven ghost stops growing (there's nothing left to be uncertain about).
-                if (!ghost.Collapsing)
-                    ghost.RadiusCells = ghostGlowStartCells * 0.5f
-                        + (Time.time - ghost.SpawnTime) * ghostSpreadCellsPerSecond;
-                float diameter = ghost.RadiusCells * 2f * cellSize;
+                float diameter = (ghostGlowStartCells * 0.5f + elapsed * ghostSpreadCellsPerSecond)
+                    * 2f * cellSize;
                 ghost.GlowDisc.transform.localScale = new Vector3(diameter, diameter, 1f);
             }
 

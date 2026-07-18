@@ -60,9 +60,10 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
    past the lamp) lingers as a last-seen impression: the model stays where you saw it and
    dims, while a crisp translucent circle in the creature's color — starting at the
    creature's own size — expands smoothly on the floor around it, about one cell of radius
-   per second, marking where it could plausibly be by now. After ~5 seconds both fade out
-   entirely. Looking back at the spot and finding it empty collapses the impression
-   instantly: observation beats memory. Tune `ghostSeconds` / `ghostSpreadCellsPerSecond` /
+   per second, marking where it could plausibly be by now. Turn back and you SEE the
+   memory (the circle means "somewhere in here", so an empty spot doesn't erase it);
+   re-spotting the actual creature replaces its ghost instantly, and after ~5 seconds the
+   impression fades out on its own. Tune `ghostSeconds` / `ghostSpreadCellsPerSecond` /
    `ghostGlowStartCells` / `ghostGlowOpacity` on the EntityViewRegistry component live in
    Play mode to taste. Vision is directional (a 120° forward arc from `game.yaml`
    `player.vision`), so minding your back — and remembering what was behind you — matters.
