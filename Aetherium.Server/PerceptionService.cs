@@ -136,6 +136,16 @@ namespace Aetherium.Server
             bool absoluteCoordinates = false)
         {
             var perfStart = PerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
+            // On a sphere (H3) the visible set is a gridDisk around the perceiver and the relative key
+            // is perceiver-anchored local i/j — neither the rectangular bounds below nor the raw
+            // coordinate difference works (H3's X/Y are two halves of a packed cell index). Route H3
+            // worlds through a dedicated path; every other tiling keeps the planar pipeline below.
+            if (world.Topology.Name == "h3")
+                return ComputeH3Perception(world, playerLocation, playerHeading, viewportSize,
+                    lightingMode, visionMode, currentTime, directionalVision, headingDegrees, fovDegrees,
+                    interactionSystem, session, self, absoluteCoordinates, perfStart);
+
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
             var worldHeight = viewportSize.Height;
@@ -521,6 +531,190 @@ Light sources found:
             // AFTER the Visuals DTOs were built from the first pass's light levels, so its output never
             // reached the client. It was pure dead work (a full per-cell shadow raytrace, ~half the
             // frame's cost on a wide daylight viewport) and, worse, used the wrong clock. Removed.
+
+            if (PerfLog)
+                RecordPerf(System.Diagnostics.Stopwatch.GetElapsedTime(perfStart).TotalMilliseconds);
+            return perception;
+        }
+
+        /// <summary>
+        /// Sphere-native perception (docs/design/h3-sphere-worldgen.md, §7 P0). On an H3 world the
+        /// visible set is the gridDisk of cells within the perception radius of the perceiver's cell,
+        /// and every relative key is perceiver-anchored local i/j (via the topology's
+        /// <see cref="Aetherium.Topology.IGridTopology.RelativeCoords"/>) so the client still learns
+        /// only offsets, never absolute coordinates — the same fairness contract as the planar path.
+        /// Slice 1 is a daylight open surface: uniform full light and full-disk visibility (the sample
+        /// world is 360° non-directional daylight); sphere-native FOV occlusion and lighting are the
+        /// phased follow-up. Cells with no stable local frame (a pentagon at extreme range) are omitted
+        /// rather than throwing.
+        /// </summary>
+        private PerceptionDto ComputeH3Perception(
+            World world, WorldLocation playerLocation, Aetherium.WorldDirection playerHeading,
+            Size viewportSize, LightingMode lightingMode, VisionMode visionMode, DateTime currentTime,
+            bool directionalVision, int? headingDegrees, int? fovDegrees,
+            InteractionSystem? interactionSystem, GameSession? session, Entity? self,
+            bool absoluteCoordinates, long perfStart)
+        {
+            var topo = world.Topology;
+            var playerCell = Aetherium.Topology.GridCoord.From(playerLocation);
+
+            // View disk radius from the viewport, bounded so a huge viewport can't enumerate an
+            // unreasonable gridDisk (radius 32 ≈ 3.2k cells). On the daylight surface the perceiver
+            // sees the whole disk — occlusion is a later slice.
+            int radius = Math.Clamp(Math.Max(viewportSize.Width, viewportSize.Height) / 2, 3, 32);
+
+            // Daylight ambient tint (the sample H3 world is fixed-noon daylight); brightness is uniform
+            // across the open surface, so every visible outdoor cell reads at full light.
+            double ambientR = 1.0, ambientG = 1.0, ambientB = 1.0;
+            if (lightingMode == LightingMode.Sunlight && visionMode == VisionMode.Normal)
+            {
+                var sunlightCalc = new SunlightCalculator();
+                var (_, elevation) = sunlightCalc.CalculateSunPosition(currentTime.TimeOfDay.TotalHours);
+                var (r, g, b, _) = sunlightCalc.GetSunlightColor(elevation);
+                ambientR = r; ambientG = g; ambientB = b;
+            }
+            const double lightLevel = 1.0;
+
+            var perception = new PerceptionDto
+            {
+                PlayerLocation = absoluteCoordinates
+                    ? new WorldLocationDto(playerLocation.X, playerLocation.Y, playerLocation.Z)
+                    : new WorldLocationDto(0, 0, 0),
+                PlayerHeading = playerHeading.ToDto(),
+                HeadingDegrees = headingDegrees ?? ConvertDirectionToDegrees(playerHeading),
+                IsDirectionalVision = directionalVision,
+                FieldOfViewDegrees = fovDegrees ?? 360,
+                VisibleBounds = new Rectangle(-radius, -radius, radius * 2, radius * 2).ToDto(),
+                UpdateTimestamp = Guid.NewGuid(),
+                Topology = topo.Name,
+                SelfCellParity = null, // parity is a triangle-only bit
+                Interoception = self is null ? null : BuildInteroception(self),
+                CurrentLightingMode = lightingMode,
+                CurrentVisionMode = visionMode,
+                GameTimeOfDay = worldClock?.GetTimeOfDay() ?? currentTime.TimeOfDay.TotalHours,
+                AmbientTint = (ambientR, ambientG, ambientB),
+                Weather = weatherSystem != null ? weatherSystem.GetWeather(GetRegionIdForLocation(playerLocation)).ToString() : "Clear",
+                Season = seasonManager?.GetSeason((int)(worldClock?.GetDay() ?? 0)) ?? "spring",
+            };
+
+            perception.TileTypes = world.TileTypes.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToDto());
+
+            var visibleItems = new List<ItemDto>();
+            var visibleCharacters = new List<CharacterDto>();
+
+            // Enumerate the gridDisk around the perceiver; each cell's key is perceiver-anchored local
+            // i/j (player at 0,0). A cell with no stable local frame returns null and is omitted.
+            foreach (var cell in topo.Range(playerCell, radius))
+            {
+                var rel = topo.RelativeCoords(playerCell, cell);
+                if (rel is null)
+                    continue;
+                var (relX, relY) = rel.Value;
+                int relZ = cell.Z - playerCell.Z;
+                var loc = new WorldLocation(cell.X, cell.Y, cell.Z);
+
+                var terrainType = world.GetTerrainType(loc);
+                bool hasEntities = world.EntitiesByLocation.TryGetValue(loc, out var atLoc);
+                if (terrainType == null && !hasEntities)
+                    continue; // nothing generated here (off-shell / empty)
+
+                var visual = new Visual(loc, terrainType?.TileType);
+
+                if (hasEntities)
+                {
+                    foreach (var entity in atLoc!.Values)
+                    {
+                        if (entity is Aetherium.Character ch)
+                        {
+                            if (loc != playerLocation) // the perceiver is the centre marker, never "seen"
+                            {
+                                var charDto = ch.ToCharacterDto();
+                                charDto.Location = new WorldLocationDto(relX, relY, relZ);
+                                visibleCharacters.Add(charDto);
+                            }
+                        }
+                        else if (!(entity is Aetherium.Entities.Terrain)
+                            && entity.AllComponents.OfType<Carriable>().Any())
+                        {
+                            var itemDto = entity.ToDto();
+                            itemDto.Location = new WorldLocationDto(relX, relY, relZ);
+                            visibleItems.Add(itemDto);
+                        }
+                    }
+                }
+
+                var visualDto = visual.ToDto(lightLevel);
+                visualDto.Location = new WorldLocationDto(relX, relY, relZ);
+                perception.Visuals[$"{relX},{relY},{relZ}"] = visualDto;
+            }
+
+            perception.VisibleItems = visibleItems;
+            perception.VisibleCharacters = visibleCharacters;
+
+            // Player's own cell: inventory + affordances (pickup/drop here; open/close/use on the
+            // player's own cell and its H3 neighbours).
+            var affordances = new List<AffordanceDto>();
+            Inventory? inv = null;
+            if (world.EntitiesByLocation.TryGetValue(playerLocation, out var here))
+            {
+                var player = here.Values.OfType<Aetherium.Character>().FirstOrDefault();
+                if (player != null)
+                {
+                    inv = player.AllComponents.OfType<Inventory>().FirstOrDefault();
+                    if (inv != null)
+                        perception.Inventory = inv.ToDto();
+
+                    foreach (var e in here.Values)
+                        if (!(e is Aetherium.Character) && !(e is Aetherium.Entities.Terrain)
+                            && e.AllComponents.OfType<Carriable>().Any())
+                            affordances.Add(new AffordanceDto { Action = "pickup", ActorId = player.EntityId, TargetId = e.EntityId });
+
+                    if (inv != null)
+                        foreach (var id in inv.ItemEntityIds)
+                            affordances.Add(new AffordanceDto { Action = "drop", ActorId = player.EntityId, TargetId = id });
+
+                    // Door affordances on the player's own cell and its topological neighbours.
+                    var doorCells = new List<WorldLocation> { playerLocation };
+                    foreach (var n in topo.Neighbors(playerCell))
+                        doorCells.Add(n.ToWorldLocation());
+                    foreach (var loc in doorCells)
+                    {
+                        if (!world.EntitiesByLocation.TryGetValue(loc, out var ents))
+                            continue;
+                        foreach (var e in ents.Values)
+                        {
+                            var door = e.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+                            if (door == null)
+                                continue;
+                            if (door.IsLocked)
+                            {
+                                if (inv != null)
+                                    foreach (var itemId in inv.ItemEntityIds)
+                                        affordances.Add(new AffordanceDto { Action = "use", ActorId = player.EntityId, ItemId = itemId, TargetId = e.EntityId, RequiresKeyId = door.KeyShape });
+                                else
+                                    affordances.Add(new AffordanceDto { Action = "use", ActorId = player.EntityId, TargetId = e.EntityId, RequiresKeyId = door.KeyShape });
+                            }
+                            else
+                            {
+                                affordances.Add(new AffordanceDto { Action = door.IsOpen ? "close" : "open", ActorId = player.EntityId, TargetId = e.EntityId });
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (interactionSystem != null && session != null && inv != null)
+            {
+                foreach (var aff in affordances.Where(a => a.Action == "use" && !string.IsNullOrEmpty(a.ItemId) && !string.IsNullOrEmpty(a.TargetId)))
+                {
+                    var useOptions = interactionSystem.GetUseOptions(session, aff.ItemId!, aff.TargetId);
+                    aff.UsageOptions = useOptions.Select(opt => new AffordanceUsageDto { UsageId = opt.UsageId, Label = opt.Label, TargetId = aff.TargetId }).ToList();
+                }
+            }
+
+            perception.Affordances = affordances;
+            perception.NavigationData = ComputeNavigationData(world, playerLocation, playerHeading);
+            perception.Audio = ComputeAudioPerception(world, playerLocation, null, currentTime);
 
             if (PerfLog)
                 RecordPerf(System.Diagnostics.Stopwatch.GetElapsedTime(perfStart).TotalMilliseconds);

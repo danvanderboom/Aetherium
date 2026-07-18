@@ -1,10 +1,11 @@
 # Vision & Design: H3 Spherical Worlds and Sphere-Aware Procedural Generation
 
-**Status:** Living design. **Slice 1 is built and green** — the worldgen pipeline is now
-topology-aware, a sphere-native `H3TerrainGenerator` terraforms a whole planet at a chosen H3
-resolution, and a switchable sci-fi planet bundle (`aphelion-h3`) ships alongside the square
-Aphelion. Sphere-native settlements/rivers/roads, transit, economy wiring, and player-relative
-perception on the sphere are the phased roadmap in [§7](#7-roadmap).
+**Status:** Living design. **Slice 1 is built and green, and the planet is walkable** — the worldgen
+pipeline is topology-aware, a sphere-native `H3TerrainGenerator` terraforms a whole planet at a chosen
+H3 resolution, a switchable sci-fi planet bundle (`aphelion-h3`) ships alongside the square Aphelion,
+**and player-relative perception now works on the sphere** (a `gridDisk` viewport with `cellToLocalIj`
+keys — a player can join and walk it). Sphere-native settlements/rivers/roads, transit, economy wiring,
+and FOV/lighting on the sphere are the phased roadmap in [§7](#7-roadmap).
 **Depends on / builds on:** [`h3-topology.md`](../h3-topology.md), [`grid-topologies.md`](../grid-topologies.md),
 [`economy-simulation.md`](../economy-simulation.md), [`transit-networks.md`](transit-networks.md).
 **Audience:** engine maintainers, OpenSpec proposal authors, game/campaign designers.
@@ -144,8 +145,9 @@ that logistics is content, small enough to generate in seconds and hold in memor
 | 3-D noise | `Noise`/`FractalNoise`/normalized 3-D overloads for spherical sampling | `WorldGen/Algorithms/Noise/PerlinNoise.cs` |
 | Sphere generator | `H3TerrainGenerator` — full-shell enumeration, 3-D elevation+moisture, percentile biomes | `WorldGen/Generators/Outdoor/H3TerrainGenerator.cs` |
 | Pipeline routing | `OutdoorLayoutPass` runs the H3 generator on `"h3"`; `IWorldGenerationPass.SupportsTopology` gate; four square-only passes opt out of `"h3"` | `WorldGen/IWorldGenerationPass.cs`, `Passes/OutdoorLayoutPass.cs`, `OutdoorValidationPass.cs`, `OutdoorInteractionsPass.cs`, `PortalNetworkPass.cs`, `EnvironmentalStoryPass.cs` |
+| Perception (walkable) | `IGridTopology.RelativeCoords` (raw diff default; H3 `cellToLocalIj` override); `PerceptionService` routes H3 worlds to a `gridDisk` viewport with perceiver-anchored local-i/j keys | `Topology/IGridTopology.cs`, `Topology/H3Topology.cs`, `PerceptionService.cs` |
 | Bundle | `aphelion-h3` — the switchable sci-fi planet (topology h3, generator h3-terrain, res 4) | `Data/Games/aphelion-h3/game.yaml` |
-| Tests | H3 full-shell coverage, pentagon handling, biome variety, determinism, spawn, neighbour packing; 3-D noise range/determinism/continuity; bundle validates with `topology: h3` | `Aetherium.Test/WorldGen/H3TerrainGeneratorTests.cs`, `PerlinNoise3DTests.cs`, `Games/GameDefinitionRegistryTests.cs` |
+| Tests | H3 full-shell coverage, pentagon handling, biome variety, determinism, spawn, neighbour packing; 3-D noise range/determinism/continuity; relative-coord origin/injectivity; H3 perception frame + walk-recentre; bundle validates with `topology: h3` | `Aetherium.Test/WorldGen/H3TerrainGeneratorTests.cs`, `PerlinNoise3DTests.cs`, `Perception/H3PerceptionTests.cs`, `Games/GameDefinitionRegistryTests.cs` |
 
 Everything above is green in the full suite, and every non-H3 world is unaffected.
 
@@ -187,17 +189,24 @@ data. This is the whole point of the topology seam:
 
 ## 7. Roadmap
 
-Slice 1 is a terrained, biome-varied, populated **planet you can generate and switch to**. Getting to a
-*played* planetary economy is a sequence of self-contained slices, each on machinery that already
-exists:
+Slice 1 is a terrained, biome-varied, populated **planet you can generate, switch to, and walk**.
+Getting to a *played* planetary economy is a sequence of self-contained slices, each on machinery that
+already exists:
 
-- **P0 — Perception on the sphere (playability gate).** `PerceptionService` emits player-relative keys
-  by subtracting raw lattice coords — correct for square/hex/tri, meaningless for a packed H3 index. On
-  a sphere these become [`cellToLocalIj`](../h3-topology.md#perception-on-a-sphere-celltolocalij-keys)-anchored
-  `"relI,relJ,relZ"` keys; same contract (opaque strings, no absolute coordinates). **This is the one
-  piece between "generates and switches" and "join and walk the planet."** Small, self-contained,
-  confined to `PerceptionService`.
-- **P1 — Sphere-native rivers, coasts, and roads.** Replace the square carvers: rivers as steepest-
+- **P0 — Perception on the sphere (playability gate). ✅ BUILT.** `PerceptionService` emitted
+  player-relative keys by subtracting raw lattice coords — correct for square/hex/tri, meaningless for a
+  packed H3 index. It now routes H3 worlds through a dedicated path (`PerceptionService.ComputeH3Perception`)
+  that enumerates the visible set as a `gridDisk` around the perceiver and keys each cell by
+  perceiver-anchored local i/j via the topology's `RelativeCoords` (H3's
+  [`cellToLocalIj`](../h3-topology.md#perception-on-a-sphere-celltolocalij-keys)), player at `0,0,0`.
+  Same fairness contract (opaque offsets, no absolute coordinates); cells with no stable local frame (a
+  pentagon at extreme range) are omitted rather than throwing. Slice-1 scope matches the sample world:
+  daylight, 360°, full-disk visibility — **FOV occlusion and non-daylight lighting on the sphere are the
+  remaining perception work** (a natural extension of P1, using `topology.Line` raycasts, which H3
+  already implements). Tested by `H3RelativeCoordsTests` (origin, injectivity over a disk) and
+  `H3PerceptionFrameTests` (H3 frame centred on the player, disk of terrained cells, frame recentres as
+  the player walks).
+- **P1 — Sphere-native rivers, coasts, and roads (+ FOV/lighting occlusion).** Replace the square carvers: rivers as steepest-
   descent over `topology.Neighbors`, coasts read from the `Water` field, roads as `topology.Line`
   (great-circle cell paths, which H3 already implements). Ungates the river/road half of the outdoor
   pipeline for H3.

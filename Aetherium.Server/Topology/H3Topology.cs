@@ -183,6 +183,30 @@ namespace Aetherium.Topology
             return (units * Math.Sin(azimuth), -units * Math.Cos(azimuth));
         }
 
+        // Perceiver-relative local i/j on the sphere. A global coordinate difference is meaningless on
+        // H3 (X/Y are two halves of a packed index), so we anchor on the perceiver: H3's cellToLocalIj
+        // yields integer (i, j) for a cell in the origin's neighborhood, and the relative coordinate is
+        // that minus the origin's own anchor (cellToLocalIj(origin, origin) is not the zero vector).
+        // Valid within a base-cell neighborhood — comfortably larger than any perception radius — but
+        // can throw across a pentagon at range; on failure we return null so the cell is simply omitted.
+        public (int RelX, int RelY)? RelativeCoords(GridCoord origin, GridCoord cell)
+        {
+            try
+            {
+                var o = ToIndex(origin);
+                var anchor = o.CellToLocalIj(o);
+                var here = o.CellToLocalIj(ToIndex(cell));
+                return (here.I - anchor.I, here.J - anchor.J);
+            }
+            catch
+            {
+                // No stable local frame between these two cells (an experimental-API limit near a
+                // pentagon at extreme range). Omitting the cell is correct — better a small blind spot
+                // than a thrown perception frame.
+                return null;
+            }
+        }
+
         // Heading from `cell` to an adjacent `neighbor`, in engine degrees (0 = north, clockwise).
         private static int HeadingDegrees(H3Index cell, H3Index neighbor)
         {
