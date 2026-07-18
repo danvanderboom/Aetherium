@@ -1258,6 +1258,12 @@ namespace Aetherium.Server.MultiWorld
                 // every actor's ability cooldowns and regenerate their resource pools. Silent,
                 // canonical-state-only — the read accessors expose the new values on demand.
                 TickAbilityUpkeep();
+
+                // Economy (docs/economy-simulation.md T2): settlements produce/consume, markets reprice,
+                // and goods arbitrage along the road graph. Rate-limited to its own slow cadence and a
+                // fast no-op on any world without markets (every square game today), so this is free
+                // there and cheap on the planet.
+                _economySystem.Step(_world, gameTimeElapsed);
             }
 
             var msDeathAbility = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs2).TotalMilliseconds : 0.0;
@@ -2317,6 +2323,7 @@ namespace Aetherium.Server.MultiWorld
         private DeathPolicy _deathPolicy = DeathPolicy.Default;
         private readonly DeathSystem _deathSystem = new DeathSystem();
         private readonly CorpseExpirySystem _corpseExpirySystem = new CorpseExpirySystem();
+        private readonly Aetherium.Server.Economy.EconomySystem _economySystem = new Aetherium.Server.Economy.EconomySystem();
 
         // Per-world ability content (engine gap-analysis §4.3 — see wire-abilities-live), compiled from
         // the world's AbilityConfig. The catalog is the runtime (compiled) form of the config's

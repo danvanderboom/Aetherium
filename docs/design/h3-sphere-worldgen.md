@@ -153,6 +153,7 @@ that logistics is content, small enough to generate in seconds and hold in memor
 | Rivers (sphere-native) | `H3RiverCarver` — steepest descent down the elevation field from spaced high headwaters to the sea, widening downstream into multi-lane channels; carved as Water | `WorldGen/Generators/Outdoor/H3RiverCarver.cs` |
 | Settlements (sphere-native) | `H3SettlementPlanner` + `Settlement` component / `SettlementEntity` — tiered (Capital→Village), great-circle-spaced, coastal-leaning; persistent entities the economy hooks; built-up cores | `WorldGen/Generators/Outdoor/H3SettlementPlanner.cs`, `Components/Settlement.cs`, `Entities/SettlementEntity.cs` |
 | Roads (sphere-native) | `H3RoadNetwork` — MST backbone + k-nearest loops over great-circle distance, carved wide along `gridPathCells`, bridging water; highways (city trunk) wider than feeders | `WorldGen/Generators/Outdoor/H3RoadNetwork.cs` |
+| Economy (T2 biome flows) | `Producer`/`Consumer`/`LocalMarket`/`TradeLinks` components + `EconomySystem` (on the map tick) + `EconomySeeder`/`Goods`: settlements produce by biome, consume a universal basket, price from stock-vs-target, and goods arbitrage cheap→dear along the road graph with distance friction | `Components/Producer.cs`, `Consumer.cs`, `LocalMarket.cs`, `TradeLinks.cs`, `Economy/EconomySystem.cs`, `EconomySeeder.cs`, `Goods.cs`, `MultiWorld/GameMapGrain.cs` |
 | Bundle | `aphelion-h3` — the switchable sci-fi planet (topology h3, generator h3-terrain, res 4): 320 tiered settlements, wide rivers + road corridors between them | `Data/Games/aphelion-h3/game.yaml` |
 | Tests | H3 full-shell coverage, pentagon handling, biome variety, determinism, spawn, neighbour packing; 3-D noise range/determinism/continuity; relative-coord origin/injectivity; H3 perception frame + walk-recentre; **rivers flow downhill to sea + widen, settlements tiered/persistent + capital spawn, roads MST-connect + bridge water**; bundle validates with `topology: h3` | `Aetherium.Test/WorldGen/H3TerrainGeneratorTests.cs`, `PerlinNoise3DTests.cs`, `H3SphereFeaturesTests.cs`, `Perception/H3PerceptionTests.cs`, `Games/GameDefinitionRegistryTests.cs` |
 
@@ -239,11 +240,14 @@ already exists:
   `SettlementEntity`+`Settlement` — the hook the economy attaches to. Explicit reachability validation
   (walking `World.Topology`) is still open, but the MST guarantees every settlement is road-connected by
   construction.
-- **P3 — Economy wiring (T0–T3 of [economy-simulation.md](../economy-simulation.md)).** Producer/
-  Consumer components on biomes and settlements (ore in mountains, grain on plains, timber in forests),
-  markets per settlement, trade routes as world-graph edges — the planet becomes the board the shipped
-  macro-economy plays on, now with players in it. The `Settlement` component + `RoadEdge` graph from P1/P2
-  are the substrate.
+- **P3 — Economy (T2 "real flows"). ✅ BUILT (first slice).** `Producer`/`Consumer`/`LocalMarket`/
+  `TradeLinks` components seeded onto every settlement by biome + population (`EconomySeeder`, `Goods`):
+  plains grow grain, forests cut timber, hills mine ore, coasts land fish; everyone eats and builds.
+  `EconomySystem` ticks on the map (`GameMapGrain.TickAsync`) — production/consumption, stock-vs-target
+  pricing, and goods arbitraging cheap→dear along the road graph with throughput/distance friction, so a
+  forest's timber spreads to the plains and prices converge modulo distance. Per-map and player-facing;
+  the cluster macro-economy is untouched. **Remaining:** goods/recipes as per-world data (not hard-coded),
+  player buy/sell + currency, and feeding the cluster market for cross-world trade.
 - **P4 — Transportation networks ([transit-networks.md](transit-networks.md)).** Rail/road/sea/air
   services spanning the continents, stations, scheduled and hailed transport — logistics as gameplay at
   planetary scale. Subways run a negative band, satellites the high bands; grade separation is the

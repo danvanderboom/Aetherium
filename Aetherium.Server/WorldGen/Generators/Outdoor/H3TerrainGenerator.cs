@@ -208,6 +208,13 @@ namespace Aetherium.WorldGen.Generators.Outdoor
             int roadWidth = context.GetIntParam("roadWidth", 1, 0, 8);
             var roads = new H3RoadNetwork().Connect(world, settlements, roadNeighbors, highwayWidth, roadWidth);
 
+            // Seed the economy onto the settlements: producers/consumers/markets from biome + population,
+            // and trade links from the road graph. From here the map's EconomySystem drives the numbers.
+            foreach (var ps in settlements)
+                Aetherium.Server.Economy.EconomySeeder.Seed(ps.Entity, ps.Entity.Get<Settlement>());
+            foreach (var edge in roads)
+                Aetherium.Server.Economy.EconomySeeder.Link(edge.A.Entity, edge.B.Entity, edge.Highway, edge.Length);
+
             // Spawn at the capital if one was placed (the natural starting city); otherwise keep the
             // open-ground fallback chosen above.
             var capital = settlements.FirstOrDefault(s => s.Tier == SettlementTier.Capital)
