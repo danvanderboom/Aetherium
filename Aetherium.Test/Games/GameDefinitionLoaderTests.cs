@@ -147,6 +147,52 @@ namespace Aetherium.Test.Games
         }
 
         [Test]
+        public void LoadBundle_BindsPlayerAndCreatureVision()
+        {
+            // Per-character-type vision (directionality/FOV/range): the human player gets a
+            // forward cone; a creature can carry its own. Proves the YAML `player.vision:` and
+            // `creatures[].vision:` keys bind to the config model that the join path consumes.
+            var dir = WriteBundle("vision", ("game.yaml", Manifest + """
+
+                player:
+                  vision:
+                    directional: true
+                    fieldOfView: 120
+                content:
+                  creatures:
+                    - id: hunter
+                      name: Hunter
+                      health: 20
+                      vision: { directional: true, fieldOfView: 70, range: 12 }
+                    - id: blob
+                      name: Blob
+                      health: 10
+                  spawns:
+                    - { creatureId: hunter, weight: 1 }
+                """));
+
+            var result = new GameDefinitionLoader().LoadBundle(dir);
+
+            Assert.That(result.Success, Is.True, string.Join("; ", result.Diagnostics));
+            var def = result.Definition!;
+
+            Assert.That(def.Player, Is.Not.Null);
+            Assert.That(def.Player!.Vision, Is.Not.Null);
+            Assert.That(def.Player.Vision!.Directional, Is.True);
+            Assert.That(def.Player.Vision.FieldOfView, Is.EqualTo(120));
+
+            var hunter = def.Content!.Creatures.Single(c => c.Id == "hunter");
+            Assert.That(hunter.Vision, Is.Not.Null);
+            Assert.That(hunter.Vision!.Directional, Is.True);
+            Assert.That(hunter.Vision.FieldOfView, Is.EqualTo(70));
+            Assert.That(hunter.Vision.Range, Is.EqualTo(12));
+
+            // A creature with no vision block stays omnidirectional (null = legacy default).
+            var blob = def.Content.Creatures.Single(c => c.Id == "blob");
+            Assert.That(blob.Vision, Is.Null);
+        }
+
+        [Test]
         public void LoadBundle_DuplicateSection_IsRejected()
         {
             var sections = SplitTopLevelSections(InlineSections);

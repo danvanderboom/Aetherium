@@ -20,6 +20,15 @@ world:
   size: { width: 48, height: 48, depth: 3 }   # three decks
   maxPlayers: 8
 
+# The player is a human in an EVA suit: directional sight, a ~120° forward arc (typical
+# human focal + near-peripheral span). With this on, the server sends a smaller perception
+# frame — only the forward cone, nothing behind you — so minding your back is real. Range
+# is governed by the suit lamp (see the torch lighting); this cone is the angular limit.
+player:
+  vision:
+    directional: true
+    fieldOfView: 120
+
 death:
   permadeath: false
   downStateEnabled: true          # co-op revives (the revive VERB is engine gap G7, M2)

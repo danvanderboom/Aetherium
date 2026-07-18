@@ -952,10 +952,24 @@ namespace Aetherium.Server.MultiWorld
             var bearing = character.Get<Aetherium.Components.HasHeading>()?.ToWorldDirection()
                 ?? Aetherium.WorldDirection.North;
 
+            // Honor the creature's per-type vision (content.yaml `vision:`): a directional
+            // creature only perceives its forward cone, exactly as the human player does when
+            // directional vision is on — so an AI hunter's field of view is a real constraint,
+            // not just a client presentation detail.
+            var heading = character.Get<Aetherium.Components.HasHeading>();
+            bool directional = heading?.IsDirectional ?? false;
+            int? headingDegrees = directional ? heading!.Heading : (int?)null;
+            int? fovDegrees = directional ? heading!.FieldOfViewDegrees : (int?)null;
+
             // Passing the character as `self` populates the interoception channel — the
             // player's own health/statuses/pools/cooldowns (add-interoception-channel).
             var perception = new Aetherium.Server.PerceptionService()
-                .ComputePerception(_world, location, bearing, new System.Drawing.Size(40, 40), self: character);
+                .ComputePerception(
+                    _world, location, bearing, new System.Drawing.Size(40, 40),
+                    Aetherium.Model.LightingMode.Torch, Aetherium.Model.VisionMode.Normal,
+                    heatTracker: null, currentTime: System.DateTime.UtcNow,
+                    directionalVision: directional, headingDegrees: headingDegrees, fovDegrees: fovDegrees,
+                    self: character);
             var json = System.Text.Json.JsonSerializer.Serialize(perception);
             return Task.FromResult<string?>(json);
         }
