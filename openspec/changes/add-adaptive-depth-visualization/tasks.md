@@ -16,15 +16,15 @@
 - [x] 2.6 Verified via the deterministic ASCII-capture tests (`ConsoleDepthViewTests`, `DepthIntegrationTests`) that drive the same `CaptureRenderedFrame`/`AsciiMapData` path `monitor-lite.ps1` consumes; a live `monitor-lite.ps1` run additionally needs a running server (`ws://localhost:5001/monitor`)
 
 ## 3. Unity stack + camera + theming
-- [ ] 3.1 Wire the stubbed tile color/sprite mapping in `TilemapRenderer2D` so bands and terrains are distinguishable
-- [ ] 3.2 Render one `Tilemap` per band in the slab, stacked by `sortingOrder`, with `TilemapRenderer` alpha set from `|dZ|` (focus opaque, deeper bands more transparent)
-- [ ] 3.3 Add a real orthographic follow camera that tracks the player
-- [ ] 3.4 Map DTO to `PerceptionLite` for multi-Z frames; build/verify against the JSON mock provider first so the unfinished live path does not block visualization
-- [ ] 3.5 EditMode/PlayMode tests for multi-band rendering and alpha falloff
+- [x] 3.1 Wire the stubbed tile color/sprite mapping in `TilemapRenderer2D` so bands and terrains are distinguishable — `TileTheme.ColorFor` (deterministic palette + hashed-hue fallback) drives a shared 1×1 white sprite tinted per `Tile.color`; `CreateColoredTile`/`GetSharedSprite` replace the placeholder blank tile
+- [x] 3.2 Render one `Tilemap` per band in the slab, stacked by `sortingOrder`, with `TilemapRenderer` alpha set from `|dZ|` (focus opaque, deeper bands more transparent) — new `BandStackRenderer` (one child `Tilemap`+`TilemapRenderer2D` per band); `DepthShading.AlphaForDepth` = `1/(1+0.5|dZ|)` (console-parity) via `Tilemap.color` alpha, `DepthShading.SortingOrderForBand` = band Z
+- [x] 3.3 Add a real orthographic follow camera that tracks the player — new `FollowCamera` (orthographic, XY follow with fixed −Z offset, framerate-independent optional smoothing); adaptive framing deferred to Section 5
+- [x] 3.4 Map DTO to `PerceptionLite` for multi-Z frames; build/verify against the JSON mock provider first so the unfinished live path does not block visualization — `PerceptionLite`/mock already Z-capable; added `StreamingAssets/PerceptionFrames/interchange-frame.json` (bands −1…+2) and `MultiBandFrameTests` verifying the slab round-trips and keys match relative (x,y,z)
+- [x] 3.5 EditMode/PlayMode tests for multi-band rendering and alpha falloff — EditMode `DepthShadingTests` (6), `TileThemeTests` (6), `MultiBandFrameTests` (3); PlayMode `BandStackRenderingTests` (6: per-band tilemaps, focus-opaque/off-focus-faded/symmetric, altitude sorting, focus reassignment, vanished-band clearing, tile theming) and `FollowCameraTests` (4). Verified headlessly in Unity 6000.4.6f1 batchmode: EditMode 25/25, my 10 new PlayMode tests all pass (`-nographics`); the only PlayMode failures are 3 pre-existing scene-load tests, identical on the develop baseline
 
 ## 4. Cross-section / elevation view (both clients)
 - [x] 4.1 Console: a toggle-key side-on schematic that draws the column around the player as stacked bands (one row per band, no per-tile FOV) — `ClientConsoleMapView.CrossSectionMode` + `BuildCrossSection`/`DrawCrossSection`; `X` toggles plan ↔ elevation in `ClientConsoleDungeonGameNew`
-- [ ] 4.2 Unity: an equivalent cross-section overlay — deferred with the rest of the Unity client work (Section 3)
+- [ ] 4.2 Unity: an equivalent cross-section overlay — still pending; Section 3 built the plan-view stack (`BandStackRenderer`) but not the side-on overlay, which lands with Section 5 mode-escalation
 - [x] 4.3 Verify both against a multi-level interchange column — console verified (`ConsoleDepthViewTests`: viaduct/street/subway column stacks top-first, focus marked, player anchored, off-axis slab content shown without FOV); Unity half deferred with 4.2
 
 ## 5. Adaptive framing/slab + mode escalation

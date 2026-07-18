@@ -15,8 +15,15 @@ namespace Aetherium.Unity.Rendering
     {
         [SerializeField] private Tilemap? tilemap;
         [SerializeField] private TileBase? defaultTile;
+        private TilemapRenderer? tilemapRenderer;
         private Dictionary<string, TileBase> tileCache = new Dictionary<string, TileBase>();
         private TileBase? fallbackTile;
+
+        // A single 1×1 white sprite shared by every runtime-generated Tile; each
+        // Tile just tints it via Tile.color (see TileTheme), so we never allocate a
+        // texture per tile type. Static so the whole band stack shares one sprite.
+        private static Sprite? sharedSprite;
+        private static Texture2D? sharedTexture;
 
         private int currentZLevel = 0;
         private PerceptionLite? currentPerception;
@@ -39,6 +46,71 @@ namespace Aetherium.Unity.Rendering
                     Debug.LogError("TilemapRenderer2D requires a Tilemap component.");
                 }
             }
+
+            if (tilemapRenderer == null)
+                tilemapRenderer = GetComponent<TilemapRenderer>();
+        }
+
+        /// <summary>
+        /// Injects the Tilemap and fallback tile when this renderer is created at
+        /// runtime (e.g. by <see cref="BandStackRenderer"/>) after Awake has run.
+        /// </summary>
+        public void Configure(Tilemap targetTilemap, TileBase? fallback)
+        {
+            tilemap = targetTilemap;
+            defaultTile = fallback;
+            tilemapRenderer = GetComponent<TilemapRenderer>();
+        }
+
+        /// <summary>
+        /// Sets this band's overall opacity by tinting the whole tilemap. RGB stays
+        /// white so each tile's own <see cref="TileTheme"/> color shows through; only
+        /// alpha is scaled. Used by the band stack for depth falloff.
+        /// </summary>
+        public void SetLayerAlpha(float alpha)
+        {
+            if (tilemap == null)
+                return;
+
+            tilemap.color = new Color(1f, 1f, 1f, Mathf.Clamp01(alpha));
+        }
+
+        /// <summary>Current layer alpha (tilemap tint alpha); 0 if no tilemap.</summary>
+        public float GetLayerAlpha() => tilemap != null ? tilemap.color.a : 0f;
+
+        /// <summary>Sets the draw order for this band (higher = drawn on top).</summary>
+        public void SetSortingOrder(int order)
+        {
+            if (tilemapRenderer == null)
+                tilemapRenderer = GetComponent<TilemapRenderer>();
+
+            if (tilemapRenderer != null)
+                tilemapRenderer.sortingOrder = order;
+        }
+
+        /// <summary>Current sorting order; 0 if no renderer.</summary>
+        public int GetSortingOrder() => tilemapRenderer != null ? tilemapRenderer.sortingOrder : 0;
+
+        /// <summary>
+        /// Reads back the themed color of the tile at grid cell (<paramref name="gridX"/>,
+        /// <paramref name="gridY"/>), mirroring the grid→cell mapping used when writing.
+        /// Returns false when no tile is present. Intended for verification/tests.
+        /// </summary>
+        public bool TryGetTileColor(int gridX, int gridY, out Color color)
+        {
+            color = default;
+            if (tilemap == null)
+                return false;
+
+            var worldPos = GridHelpers.GridToWorld(gridX, gridY);
+            var cellPos = tilemap.WorldToCell(worldPos);
+            if (tilemap.GetTile(cellPos) is Tile tile)
+            {
+                color = tile.color;
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -121,18 +193,19 @@ namespace Aetherium.Unity.Rendering
                 return cachedTile;
             }
 
-            // Try to get tile type info
-            if (tileTypes.TryGetValue(tileTypeId, out var tileType))
+            // Prefer the display name from the TileTypes table for palette matching,
+            // falling back to the id itself when the type wasn't sent. Either way an
+            // unknown name still hashes to a stable color rather than gray.
+            string themeKey = tileTypeId;
+            if (tileTypes != null && tileTypes.TryGetValue(tileTypeId, out var tileType) &&
+                !string.IsNullOrEmpty(tileType.Name))
             {
-                var tile = CreateTileFromType(tileType);
-                tileCache[tileTypeId] = tile;
-                return tile;
+                themeKey = tileType.Name;
             }
 
-            // Fallback to default
-            var fallback = GetFallbackTile();
-            tileCache[tileTypeId] = fallback;
-            return fallback;
+            var tile = CreateColoredTile(TileTheme.ColorFor(themeKey));
+            tileCache[tileTypeId] = tile;
+            return tile;
         }
 
         private TileBase GetFallbackTile()
@@ -143,34 +216,57 @@ namespace Aetherium.Unity.Rendering
             // Lazily create a single fallback Tile so we don't allocate per frame
             // when no inspector-assigned defaultTile is provided.
             if (fallbackTile == null)
-                fallbackTile = CreateDefaultTile();
+                fallbackTile = CreateColoredTile(TileTheme.ColorFor(null));
 
             return fallbackTile;
         }
 
         private void OnDestroy()
         {
-            if (fallbackTile != null)
+            // Destroy the ScriptableObject Tiles we generated (the inspector-assigned
+            // defaultTile is an asset we don't own, so it's excluded below).
+            foreach (var tile in tileCache.Values)
+            {
+                if (tile != null && tile != defaultTile)
+                    Destroy(tile);
+            }
+            tileCache.Clear();
+
+            if (fallbackTile != null && fallbackTile != defaultTile)
             {
                 Destroy(fallbackTile);
                 fallbackTile = null;
             }
         }
 
-        private TileBase CreateTileFromType(TileTypeLite tileType)
+        private Tile CreateColoredTile(Color color)
         {
-            // For now, create a simple colored tile
-            // In a full implementation, this could load sprites from Resources or addressables
-            return CreateDefaultTile();
+            var tile = ScriptableObject.CreateInstance<Tile>();
+            tile.sprite = GetSharedSprite();
+            tile.color = color;
+            return tile;
         }
 
-        private TileBase CreateDefaultTile()
+        private static Sprite GetSharedSprite()
         {
-            // Create a simple white tile
-            var tile = ScriptableObject.CreateInstance<Tile>();
-            // Note: Tile sprite would need to be set from a Sprite asset
-            // For now, this is a placeholder that Unity will handle
-            return tile;
+            if (sharedSprite == null)
+            {
+                sharedTexture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
+                {
+                    filterMode = FilterMode.Point
+                };
+                sharedTexture.SetPixel(0, 0, Color.white);
+                sharedTexture.Apply();
+
+                // pixelsPerUnit == 1 so the 1×1 sprite fills exactly one grid cell.
+                sharedSprite = Sprite.Create(
+                    sharedTexture,
+                    new Rect(0f, 0f, 1f, 1f),
+                    new Vector2(0.5f, 0.5f),
+                    1f);
+            }
+
+            return sharedSprite;
         }
     }
 }
