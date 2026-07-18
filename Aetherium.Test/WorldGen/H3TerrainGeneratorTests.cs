@@ -21,9 +21,11 @@ namespace Aetherium.Test.WorldGen
     {
         private const int Seed = 20260718;
 
+        // Biomes plus the feature terrain the generator now paints on top of them (settlement cores are
+        // Road/Indoors; rivers are Water). Every cell must carry one of these — never null or unknown.
         private static readonly HashSet<string> KnownBiomes = new(StringComparer.Ordinal)
         {
-            "Water", "Plains", "Forest", "Desert", "Hills", "Mountain"
+            "Water", "Plains", "Forest", "Desert", "Hills", "Mountain", "Road", "Indoors"
         };
 
         private static long ExpectedCellCount(int resolution)

@@ -12,9 +12,10 @@
 # 384² Overworld and is deliberately sized to host a planetary economy: many settlements, trade
 # routes, and transport networks with real distance between them (see the design doc).
 #
-# Slice-1 scope: terrain + biomes + a light creature population. Sphere-native settlements, roads,
-# rivers, transit, and markets — plus player-relative perception on the sphere — are the phased
-# roadmap in docs/design/h3-sphere-worldgen.md.
+# Built: terrain + biomes, player-relative perception + sphere-native FOV/lighting, and sphere-native
+# rivers, tiered settlements (320 of them at these settings), and the wide road corridors between them.
+# Transit (rail/subway), satellites + full z-altitude, and markets are the remaining roadmap in
+# docs/design/h3-sphere-worldgen.md.
 id: aphelion-h3
 name: Aphelion Prime
 version: 0.1.0
@@ -41,6 +42,29 @@ world:
     # A light scattering of wildlife so the planet isn't empty; the population pass is bounded and
     # topology-agnostic. Raise deliberately — every roamer fans out a move delta each tick.
     enemyCount: 12
+
+    # --- Sphere-native features (docs/design/h3-sphere-worldgen.md §7) ---
+    # Rivers: steepest-descent channels, carved as Water, widening toward the mouth so wide vehicles
+    # pass each other several lanes abreast near the coast. mouthWidth is a gridDisk half-width.
+    riverCount: 45
+    riverMouthWidth: 3
+    riverWidenSteps: 10
+    # Settlements: a busy, tiered world — the planet has room. Counts here override the land-scaled
+    # defaults; spacing is in cells (converted to great-circle radians at this resolution).
+    capitalCount: 6
+    cityCount: 24
+    townCount: 70
+    villageCount: 220
+    capitalSpacingCells: 80
+    citySpacingCells: 40
+    townSpacingCells: 18
+    villageSpacingCells: 9
+    # Roads: MST backbone + k nearest neighbours (loops → alternate trade routes). Widths are gridDisk
+    # half-widths — a trunk highway (highwayWidth 2 → 5 cells across) carries several lanes each way;
+    # feeder roads (roadWidth 1 → 3 cells) are narrower. Corridors bridge rivers and bays.
+    roadNeighbors: 2
+    highwayWidth: 2
+    roadWidth: 1
 
 # Full 360° sight with a wide horizon so the open planet reads (range sizes the perception viewport).
 player:
