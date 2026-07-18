@@ -57,11 +57,13 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
    renders as a bright magenta capsule (loud beats invisible).
 
    **Creature memory:** a creature that leaves your view (you turned away, or it slipped
-   past the lamp) lingers as a darkening, slowly swelling ghost — the swell is positional
-   uncertainty ("it could have moved by now") — then disperses. Looking back at the spot
-   and finding it empty collapses the ghost instantly: observation beats memory. Tune
-   `ghostSeconds` / `ghostExpansionCells` on the EntityViewRegistry component live in Play
-   mode to taste. Vision is directional (a 120° forward arc from `game.yaml`
+   past the lamp) lingers as a last-seen impression: the model stays where you saw it and
+   dims, while a circular pool of floor tiles glowing the creature's color spreads outward
+   around it — about one cell of radius per second — marking where it could plausibly be by
+   now. After ~5 seconds both fade out entirely. Looking back at the spot and finding it
+   empty collapses the impression instantly: observation beats memory. Tune `ghostSeconds` /
+   `ghostSpreadCellsPerSecond` / `ghostGlowOpacity` on the EntityViewRegistry component live
+   in Play mode to taste. Vision is directional (a 120° forward arc from `game.yaml`
    `player.vision`), so minding your back — and remembering what was behind you — matters.
 5. **To play the `aphelion` bundle** instead of the default world, create an instance and
    paste its world id into the `AetheriumClientBehaviour` inspector field:
