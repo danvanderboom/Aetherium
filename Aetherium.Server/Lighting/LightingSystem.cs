@@ -89,6 +89,44 @@ namespace Aetherium.Lighting
         }
 
         /// <summary>
+        /// Augments a focus-band light frame with coarse per-band light across the perception slab, so off-focus
+        /// cells emitted by the 3D vision pass are not rendered pitch black. Each off-focus cell inherits its
+        /// focus-column light attenuated by band distance; existing focus-band entries are never overwritten.
+        /// This is a deliberately coarse pass (no per-band shadow re-casting) matching the slab's silhouette fidelity.
+        /// </summary>
+        public void AddCoarseSlabLighting(World world, LightFrame frame, Rectangle bounds, int focusZ, int depthBelow, int depthAbove)
+        {
+            if (depthBelow <= 0 && depthAbove <= 0)
+                return;
+
+            int floor = Math.Max(world.MinBand, focusZ - depthBelow);
+            int ceil = Math.Min(world.MaxBand, focusZ + depthAbove);
+
+            for (int by = bounds.Top; by < bounds.Bottom; by++)
+            {
+                for (int bx = bounds.Left; bx < bounds.Right; bx++)
+                {
+                    var focusLight = frame.GetLightLevel(new WorldLocation(bx, by, focusZ));
+                    if (focusLight <= 0.0)
+                        continue; // nothing lit to propagate down/up this column
+
+                    for (int z = floor; z <= ceil; z++)
+                    {
+                        if (z == focusZ)
+                            continue;
+
+                        var cell = new WorldLocation(bx, by, z);
+                        if (frame.GetLightLevel(cell) > 0.0)
+                            continue; // don't override any real per-band lighting
+
+                        var falloff = 1.0 / (1 + Math.Abs(z - focusZ));
+                        frame.SetLightLevel(cell, focusLight * falloff);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Finds all entities with LightSource components at the specified Z level.
         /// Returns tuples of (Entity, LightSource, WorldLocation).
         /// </summary>

@@ -179,6 +179,12 @@ Light sources found:
                 {
                     visionFrame = visionSystem.ComputeVision(world, playerLocation, bounds, maxRange, lightFrame);
                 }
+
+                // Coarse per-band lighting for the 3D slab, so off-focus cells the vision pass emits carry a
+                // sensible (dimmed-by-depth) light level rather than rendering black. No-op when the slab is off.
+                var slabBelow = Math.Min(world.SlabDepthBelow, world.SlabDepthCap);
+                var slabAbove = Math.Min(world.SlabDepthAbove, world.SlabDepthCap);
+                lightingSystem.AddCoarseSlabLighting(world, lightFrame, bounds, playerLocation.Z, slabBelow, slabAbove);
             }
 
             // Get sunlight color for ambient tint (if in sunlight mode)

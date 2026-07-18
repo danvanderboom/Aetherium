@@ -12,6 +12,10 @@ namespace Aetherium.Views
     {
         int symbolWidth = 2;
 
+        // Glyphs for off-focus cells that hold only an entity, no terrain — an overhead flyer, a creature below.
+        private const string SilhouetteCharacter = "^";
+        private const string SilhouetteObject = "*";
+
         public Aetherium.WorldDirection Heading { get; set; } = Aetherium.WorldDirection.North;
         public ConsoleColor[,]? GridColoring { get; set; }
         public WorldLocationDto? WorldLocation { get; set; }
@@ -43,6 +47,152 @@ namespace Aetherium.Views
                     -(ContentSize.Width / symbolWidth) / 2,
                     -ContentSize.Height / 2),
                 size: new Size(ContentSize.Width / symbolWidth, ContentSize.Height));
+
+        // --- Depth compositing & level ribbon (add-adaptive-depth-visualization Section 2) ---
+
+        // Groups the perception's visuals by screen column (relative x,y), each column sorted top band first.
+        private Dictionary<(int x, int y), List<VisualDto>> BuildColumnIndex()
+        {
+            var index = new Dictionary<(int x, int y), List<VisualDto>>();
+            if (Perception == null) return index;
+
+            foreach (var v in Perception.Visuals.Values)
+            {
+                var key = (v.Location.X, v.Location.Y);
+                if (!index.TryGetValue(key, out var list))
+                {
+                    list = new List<VisualDto>();
+                    index[key] = list;
+                }
+                list.Add(v);
+            }
+
+            foreach (var list in index.Values)
+                list.Sort((a, b) => b.Location.Z.CompareTo(a.Location.Z)); // top band first
+            return index;
+        }
+
+        private HashSet<(int x, int y, int z)> BuildItemLocationSet()
+        {
+            var set = new HashSet<(int x, int y, int z)>();
+            if (Perception?.VisibleItems == null) return set;
+            foreach (var item in Perception.VisibleItems)
+                if (item.Location != null)
+                    set.Add((item.Location.X, item.Location.Y, item.Location.Z));
+            return set;
+        }
+
+        // A cell anchors a glyph if it has terrain, an item, or something seen there. Empty focus cells (open air /
+        // grates) are not drawable, so a lower band shows through.
+        private static bool IsDrawable(VisualDto v, HashSet<(int x, int y, int z)> itemLocs) =>
+            v.Terrain != null
+            || v.ThingsSeen.Count > 0
+            || itemLocs.Contains((v.Location.X, v.Location.Y, v.Location.Z));
+
+        // Composite selection: the focus band (dZ 0) wins when drawable; otherwise the topmost drawable band in the
+        // column — a deck overhead, or a floor seen down an open shaft. Null when the column holds no content.
+        private static (VisualDto? visual, int dz) SelectDisplayVisual(
+            List<VisualDto> columnTopFirst, HashSet<(int x, int y, int z)> itemLocs)
+        {
+            VisualDto? focus = null;
+            foreach (var v in columnTopFirst)
+                if (v.Location.Z == 0) { focus = v; break; }
+
+            if (focus != null && IsDrawable(focus, itemLocs))
+                return (focus, 0);
+
+            foreach (var v in columnTopFirst) // already top band first
+                if (IsDrawable(v, itemLocs))
+                    return (v, v.Location.Z);
+
+            return (null, 0);
+        }
+
+        // Depth attenuation applied to a cell's light, keyed on |dZ|: focus full, deeper bands progressively dimmer.
+        private static double DepthFactor(int dz) => 1.0 / (1.0 + 0.5 * Math.Abs(dz));
+
+        /// <summary>
+        /// The occupied bands around the player (relative Z), top band first, for the HUD level ribbon. The focus
+        /// band (0) is always included; each entry is flagged when it is the focus band.
+        /// </summary>
+        public List<(int dz, bool isFocus)> BuildLevelRibbon()
+        {
+            var bands = new SortedSet<int>();
+            if (Perception != null)
+            {
+                var itemLocs = BuildItemLocationSet();
+                foreach (var v in Perception.Visuals.Values)
+                    if (IsDrawable(v, itemLocs))
+                        bands.Add(v.Location.Z);
+            }
+            bands.Add(0);
+
+            var result = new List<(int dz, bool isFocus)>();
+            foreach (var z in bands.Reverse())
+                result.Add((z, z == 0));
+            return result;
+        }
+
+        private ConsoleColor? GridColorAt(int relativeX, int relativeY)
+        {
+            if (GridColoring == null) return null;
+            var h = GridColoring.GetLength(0);
+            var w = GridColoring.GetLength(1);
+            return GridColoring[Math.Abs(relativeY % h), Math.Abs(relativeX % w)];
+        }
+
+        private static TileTypeDto FallbackPlayerTile() => new TileTypeDto
+        {
+            Name = "Player",
+            Settings = new Dictionary<string, string>
+            {
+                ["MapCharacter"] = "@",
+                ["ForegroundColor"] = "Yellow",
+                ["BackgroundColor"] = "Black"
+            }
+        };
+
+        private void DrawSilhouette(VisualDto visual, ConsoleColor? gridColor, double light)
+        {
+            var ch = visual.ThingsSeen.ContainsKey(Aetherium.Model.VisualType.Character) ? SilhouetteCharacter : SilhouetteObject;
+            DrawTileType(new TileTypeDto
+            {
+                Name = "Silhouette",
+                Settings = new Dictionary<string, string>
+                {
+                    ["MapCharacter"] = ch,
+                    ["ForegroundColor"] = "DarkGray",
+                    ["BackgroundColor"] = "Black"
+                }
+            }, gridColor, light);
+        }
+
+        // Draws the vertical level ribbon to the right of the map: one row per occupied band, focus band marked.
+        private void DrawLevelRibbon(Point screenPosition, Size size)
+        {
+            var ribbon = BuildLevelRibbon();
+            if (ribbon.Count <= 1) return; // a single band needs no depth ribbon
+
+            int col = screenPosition.X + size.Width + 1;
+            try
+            {
+                for (int i = 0; i < ribbon.Count && i < size.Height; i++)
+                {
+                    var (dz, isFocus) = ribbon[i];
+                    Console.SetCursorPosition(col, screenPosition.Y + i);
+                    Console.BackgroundColor = BackgroundColor;
+                    Console.ForegroundColor = isFocus ? ConsoleColor.Yellow : ConsoleColor.DarkGray;
+                    Console.Write((isFocus ? ">" : " ") + FormatBand(dz).PadLeft(3));
+                }
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Console too narrow for the side ribbon; the HUD is best-effort, so skip it.
+            }
+            Console.ForegroundColor = ConsoleColor.Gray;
+        }
+
+        private static string FormatBand(int dz) => (dz > 0 ? "+" : "") + dz.ToString();
 
         protected override void DrawContents(Point screenPosition, Size size)
         {
@@ -77,17 +227,16 @@ namespace Aetherium.Views
             var xoffset = worldWidth / 2;
             var yoffset = worldHeight / 2;
 
-            // Diagnostic tracking for test mode (check if .ui-test directory exists in project root)
-            var currentDir = new System.IO.DirectoryInfo(System.IO.Directory.GetCurrentDirectory());
-            var projectRoot = currentDir;
-            // If we're in Aetherium subdirectory, go up one level
-            if (currentDir.Name == "Aetherium" && currentDir.Parent != null)
-                projectRoot = currentDir.Parent;
-            var uiTestDir = System.IO.Path.Combine(projectRoot.FullName, ".ui-test");
-            var testMode = System.IO.Directory.Exists(uiTestDir) || Environment.GetEnvironmentVariable("UI_SELFTEST_MODE") == "1";
-            var keysLookedUp = new System.Collections.Generic.HashSet<string>();
-            var keysFound = new System.Collections.Generic.HashSet<string>();
-            var keysNotFound = new System.Collections.Generic.HashSet<string>();
+            var columnIndex = BuildColumnIndex();
+            var itemLocs = BuildItemLocationSet();
+
+            // Focus-band light for the player glyph.
+            double playerLight = 1.0;
+            if (columnIndex.TryGetValue((0, 0), out var playerColumn))
+            {
+                var pf = playerColumn.Find(v => v.Location.Z == 0);
+                if (pf != null) playerLight = pf.LightLevel;
+            }
 
             for (int y = 0; y < size.Height; y++)
             {
@@ -95,111 +244,61 @@ namespace Aetherium.Views
                 {
                     Console.SetCursorPosition(screenPosition.X + (x * symbolWidth), screenPosition.Y + y);
 
-                    // Calculate relative coordinates (offsets from player at center)
+                    // Relative coordinates (offsets from the player at the centre).
                     var relativeX = x - xoffset;
                     var relativeY = y - yoffset;
-                    var relativeZ = 0; // Player is always on Z=0 relative to themselves
+                    var color = GridColorAt(relativeX, relativeY);
 
-                    // Create location key for looking up in perception visuals (using relative coordinates)
-                    var locationKey = $"{relativeX},{relativeY},{relativeZ}";
-                    
-                    if (testMode)
-                        keysLookedUp.Add(locationKey);
-
-                    // Check if this location is visible
-                    if (!Perception.Visuals.TryGetValue(locationKey, out var visual))
+                    // The player is always centred on the focus band.
+                    if (relativeX == 0 && relativeY == 0)
                     {
-                        if (testMode)
-                            keysNotFound.Add(locationKey);
+                        if (Perception.TileTypes.TryGetValue("Player", out var playerTileType))
+                            DrawTileType(playerTileType, color, playerLight);
+                        else
+                            DrawTileType(FallbackPlayerTile(), color, playerLight);
+                        continue;
+                    }
+
+                    // Composite this screen column over the slab.
+                    if (!columnIndex.TryGetValue((relativeX, relativeY), out var column))
+                    {
                         Console.BackgroundColor = BackgroundColor;
                         Console.Write(new string(' ', symbolWidth));
                         continue;
                     }
-                    
-                    if (testMode)
-                        keysFound.Add(locationKey);
 
-                    // Optionally: display grid coloring
-                    ConsoleColor? color = null;
-                    if (GridColoring != null)
+                    var (visual, dz) = SelectDisplayVisual(column, itemLocs);
+                    if (visual == null)
                     {
-                        var gridColorHeight = GridColoring.GetLength(0);
-                        var gridColorWidth = GridColoring.GetLength(1);
-
-                        // Use relative coordinates for grid coloring
-                        color = GridColoring[
-                            Math.Abs(relativeY % gridColorHeight),
-                            Math.Abs(relativeX % gridColorWidth)];
+                        Console.BackgroundColor = BackgroundColor;
+                        Console.Write(new string(' ', symbolWidth));
+                        continue;
                     }
 
-                    // Check if this is the player location (always at 0,0,0 in relative coordinates)
-                    if (relativeX == 0 && relativeY == 0 && relativeZ == 0)
-                    {
-                        // Draw player
-                        if (Perception.TileTypes.TryGetValue("Player", out var playerTileType))
-                        {
-                            DrawTileType(playerTileType, color, visual.LightLevel);
-                        }
-                        else
-                        {
-                            // Fallback player rendering
-                            DrawTileType(new TileTypeDto 
-                            { 
-                                Name = "Player",
-                                Settings = new Dictionary<string, string>
-                                {
-                                    ["MapCharacter"] = "@",
-                                    ["ForegroundColor"] = "Yellow",
-                                    ["BackgroundColor"] = "Black"
-                                }
-                            }, color, visual.LightLevel);
-                        }
-                    }
+                    // Off-focus bands are attenuated by depth; the focus band renders at full lighting.
+                    var light = visual.LightLevel * DepthFactor(dz);
+
+                    var itemAtLocation = Perception.VisibleItems?.FirstOrDefault(
+                        item => item.Location != null &&
+                        item.Location.X == relativeX &&
+                        item.Location.Y == relativeY &&
+                        item.Location.Z == dz);
+
+                    if (itemAtLocation != null)
+                        DrawItem(itemAtLocation, color, light);
+                    else if (visual.Terrain != null)
+                        DrawTileType(visual.Terrain, color, light);
+                    else if (dz != 0 && visual.ThingsSeen.Count > 0)
+                        DrawSilhouette(visual, color, light); // an overhead/below entity with no terrain
                     else
                     {
-                        // Check for items at this location first
-                        var itemAtLocation = Perception.VisibleItems?.FirstOrDefault(
-                            item => item.Location != null &&
-                            item.Location.X == relativeX &&
-                            item.Location.Y == relativeY &&
-                            item.Location.Z == relativeZ);
-
-                        if (itemAtLocation != null)
-                        {
-                            // Draw item
-                            DrawItem(itemAtLocation, color, visual.LightLevel);
-                        }
-                        else if (visual.Terrain != null)
-                        {
-                            // Draw terrain
-                            DrawTileType(visual.Terrain, color, visual.LightLevel);
-                        }
-                        else
-                        {
-                            Console.BackgroundColor = BackgroundColor;
-                            Console.Write(new string(' ', symbolWidth));
-                        }
+                        Console.BackgroundColor = BackgroundColor;
+                        Console.Write(new string(' ', symbolWidth));
                     }
                 }
             }
-            
-            // Diagnostic output (save to file if in test mode)
-            if (testMode && keysLookedUp.Count > 0) // Only log if we tracked anything
-            {
-                var diagPath = System.IO.Path.Combine(uiTestDir, "render_diagnostics.txt");
-                try
-                {
-                    System.IO.Directory.CreateDirectory(uiTestDir);
-                    var diagContent = $"Keys in Perception.Visuals: {string.Join(", ", Perception.Visuals.Keys.Take(10))}\n" +
-                        $"Keys looked up (sample): {string.Join(", ", keysLookedUp.Take(10))}\n" +
-                        $"Keys found: {keysFound.Count}, Keys not found: {keysNotFound.Count}\n" +
-                        $"Sample not found keys: {string.Join(", ", keysNotFound.Take(10))}\n" +
-                        $"worldWidth={worldWidth}, worldHeight={worldHeight}, xoffset={xoffset}, yoffset={yoffset}\n" +
-                        $"size.Width={size.Width}, size.Height={size.Height}, symbolWidth={symbolWidth}\n";
-                    System.IO.File.WriteAllText(diagPath, diagContent);
-                }
-                catch { /* ignore write errors */ }
-            }
+
+            DrawLevelRibbon(screenPosition, size);
 
             Console.BackgroundColor = BackgroundColor;
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -460,65 +559,63 @@ namespace Aetherium.Views
             var xoffset = worldWidth / 2;
             var yoffset = worldHeight / 2;
 
+            var columnIndex = BuildColumnIndex();
+            var itemLocs = BuildItemLocationSet();
+
             for (int y = 0; y < worldHeight; y++)
             {
                 for (int x = 0; x < worldWidth; x++)
                 {
-                    // Calculate relative coordinates (offsets from player at center)
                     var relativeX = x - xoffset;
                     var relativeY = y - yoffset;
-                    var relativeZ = 0;
 
-                    // Create location key for looking up in perception visuals (using relative coordinates)
-                    var locationKey = $"{relativeX},{relativeY},{relativeZ}";
-
-                    // Check if this location is visible
-                    if (!Perception.Visuals.TryGetValue(locationKey, out var visual))
+                    // Player is always centred on the focus band.
+                    if (relativeX == 0 && relativeY == 0)
                     {
-                        asciiMap.Tiles[y][x] = "  "; // Empty space
+                        if (Perception.TileTypes.TryGetValue("Player", out var playerTileType) &&
+                            playerTileType.Settings.TryGetValue("MapCharacter", out var playerChar))
+                            asciiMap.Tiles[y][x] = playerChar + playerChar;
+                        else
+                            asciiMap.Tiles[y][x] = "@@";
                         continue;
                     }
 
-                    // Check if this is the player location (always at 0,0,0 in relative coordinates)
-                    if (relativeX == 0 && relativeY == 0 && relativeZ == 0)
+                    if (!columnIndex.TryGetValue((relativeX, relativeY), out var column))
                     {
-                        // Player
-                        if (Perception.TileTypes.TryGetValue("Player", out var playerTileType) &&
-                            playerTileType.Settings.TryGetValue("MapCharacter", out var playerChar))
-                        {
-                            asciiMap.Tiles[y][x] = playerChar + playerChar; // 2 characters wide
-                        }
-                        else
-                        {
-                            asciiMap.Tiles[y][x] = "@@"; // Default player character
-                        }
+                        asciiMap.Tiles[y][x] = "  ";
+                        continue;
+                    }
+
+                    var (visual, dz) = SelectDisplayVisual(column, itemLocs);
+                    if (visual == null)
+                    {
+                        asciiMap.Tiles[y][x] = "  ";
+                        continue;
+                    }
+
+                    var itemAtLocation = Perception.VisibleItems?.FirstOrDefault(
+                        item => item.Location != null &&
+                        item.Location.X == relativeX &&
+                        item.Location.Y == relativeY &&
+                        item.Location.Z == dz);
+
+                    if (itemAtLocation != null && !string.IsNullOrEmpty(itemAtLocation.Icon))
+                    {
+                        var icon = itemAtLocation.Icon;
+                        asciiMap.Tiles[y][x] = icon.Length >= 2 ? icon.Substring(0, 2) : icon.PadRight(2);
+                    }
+                    else if (visual.Terrain != null && visual.Terrain.Settings.TryGetValue("MapCharacter", out var terrainChar))
+                    {
+                        asciiMap.Tiles[y][x] = terrainChar + terrainChar;
+                    }
+                    else if (dz != 0 && visual.ThingsSeen.Count > 0)
+                    {
+                        var ch = visual.ThingsSeen.ContainsKey(Aetherium.Model.VisualType.Character) ? SilhouetteCharacter : SilhouetteObject;
+                        asciiMap.Tiles[y][x] = ch + ch;
                     }
                     else
                     {
-                        // Check for items at this location first
-                        var itemAtLocation = Perception.VisibleItems?.FirstOrDefault(
-                            item => item.Location != null &&
-                            item.Location.X == relativeX &&
-                            item.Location.Y == relativeY &&
-                            item.Location.Z == relativeZ);
-
-                        if (itemAtLocation != null && !string.IsNullOrEmpty(itemAtLocation.Icon))
-                        {
-                            var icon = itemAtLocation.Icon;
-                            if (icon.Length >= 2)
-                                asciiMap.Tiles[y][x] = icon.Substring(0, 2);
-                            else
-                                asciiMap.Tiles[y][x] = icon.PadRight(2);
-                        }
-                        else if (visual.Terrain != null && visual.Terrain.Settings.TryGetValue("MapCharacter", out var terrainChar))
-                        {
-                            // Terrain - duplicate the character to fill 2 spaces
-                            asciiMap.Tiles[y][x] = terrainChar + terrainChar;
-                        }
-                        else
-                        {
-                            asciiMap.Tiles[y][x] = "  "; // Unknown/empty
-                        }
+                        asciiMap.Tiles[y][x] = "  ";
                     }
                 }
             }

@@ -1,0 +1,28 @@
+## Context
+Movement is authoritative in `World.TryMove`, which blocks non-passable terrain via `World.PassableTerrain` and gates vertical moves on `CanAscend`/`CanDescend` marker components placed on the terrain/location. The world is 3D `(X,Y,Z)`, but Z today means "floors" reachable only via stair-like markers, not free air. An `ObstructsMovement` component (numeric `Obstruction`, default 1) and a separate `ObstructsView` (numeric `Opacity`, consumed by `FovCalculator`) already exist; light uses terrain `BlocksLight` + `SunlightCalculator`. There is no autonomous NPC movement/pathfinding today, so the flight-plan follower is greenfield and rides the existing tick chain. The authoritative design is `docs/design/flying-entities.md`.
+
+## Goals / Non-Goals
+- Goals: per-band obstruction; a `Flight` capability that ignores ground obstruction while airborne; autonomous movement via flight plans and patterns; land/takeoff; altitude-aware interaction; all per-world data.
+- Non-Goals (this change): multi-tile/boardable vehicles, procedural transit networks/stations/timetables, player-piloted real-time flight controls, rendering the vertical stack, aerodynamics/fuel/physics simulation.
+
+## Decisions
+- **Altitude bands (z-order for obstruction).** Each Z is an altitude band. A ground obstacle declares an **obstruction height** `h` and blocks bands `[z, z+h)`: a mountain blocks surface + low air, a plaza floor blocks only its own band, an orbiting satellite is obstructed by nothing below it. Passability generalizes from the binary `PassableTerrain` into a band-aware `IsPassable(cell, forEntity)`. Band-0 grounded behavior is unchanged (an entity with no `Flight` at band 0 behaves exactly as today). This is what lets a subway tube (−2), a street (0), and a monorail viaduct (+3) share the same `(x,y)`.
+- **Three independent obstruction facets.** Movement (`ObstructsMovement`), sight (`ObstructsView.Opacity`), and light (`BlocksLight`) are distinct facets, and each carries the same band/height extent so occlusion is evaluated per band. A glass skylight blocks movement with `Opacity = 0` (you see the bird straight through it); a stone bridge blocks both movement and sight (it hides the bird above). "Can I see the flyer overhead?" resolves to: only if no band between us has opaque `ObstructsView` at that column.
+- **Flight capability guarded by `Has<Flight>()`.** While airborne, horizontal moves ignore ground-band obstruction (blocked only by obstacles that reach the flyer's band, e.g. a mountain peak into low air); vertical moves within `[MinBand, MaxBand]` are free and do not require `CanAscend`/`CanDescend` markers (those still gate *grounded* stair movement). A flyer never falls; altitude is explicit state. Guarding the new logic behind `Has<Flight>()` keeps the hot `TryMove` path fast for single-tile grounded entities (mind the `Entity.Get<T>()` throws-on-missing gotcha — call `Has<T>()` first).
+- **One follower, many plan sources.** Every autonomous flyer carries a `FlightPlan` whose `Source` (`Patterned`/`AdHoc`/`Scheduled`/`Manual`) varies, but a single tick-driven follower advances it at the entity's action cadence. Patterns (`orbit`/`patrol`/`wander`/`hover`) are leg generators. No global pathfinder for MVP — legs are waypoints and straight-line/greedy stepping suffices; A* over the band-graph is future work.
+- **Dense-sky separation without per-pair avoidance.** A per-world semicircular cruise rule maps heading → cruise band so opposing traffic self-separates by altitude; landing, takeoff, hover, and manual/piloted flight are exempt. Collision policy is per-world/per-class data: `separated` (default — the cruise rule keeps classes apart, same-tile/same-band resolved as occupancy) or `collidable` (flyers can collide; a collision raises an event for downstream reactions/damage).
+- **Land/takeoff as tools.** `land`/`takeoff` drive an `Airborne ↔ Landing/TakingOff ↔ Landed` state machine, gated by `Flight.CanLand` and per-world valid landing terrain (target ground cell in `requiredTerrain`, unoccupied, directly below). Modeling them as tools keeps triggering uniform across agents, scripts, players, and flight-plan arrival behavior.
+- **Data, not hardcoding.** Band range/labels and the terrain→obstruction-height table live in world config; `Flight` params, the plan/pattern, landing rules, cruise rule, and collision policy live in entity/spawn config and are attached in `SpawnEntityAsync`.
+
+## Risks / Trade-offs
+- `TryMove`/passability is a hot path → keep the per-band check behind `Has<Flight>()` and a cheap band-obstruction lookup so grounded entities do not regress.
+- Perception is single-Z today; visible flyer interaction (Phase 5) depends on the multi-Z perception slab from `adaptive-depth-visualization` → ship Phases 1–4 headless-testable and gate visible interaction on that work.
+- No existing pathfinder → MVP uses waypoint stepping; complex avoidance is future work.
+- Band-count creep multiplies per-band cost → keep the band range per-world and bounded.
+
+## References
+- `docs/design/flying-entities.md` (authoritative design)
+- `Aetherium.Server/Core/World.cs` (`TryMove`, `PassableTerrain`); `engine-core` spec (Movement Constraints, Terrain Passability Rules)
+- `Aetherium.Server/Components/ObstructsMovement.cs`, `ObstructsView.cs`, `CanAscend.cs`, `CanDescend.cs`; `SunlightCalculator.cs`
+- Tick chain `WorldGrain.TickAsync → GameMapGrain.TickAsync → MapRegionGrain.TickAsync`; spawning `GameMapGrain.SpawnEntityAsync`
+- Related designs: `boardable-vehicles`, `transit-networks`, `gamepad-dual-stick`, `adaptive-depth-visualization`
