@@ -42,6 +42,14 @@ aetherctl perception get <sessionId> --absolute --json
 # 4) interrogate the whole world (god view), independent of any character's FOV
 aetherctl world dump <worldId>
 
+# Scripted / batch actions (deterministic, reproducible)
+# actions.json: [ {"tool":"move","args":{"direction":"forward"}}, {"tool":"rotate","args":{"degrees":90}} ]
+aetherctl agent script <sessionId> --file actions.json --json
+# Drive one OR MORE characters from a scenario file
+# scenario.json: { "characters": [ {"sessionId":"...","actions":[...]},
+#                                   {"world":"<worldId>","at":"10,10,0","actions":[...]} ] }
+aetherctl scenario run scenario.json --concurrent --json
+
 # Tools
 aetherctl tools list
 aetherctl tools describe move --json

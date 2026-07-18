@@ -68,6 +68,8 @@ namespace Aetherium.Server.Management
         // Tool system
         Task<List<ToolInfoDto>> ListAvailableToolsAsync(string? profileName = null);
         Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, string sessionId, Dictionary<string, object> args);
+        // Runs an ordered action sequence against one session in a single grain turn (deterministic ordering).
+        Task<List<BatchActionResultDto>> ExecuteToolBatchAsync(string sessionId, List<ScriptedActionDto> actions, bool stopOnError);
     }
 }
 

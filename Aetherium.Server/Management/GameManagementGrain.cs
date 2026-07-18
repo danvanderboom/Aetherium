@@ -1140,12 +1140,78 @@ namespace Aetherium.Server.Management
             catch (Exception ex)
             {
                 Console.WriteLine($"[GameManagementGrain] Error executing tool {toolId} for session {sessionId}: {ex.Message}");
-                return new ToolExecutionResultDto 
-                { 
-                    Success = false, 
-                    Message = $"Error executing tool: {ex.Message}" 
+                return new ToolExecutionResultDto
+                {
+                    Success = false,
+                    Message = $"Error executing tool: {ex.Message}"
                 };
             }
+        }
+
+        private const int MaxBatchActions = 1000;
+
+        public async Task<List<BatchActionResultDto>> ExecuteToolBatchAsync(string sessionId, List<ScriptedActionDto> actions, bool stopOnError)
+        {
+            var results = new List<BatchActionResultDto>();
+
+            if (actions == null || actions.Count == 0)
+                return results;
+
+            if (actions.Count > MaxBatchActions)
+            {
+                results.Add(new BatchActionResultDto
+                {
+                    Index = 0,
+                    Tool = string.Empty,
+                    Success = false,
+                    Message = $"Batch too large: {actions.Count} actions (max {MaxBatchActions})"
+                });
+                return results;
+            }
+
+            // Fail fast on an unknown session with a single result rather than N identical failures.
+            if (string.IsNullOrEmpty(sessionId) || !_sessionIndex.ContainsKey(sessionId))
+            {
+                results.Add(new BatchActionResultDto
+                {
+                    Index = 0,
+                    Tool = string.Empty,
+                    Success = false,
+                    Message = $"Session not found: {sessionId}"
+                });
+                return results;
+            }
+
+            // Runs inside a single grain turn: no other management call interleaves against this
+            // session mid-batch, so ordering is deterministic. Each step reuses ExecuteToolAsync.
+            for (int i = 0; i < actions.Count; i++)
+            {
+                var action = actions[i] ?? new ScriptedActionDto();
+                var args = action.Args ?? new Dictionary<string, object>();
+
+                ToolExecutionResultDto stepResult;
+                try
+                {
+                    stepResult = await ExecuteToolAsync(action.Tool, sessionId, args);
+                }
+                catch (Exception ex)
+                {
+                    stepResult = new ToolExecutionResultDto { Success = false, Message = $"Error executing tool: {ex.Message}" };
+                }
+
+                results.Add(new BatchActionResultDto
+                {
+                    Index = i,
+                    Tool = action.Tool,
+                    Success = stepResult.Success,
+                    Message = stepResult.Message
+                });
+
+                if (stopOnError && !stepResult.Success)
+                    break;
+            }
+
+            return results;
         }
     }
 }

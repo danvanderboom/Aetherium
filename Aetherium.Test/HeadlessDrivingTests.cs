@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using Orleans.TestingHost;
 using Orleans.Hosting;
 using Orleans.Configuration;
 using Orleans;
+using Aetherium.Model;
 using Aetherium.Server.Management;
 using Aetherium.Server.MultiWorld;
 
@@ -56,6 +58,14 @@ namespace Aetherium.Test
                     });
 
                     services.AddSingleton<Aetherium.Server.GameSessionManager>();
+
+                    // Tool registry (reflection-discovered) so ExecuteToolAsync / batch can run tools.
+                    services.AddSingleton<Aetherium.Server.Agents.Tools.AgentToolRegistry>(sp =>
+                    {
+                        var registry = new Aetherium.Server.Agents.Tools.AgentToolRegistry(sp);
+                        registry.DiscoverTools(typeof(Aetherium.Server.Agents.Tools.AgentToolRegistry).Assembly);
+                        return registry;
+                    });
 
                     // The in-process bridge under test: GameMapGrain publishes worlds here,
                     // GameManagementGrain reads/drives them for headless sessions + snapshots.
@@ -353,6 +363,137 @@ namespace Aetherium.Test
             Assert.That(reaped, Is.GreaterThanOrEqualTo(1));
             var afterReap = await mgmt.ListSessionsAsync();
             Assert.That(afterReap.Any(s => s.SessionId == session.SessionId), Is.False);
+        }
+
+        // ---- Scripted / batch action execution (change: add-aetherctl-scripted-actions) ----
+
+        private static ScriptedActionDto Move(string dir = "forward") =>
+            new ScriptedActionDto { Tool = "move", Args = new Dictionary<string, object> { ["direction"] = dir } };
+
+        private async Task<string> HeadlessSessionInNewWorldAsync()
+        {
+            var worldId = await CreateWorldAsync();
+            var session = await Mgmt().CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+            return session.SessionId!;
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Execute an ordered batch"
+        [Test]
+        public async Task Batch_RunsInOrder_OneResultPerStep()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+            var actions = new List<ScriptedActionDto> { Move(), Move(), Move() };
+
+            var results = await Mgmt().ExecuteToolBatchAsync(sessionId, actions, false);
+
+            Assert.That(results.Count, Is.EqualTo(3));
+            Assert.That(results.Select(r => r.Index), Is.EqualTo(new[] { 0, 1, 2 }));
+            Assert.That(results.All(r => r.Tool == "move"), Is.True);
+            Assert.That(results.All(r => r.Success), Is.True);
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Stop on first error"
+        [Test]
+        public async Task Batch_StopOnError_HaltsAtFirstFailure()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+            var actions = new List<ScriptedActionDto>
+            {
+                Move(),
+                new ScriptedActionDto { Tool = "no-such-tool", Args = new Dictionary<string, object>() },
+                Move()
+            };
+
+            var results = await Mgmt().ExecuteToolBatchAsync(sessionId, actions, stopOnError: true);
+
+            Assert.That(results.Count, Is.EqualTo(2), "should stop after the failing step");
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[1].Success, Is.False);
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Continue past errors"
+        [Test]
+        public async Task Batch_ContinuePastErrors_ReportsEachStep()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+            var actions = new List<ScriptedActionDto>
+            {
+                Move(),
+                new ScriptedActionDto { Tool = "no-such-tool", Args = new Dictionary<string, object>() },
+                Move()
+            };
+
+            var results = await Mgmt().ExecuteToolBatchAsync(sessionId, actions, stopOnError: false);
+
+            Assert.That(results.Count, Is.EqualTo(3));
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[1].Success, Is.False);
+            Assert.That(results[2].Success, Is.True);
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Unknown session"
+        [Test]
+        public async Task Batch_UnknownSession_SingleFailure()
+        {
+            var results = await Mgmt().ExecuteToolBatchAsync($"nope-{Guid.NewGuid()}", new List<ScriptedActionDto> { Move() }, false);
+
+            Assert.That(results.Count, Is.EqualTo(1));
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].Message.ToLowerInvariant(), Does.Contain("not found"));
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Empty and oversized batches"
+        [Test]
+        public async Task Batch_EmptyAndOversized()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+
+            var empty = await Mgmt().ExecuteToolBatchAsync(sessionId, new List<ScriptedActionDto>(), false);
+            Assert.That(empty, Is.Empty);
+
+            var oversized = Enumerable.Range(0, 1001).Select(_ => Move()).ToList();
+            var overResult = await Mgmt().ExecuteToolBatchAsync(sessionId, oversized, false);
+            Assert.That(overResult.Count, Is.EqualTo(1));
+            Assert.That(overResult[0].Success, Is.False);
+            Assert.That(overResult[0].Message.ToLowerInvariant(), Does.Contain("too large"));
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — ordered batch changes observable state
+        [Test]
+        public async Task Batch_ChangesObservableState()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+            var actions = new List<ScriptedActionDto>
+            {
+                new ScriptedActionDto { Tool = "toggledirectionalvision", Args = new Dictionary<string, object> { ["enabled"] = true } }
+            };
+
+            var results = await Mgmt().ExecuteToolBatchAsync(sessionId, actions, false);
+            Assert.That(results.Single().Success, Is.True, results.Single().Message);
+
+            using var doc = JsonDocument.Parse((await Mgmt().GetPerceptionAsync(sessionId))!);
+            Assert.That(doc.RootElement.GetProperty("IsDirectionalVision").GetBoolean(), Is.True);
+        }
+
+        // Spec: aetherctl / Multi-Character Scenario Command — core capability the CLI orchestrates:
+        //       two characters in one world, each driven by its own batch, both reporting results.
+        [Test]
+        public async Task MultipleCharacters_InOneWorld_EachDrivenAndReport()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var a = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            var b = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(a.Success && b.Success, Is.True);
+            Assert.That(a.SessionId, Is.Not.EqualTo(b.SessionId));
+
+            var ra = await mgmt.ExecuteToolBatchAsync(a.SessionId!, new List<ScriptedActionDto> { Move(), Move() }, false);
+            var rb = await mgmt.ExecuteToolBatchAsync(b.SessionId!, new List<ScriptedActionDto> { Move() }, false);
+
+            Assert.That(ra.Count, Is.EqualTo(2));
+            Assert.That(rb.Count, Is.EqualTo(1));
+            Assert.That(ra.All(r => r.Success) && rb.All(r => r.Success), Is.True);
         }
     }
 }
