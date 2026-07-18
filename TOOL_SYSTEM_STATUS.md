@@ -107,7 +107,8 @@
 - [x] Session termination (`session close <sessionId>`)
 - [x] Headless driving (`session create --world`, `perception get [--absolute]`, `world dump`) — see OpenSpec change `add-aetherctl-headless-driving`.
 - [x] Scripted / batch actions (`agent script <sessionId> --file`, `scenario run <file>`; server `ExecuteToolBatchAsync`) — see OpenSpec change `add-aetherctl-scripted-actions`.
-- [x] Runtime world-building (`world spawn`, `world edit <toolId>`; server `ExecuteWorldToolAsync`; `SpawnEntityTool` implemented via `EntityFactory`) — see OpenSpec change `add-aetherctl-runtime-worldbuilding`. Remaining follow-ups: item/prefab spawning beyond creatures, `BuildStructureAsync`, an `AgentRunner` scripted policy, conditionals/assertions in scripts, cross-character synchronization, activating the dormant `Memory` component, and region-bounded snapshots.
+- [x] Runtime world-building (`world spawn`, `world edit <toolId>`; server `ExecuteWorldToolAsync`; `SpawnEntityTool` implemented via `EntityFactory`) — see OpenSpec change `add-aetherctl-runtime-worldbuilding`.
+- [x] Telemetry CLI (`telemetry snapshots|analysis|replays|replay|clear`) over the existing `AgentTelemetryGrain` — see OpenSpec change `add-aetherctl-telemetry`. Remaining follow-ups: item/prefab spawning beyond creatures, `BuildStructureAsync`, an `AgentRunner` scripted policy, conditionals/assertions in scripts, cross-character synchronization, activating the dormant `Memory` component (design under investigation), region-bounded snapshots, and replay playback.
 - [ ] Delegation commands
 
 ### Phase 10: Documentation (In Progress)

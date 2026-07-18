@@ -619,6 +619,45 @@ namespace Aetherium.Test
             Assert.That(characterTool.Message.ToLowerInvariant(), Does.Contain("world_edit"));
         }
 
+        // Spec: aetherctl / Telemetry Inspection Commands (change: add-aetherctl-telemetry) —
+        //       server anchor for the retrieval path the CLI uses: record snapshot + replay, read back.
+        [Test]
+        public async Task Telemetry_RecordAndReadBack_SnapshotsAnalysisReplay()
+        {
+            var agentId = $"agent-telemetry-{Guid.NewGuid()}";
+            var telemetry = _cluster.GrainFactory.GetGrain<Aetherium.Server.Agents.Telemetry.IAgentTelemetryGrain>(agentId);
+
+            await telemetry.RecordSnapshotAsync(new Aetherium.Server.Agents.Telemetry.PerformanceSnapshot
+            {
+                Timestamp = DateTime.UtcNow,
+                StepNumber = 1,
+                AgentId = agentId,
+                SessionId = "session-x",
+                ActionType = "move",
+                ActionSummary = "move F",
+                ActionSucceeded = true,
+                DecisionLatencyMs = 5,
+                PerceptionComplexity = 10
+            });
+
+            var snapshots = await telemetry.GetSnapshotsAsync(10);
+            Assert.That(snapshots.Count, Is.EqualTo(1));
+            Assert.That(snapshots[0].ActionType, Is.EqualTo("move"));
+
+            var analysis = await telemetry.GetAnalysisAsync();
+            Assert.That(analysis.TotalSteps, Is.EqualTo(1));
+            Assert.That(analysis.TotalSuccessfulActions, Is.EqualTo(1));
+
+            var replayId = await telemetry.RecordFailedRunAsync("{\"steps\":[]}");
+            var ids = await telemetry.GetFailedRunIdsAsync(10);
+            Assert.That(ids, Does.Contain(replayId));
+            var replay = await telemetry.GetReplayAsync(replayId);
+            Assert.That(replay, Is.EqualTo("{\"steps\":[]}"));
+
+            await telemetry.ClearTelemetryAsync();
+            Assert.That((await telemetry.GetSnapshotsAsync(10)).Count, Is.EqualTo(0));
+        }
+
         // Spec: game-management-grain / Runtime World Tool Execution — Scenario "Operator gating"
         [Test]
         public async Task WorldTool_OperatorGate_Denies()

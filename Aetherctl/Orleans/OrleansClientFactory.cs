@@ -73,6 +73,12 @@ namespace Aetherctl.Orleans
             return _client!.GetGrain<IAgentRunnerGrain>(runnerId);
         }
 
+        public Aetherium.Server.Agents.Telemetry.IAgentTelemetryGrain GetAgentTelemetry(string agentId)
+        {
+            EnsureConnected();
+            return _client!.GetGrain<Aetherium.Server.Agents.Telemetry.IAgentTelemetryGrain>(agentId);
+        }
+
         private void EnsureConnected()
         {
             if (_client == null)
