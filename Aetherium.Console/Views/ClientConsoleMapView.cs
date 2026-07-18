@@ -24,6 +24,33 @@ namespace Aetherium.Views
         /// <summary>When true, the map renders as a side-on elevation (cross-section) instead of the top-down plan.</summary>
         public bool CrossSectionMode { get; set; } = false;
 
+        /// <summary>
+        /// When true, the elevation view is auto-surfaced once the local column's vertical complexity crosses
+        /// <see cref="CrossSectionEscalationThreshold"/> — Section 5.2 mode escalation. Off by default so the
+        /// manual <c>X</c> toggle stays in full control unless a client opts in.
+        /// </summary>
+        public bool AutoEscalateCrossSection { get; set; } = false;
+
+        /// <summary>Occupied-band count at/above which the elevation view auto-surfaces (when auto-escalation is on).</summary>
+        public int CrossSectionEscalationThreshold { get; set; } = 4;
+
+        /// <summary>
+        /// Distinct occupied bands in the current perception slab (including the focus band) — the local
+        /// vertical complexity that drives mode escalation. Reuses the level-ribbon band set.
+        /// </summary>
+        public int VerticalComplexity() => BuildLevelRibbon().Count;
+
+        /// <summary>True when vertical complexity warrants auto-surfacing the elevation view.</summary>
+        public bool ShouldAutoSurfaceCrossSection() =>
+            VerticalComplexity() >= CrossSectionEscalationThreshold;
+
+        /// <summary>
+        /// Whether the elevation view should render this frame: the manual toggle, or auto-escalation past the
+        /// threshold when enabled. The plan view is the default otherwise.
+        /// </summary>
+        public bool EffectiveCrossSection =>
+            CrossSectionMode || (AutoEscalateCrossSection && ShouldAutoSurfaceCrossSection());
+
         public Point ContentScreenPosition =>
             HasFrame ? ScreenPosition.FromDelta(+1, +1) : ScreenPosition;
 
@@ -391,7 +418,8 @@ namespace Aetherium.Views
             }
 
             // Elevation (cross-section) view is a different projection of the same perception; render and return.
-            if (CrossSectionMode)
+            // Either the manual toggle or auto-escalation past the vertical-complexity threshold surfaces it.
+            if (EffectiveCrossSection)
             {
                 DrawCrossSection(screenPosition, size);
                 return;
