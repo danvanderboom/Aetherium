@@ -446,9 +446,20 @@ namespace Aetherium.Server
 		// Skip the player's own move — the gateway-route already advanced ViewLocation
 		// (in legacy mode) or this is a no-op (in grain mode the entity moves via the
 		// grain; the local mirror just needs the index update).
-		if (!World.Entities.TryGetValue(delta.EntityId, out _))
+		if (!World.Entities.TryGetValue(delta.EntityId, out var moving))
 			return;
-		World.MoveEntity(delta.EntityId, new WorldLocation(delta.NewX, delta.NewY, delta.NewZ));
+		var destination = new WorldLocation(delta.NewX, delta.NewY, delta.NewZ);
+		World.MoveEntity(delta.EntityId, destination);
+
+		// Ghost forensics: MoveEntity silently no-ops when the entity isn't indexed at
+		// its recorded source (EntitiesByLocation bucket miss). A no-op here freezes the
+		// mirror copy in place forever — rendered at a stale cell while the canonical
+		// entity walks off and attacks from "empty" floor. Catch it in the act.
+		var after = moving.Get<WorldLocation>();
+		if (after is null || after != destination)
+			Console.WriteLine($"[GameSession] MOVE NO-OP: {delta.EntityId} stuck at " +
+				$"({after?.X},{after?.Y},{after?.Z}), delta wanted ({delta.NewX},{delta.NewY},{delta.NewZ}) " +
+				$"old=({delta.OldX},{delta.OldY},{delta.OldZ})");
 
 		// If this delta concerns the player Character, keep ViewLocation in sync.
 		// This is the grain-routed session's own-move path, so it advances the move

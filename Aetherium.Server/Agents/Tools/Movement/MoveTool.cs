@@ -64,19 +64,12 @@ namespace Aetherium.Server.Agents.Tools.Movement
             if (distance < 1 || distance > 100)
                 return ToolExecutionResult.Error("Distance must be between 1 and 100");
             
-            // Async path: management-grain dispatch (used by agent runners that operate
-            // through IGameManagementGrain rather than holding a session reference).
-            if (context.ManagementGrain != null)
-            {
-                var result = await context.ManagementGrain.MoveAsync(context.SessionId, direction);
-                return result.Success
-                    ? ToolExecutionResult.Ok($"Moved {direction}")
-                    : ToolExecutionResult.Error(result.Message);
-            }
-
-            // In-process path: route through the gateway. Phase 2a's LocalMutationGateway
-            // wraps GameSession.MoveView; phase 2b+c will swap this for a grain-routed
-            // gateway transparently — this tool code does not change.
+            // Route through the gateway FIRST. For a grain-bound session this is the
+            // GrainMutationGateway — the ONLY path that moves the canonical player. The
+            // management-grain path below calls session.MoveView (session-local): checking
+            // it first silently left the canonical body parked at its spawn while the
+            // client walked a phantom — monsters then converged on and killed a body the
+            // player couldn't see ("continuous damage with no monster in sight").
             if (context.MutationGateway != null)
             {
                 Aetherium.Model.RelativeDirection relDir;
@@ -90,8 +83,32 @@ namespace Aetherium.Server.Agents.Tools.Movement
                     case "E" or "EAST":
                     case "S" or "SOUTH":
                     case "W" or "WEST":
-                        // Absolute directions require translation against the actor's heading;
-                        // that's the management-grain path's job today.
+                        // Absolute directions translate against the actor's current heading into
+                        // the equivalent single relative step (0°→F, 90°→R, 180°→B, 270°→L) —
+                        // same net movement as the management path's rotate/move/rotate-back,
+                        // without changing heading, and it stays on the gateway so a grain-bound
+                        // session mutates CANONICAL state. Falls back to the management grain
+                        // when no session heading is available.
+                        if (context.Session != null)
+                        {
+                            int target = direction[0] switch { 'E' => 90, 'S' => 180, 'W' => 270, _ => 0 };
+                            int diff = ((target - context.Session.HeadingDegrees) % 360 + 360) % 360;
+                            relDir = diff switch
+                            {
+                                90 => Aetherium.Model.RelativeDirection.Right,
+                                180 => Aetherium.Model.RelativeDirection.Backward,
+                                270 => Aetherium.Model.RelativeDirection.Left,
+                                _ => Aetherium.Model.RelativeDirection.Forward,
+                            };
+                            break;
+                        }
+                        if (context.ManagementGrain != null)
+                        {
+                            var absolute = await context.ManagementGrain.MoveAsync(context.SessionId, direction);
+                            return absolute.Success
+                                ? ToolExecutionResult.Ok($"Moved {direction}")
+                                : ToolExecutionResult.Error(absolute.Message);
+                        }
                         return ToolExecutionResult.Error("Absolute directions require async execution via management grain");
                     default:
                         return ToolExecutionResult.Error($"Invalid direction: {direction}");
@@ -101,6 +118,16 @@ namespace Aetherium.Server.Agents.Tools.Movement
                 return moveResult.Success
                     ? ToolExecutionResult.Ok($"Moved {direction} by {distance}")
                     : ToolExecutionResult.Error(moveResult.Reason ?? "Move failed");
+            }
+
+            // Fallback: management-grain dispatch — agent runners that operate through
+            // IGameManagementGrain without holding a session/gateway reference.
+            if (context.ManagementGrain != null)
+            {
+                var result = await context.ManagementGrain.MoveAsync(context.SessionId, direction);
+                return result.Success
+                    ? ToolExecutionResult.Ok($"Moved {direction}")
+                    : ToolExecutionResult.Error(result.Message);
             }
 
             return ToolExecutionResult.Error("No execution context available");

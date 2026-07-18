@@ -887,6 +887,14 @@ namespace Aetherium.Server.MultiWorld
                 _mapState.State.Size,
                 excludePlayerEntityId: joinerPlayerId);
 
+            // Ghost forensics: the session mirror can only ever know what this snapshot
+            // carries — log canonical vs captured so a canonical→snapshot leak is visible.
+            var canonicalMonsters = _world.Entities.Values.OfType<Aetherium.Monster>().Count();
+            var snapshotMonsters = snapshot.Entities.Count(p => p.TypeName == nameof(Aetherium.Monster));
+            Console.WriteLine(
+                $"[GameMapGrain] joiner snapshot for {joinerPlayerId}: {snapshot.Entities.Count} placements " +
+                $"({snapshotMonsters} monsters) from canonical {_world.Entities.Count} entities ({canonicalMonsters} monsters)");
+
             return Task.FromResult(snapshot);
         }
 
