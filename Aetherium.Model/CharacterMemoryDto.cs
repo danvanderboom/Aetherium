@@ -26,5 +26,9 @@ namespace Aetherium.Model
         public double EffectiveStrength { get; set; }
         public int Impressions { get; set; }
         public DateTime LastEventTime { get; set; }
+        /// <summary>This memory's own decay half-life in seconds (add-memory-dynamics); 0 ⇒ world fallback.</summary>
+        public double StabilitySeconds { get; set; }
+        /// <summary>True once the memory has become permanent through familiarity — it no longer decays.</summary>
+        public bool Permanent { get; set; }
     }
 }

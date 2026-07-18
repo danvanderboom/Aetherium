@@ -62,6 +62,19 @@ aetherctl world edit <worldId> destroyentity --args '{"entityId":"<id>"}'
 aetherctl memory get <sessionId>
 aetherctl memory get <sessionId> --json
 
+# Memory dynamics (opt-in, default OFF): memory that follows a real forgetting curve.
+# Enable per world via generator params:
+#   MemoryDynamicsEnabled=true            master switch
+#   MemoryStabilityGrowthFactor=2.0       stability ×= this on each SPACED revisit
+#   MemoryMinReinforcementIntervalSeconds=60   below this, a revisit is "massed" (no growth)
+#   MemoryPermanenceThresholdSeconds=2592000   stability past this ⇒ permanent (never fades)
+#   MemoryForgetThreshold=0.05            effective strength below this is culled at write time
+# Each memory grows its own decay half-life ("stability") as it is revisited with spacing;
+# frequently seen places entrench and eventually stick forever, unvisited ones fade and are
+# forgotten. Per-character overrides live on a MemoryProfile component (HalfLifeMultiplier,
+# StabilityGrowthMultiplier, MaxLocationsOverride) — forgetful vs eidetic as data. The
+# `memory get` table annotates each entry with " stab=<h>h" or " [permanent]".
+
 # Agent telemetry (per-step snapshots, analysis, failed-run replays)
 aetherctl telemetry snapshots <agentId> --limit 20
 aetherctl telemetry analysis <agentId> --json

@@ -780,6 +780,69 @@ namespace Aetherium.Test
             Assert.That(await mgmt.GetMemoryAsync(session.SessionId!), Is.Not.Null);
         }
 
+        // ---- Memory dynamics (change: add-memory-dynamics) ----
+
+        // Spec: character-memory / Memory Dynamics Opt-In — Scenario "Default off preserves legacy behavior"
+        [Test]
+        public async Task MemoryDynamics_DefaultOff_WritesNoStabilityOrPermanence()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync(); // no dynamics parameters ⇒ default off
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // Two perceptions: without dynamics, a re-encounter must not write stability/permanence.
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            var memories = doc.RootElement.GetProperty("Memories").EnumerateArray().ToList();
+            Assert.That(memories.Count, Is.GreaterThan(0));
+            Assert.That(memories.All(m => m.GetProperty("StabilitySeconds").GetDouble() == 0),
+                Is.True, "dynamics off ⇒ no stability is ever written");
+            Assert.That(memories.All(m => !m.GetProperty("Permanent").GetBoolean()),
+                Is.True, "dynamics off ⇒ nothing becomes permanent");
+        }
+
+        // Spec: character-memory / Memory Stability and Reinforcement — Scenario "Spaced re-encounter grows
+        //       stability" (observed through the read API; DTO carries the new fields)
+        [Test]
+        public async Task MemoryDynamics_SpacedReencounter_GrowsStability_VisibleViaReadApi()
+        {
+            var mgmt = Mgmt();
+            // Min interval 0 makes every re-encounter count as spaced, so the test needs no wall-clock wait.
+            var request = new CreateWorldRequest
+            {
+                Name = "Dynamics World",
+                Description = "memory dynamics enabled via generator parameters",
+                GeneratorType = "maze",
+                MaxPlayers = 10,
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                GeneratorParameters = new Dictionary<string, object>
+                {
+                    ["MemoryDynamicsEnabled"] = true,
+                    ["MemoryMinReinforcementIntervalSeconds"] = 0,
+                }
+            };
+            var worldId = await mgmt.CreateWorldAsync(request);
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // First pass records; second pass re-encounters the same content and reinforces.
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            var memories = doc.RootElement.GetProperty("Memories").EnumerateArray().ToList();
+            Assert.That(memories.Count, Is.GreaterThan(0));
+
+            // The DTO carries the new fields, and at least one re-encountered memory grew stability.
+            Assert.That(memories[0].TryGetProperty("StabilitySeconds", out _), Is.True, "DTO exposes StabilitySeconds");
+            Assert.That(memories[0].TryGetProperty("Permanent", out _), Is.True, "DTO exposes Permanent");
+            Assert.That(memories.Any(m => m.GetProperty("StabilitySeconds").GetDouble() > 0),
+                Is.True, "a spaced re-encounter grows a memory's stability");
+        }
+
         // Spec: game-management-grain / Runtime World Tool Execution — Scenario "Operator gating"
         [Test]
         public async Task WorldTool_OperatorGate_Denies()

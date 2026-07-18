@@ -706,6 +706,27 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.TryGetValue("MemoryDecayHalfLifeSeconds", out var halfObj)
                 && double.TryParse(halfObj?.ToString(), out var half))
                 world.MemoryPolicy.DecayHalfLifeSeconds = half;
+
+            // Dynamics overrides (add-memory-dynamics): opt-in reinforcement/permanence/forgetting.
+            if (parameters.TryGetValue("MemoryDynamicsEnabled", out var dynObj)
+                && bool.TryParse(dynObj?.ToString(), out var dyn))
+                world.MemoryPolicy.DynamicsEnabled = dyn;
+
+            if (parameters.TryGetValue("MemoryStabilityGrowthFactor", out var growthObj)
+                && double.TryParse(growthObj?.ToString(), out var growth) && growth > 0)
+                world.MemoryPolicy.StabilityGrowthFactor = growth;
+
+            if (parameters.TryGetValue("MemoryMinReinforcementIntervalSeconds", out var minObj)
+                && double.TryParse(minObj?.ToString(), out var min) && min >= 0)
+                world.MemoryPolicy.MinReinforcementIntervalSeconds = min;
+
+            if (parameters.TryGetValue("MemoryPermanenceThresholdSeconds", out var permObj)
+                && double.TryParse(permObj?.ToString(), out var perm) && perm > 0)
+                world.MemoryPolicy.PermanenceThresholdSeconds = perm;
+
+            if (parameters.TryGetValue("MemoryForgetThreshold", out var forgetObj)
+                && double.TryParse(forgetObj?.ToString(), out var forget))
+                world.MemoryPolicy.ForgetThreshold = forget;
         }
 
         private static WorldGenerationTemplate ResolveTemplate(string generatorType)

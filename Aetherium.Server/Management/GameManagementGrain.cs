@@ -546,7 +546,16 @@ namespace Aetherium.Server.Management
             try
             {
                 var memory = player.Get<Aetherium.Components.Memory>();
-                var halfLife = session.World.MemoryPolicy.DecayHalfLifeSeconds;
+
+                // Resolve the character's effective decay fallback (world policy × any MemoryProfile),
+                // so effective strength honors per-memory stability and permanence (add-memory-dynamics).
+                var profile = player.Has<Aetherium.Components.MemoryProfile>()
+                    ? player.Get<Aetherium.Components.MemoryProfile>() : null;
+                var dynamics = session.World.MemoryPolicy.ResolveDynamics(
+                    profile?.HalfLifeMultiplier ?? 1.0,
+                    profile?.StabilityGrowthMultiplier ?? 1.0,
+                    profile?.MaxLocationsOverride);
+                var fallbackHalfLife = dynamics.BaseHalfLifeSeconds;
 
                 var dto = new CharacterMemoryDto
                 {
@@ -564,9 +573,12 @@ namespace Aetherium.Server.Management
                         ContentType = m.ContentType,
                         Content = m.Content,
                         Strength = m.Strength,
-                        EffectiveStrength = Aetherium.Core.MemoryPolicy.EffectiveStrength(m.Strength, m.TimeSinceLastSeen, halfLife),
+                        EffectiveStrength = Aetherium.Core.MemoryPolicy.EffectiveStrength(
+                            m.Strength, m.TimeSinceLastSeen, m.StabilitySeconds, m.Permanent, fallbackHalfLife),
                         Impressions = m.Impressions,
-                        LastEventTime = m.LastEventTime
+                        LastEventTime = m.LastEventTime,
+                        StabilitySeconds = m.StabilitySeconds,
+                        Permanent = m.Permanent
                     });
                 }
 
