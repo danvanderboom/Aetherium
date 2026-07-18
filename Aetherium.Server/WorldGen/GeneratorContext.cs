@@ -38,6 +38,16 @@ namespace Aetherium.WorldGen
         public int ZLevel { get; init; } = 0;
 
         /// <summary>
+        /// The grid tiling this world is generated for (docs/h3-topology.md, docs/grid-topologies.md).
+        /// Threaded from the world's topology so a generator or pass can branch on the tiling —
+        /// most importantly, an H3 (sphere) world enumerates its cells by resolution rather than
+        /// scanning a Width×Height rectangle, since its <see cref="Aetherium.Components.WorldLocation"/>
+        /// X/Y are two halves of a packed 64-bit cell index, not column/row. Defaults to square
+        /// (the legacy behaviour); planar generators can keep ignoring it.
+        /// </summary>
+        public Aetherium.Topology.IGridTopology Topology { get; init; } = Aetherium.Topology.SquareTopology.Instance;
+
+        /// <summary>
         /// Optional seed for deterministic generation. If provided, Random is seeded with this value.
         /// </summary>
         public int? Seed { get; }

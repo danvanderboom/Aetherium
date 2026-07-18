@@ -526,6 +526,7 @@ namespace Aetherium.Server.MultiWorld
                 GeneratorVersion = recipe.GeneratorVersion,
                 Template = recipe.Template,
                 Parameters = new Dictionary<string, string>(recipe.Parameters, System.StringComparer.OrdinalIgnoreCase),
+                Topology = recipe.Topology,
             };
             var orchestrator = new WorldGenerationOrchestrator(_generatorRegistry, BuildPasses(request.Template));
             var result = orchestrator.Generate(request);
@@ -568,7 +569,8 @@ namespace Aetherium.Server.MultiWorld
                 Seed = seed,
                 GeneratorVersion = parameters.TryGetValue("version", out var versionObj) ? versionObj?.ToString() ?? "1.0.0" : "1.0.0",
                 Template = ResolveTemplate(generatorType),
-                Parameters = parameterStrings
+                Parameters = parameterStrings,
+                Topology = topology
             };
 
             var passes = BuildPasses(request.Template);
@@ -654,6 +656,7 @@ namespace Aetherium.Server.MultiWorld
                 Width = size.Width,
                 Height = size.Height,
                 Levels = size.Depth,
+                Topology = topology,
             };
 
             _mapState.State = new MapState

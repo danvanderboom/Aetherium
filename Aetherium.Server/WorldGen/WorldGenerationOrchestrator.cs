@@ -54,6 +54,10 @@ namespace Aetherium.WorldGen
                 ? (request.Template == WorldGenerationTemplate.Dungeon ? "AdvancedDungeon" : "PerlinTerrain")
                 : request.LayoutGenerator;
 
+            // Resolve the tiling once (null/empty ⇒ square). Generators read it off the context;
+            // the pass loop uses the name to skip square-only passes on a sphere.
+            var topology = Aetherium.Topology.GridTopologyRegistry.Get(request.Topology);
+
             var generatorParams = new Dictionary<string, string>(request.Parameters, StringComparer.OrdinalIgnoreCase);
             generatorParams["layoutGenerator"] = resolvedLayout;
             var generatorContext = new GeneratorContext(request.Width, request.Height, request.Seed)
@@ -63,7 +67,8 @@ namespace Aetherium.WorldGen
                 NarrativeId = request.Narrative.NarrativeId,
                 NarrativeConstraints = request.Narrative,
                 GeneratorVersion = request.GeneratorVersion,
-                FeatureRegistry = _registry
+                FeatureRegistry = _registry,
+                Topology = topology
             };
 
             var pipelineContext = new WorldGenerationContext(request, generatorContext);
@@ -74,6 +79,11 @@ namespace Aetherium.WorldGen
             foreach (var pass in _passes)
             {
                 if (!pass.SupportsTemplate(request.Template))
+                    continue;
+
+                // Skip passes that declare they can't build for this tiling (e.g. square-grid-only
+                // passes on an H3 sphere), so a sphere world runs only its topology-safe passes.
+                if (!pass.SupportsTopology(request.Topology))
                     continue;
 
                 if (cancellationToken.IsCancellationRequested)

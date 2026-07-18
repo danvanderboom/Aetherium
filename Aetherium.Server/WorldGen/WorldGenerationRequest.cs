@@ -22,6 +22,14 @@ namespace Aetherium.WorldGen
         public string LayoutGenerator { get; set; } = string.Empty;
         public string? OutdoorGenerator { get; set; }
             = null; // Optional override for outdoor template when layout differs.
+
+        /// <summary>
+        /// Grid tiling name ("square"/"hex"/"tri"/"h3"); null or empty ⇒ square. Threaded into
+        /// <see cref="GeneratorContext.Topology"/> and used to gate passes via
+        /// <see cref="IWorldGenerationPass.SupportsTopology"/>, so an H3 (sphere) world runs a
+        /// sphere-native layout and skips square-grid-only passes (docs/h3-topology.md).
+        /// </summary>
+        public string? Topology { get; set; }
         public WorldGenerationTemplate Template { get; set; } = WorldGenerationTemplate.Dungeon;
         public int Width { get; set; } = 80;
         public int Height { get; set; } = 80;

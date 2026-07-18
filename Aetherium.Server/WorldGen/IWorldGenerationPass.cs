@@ -18,6 +18,16 @@ namespace Aetherium.WorldGen
         bool SupportsTemplate(WorldGenerationTemplate template);
 
         /// <summary>
+        /// Whether this pass runs for a given world tiling (docs/h3-topology.md). Defaults to
+        /// <c>true</c> — most passes read the terrain dictionary and are topology-agnostic. Passes
+        /// built on square-grid geometry (rectangular bounding boxes, 4/6-neighbour deltas, or a
+        /// single start→objective route) override this to opt out of tilings they can't yet handle
+        /// — notably <c>"h3"</c>, whose coordinates pack a spherical cell index rather than a
+        /// scannable rectangle. Sphere-native replacements for those passes are the phased follow-up.
+        /// </summary>
+        bool SupportsTopology(string? topology) => true;
+
+        /// <summary>
         /// Executes the pass. Existing implementations should override the
         /// parameterless variant; new code is encouraged to override
         /// <see cref="Execute(WorldGenerationContext, CancellationToken)"/> to support
