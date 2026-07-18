@@ -573,7 +573,6 @@ Light sources found:
                 var (r, g, b, _) = sunlightCalc.GetSunlightColor(elevation);
                 ambientR = r; ambientG = g; ambientB = b;
             }
-            const double lightLevel = 1.0;
 
             var perception = new PerceptionDto
             {
@@ -602,9 +601,20 @@ Light sources found:
             var visibleItems = new List<ItemDto>();
             var visibleCharacters = new List<CharacterDto>();
 
-            // Enumerate the gridDisk around the perceiver; each cell's key is perceiver-anchored local
-            // i/j (player at 0,0). A cell with no stable local frame returns null and is omitted.
-            foreach (var cell in topo.Range(playerCell, radius))
+            // Sphere-native FOV + lighting (docs/design/h3-sphere-worldgen.md §7 P1): the visible set is
+            // a gridDisk with real occlusion — mountains, forests, and walls block sight via the same
+            // ObstructsView model as the square grid — plus a per-cell light level, the directional cone
+            // (when the perceiver has one), and darkness-shrunk range. Replaces the earlier full-disk,
+            // uniform-daylight approximation.
+            var visible = new Aetherium.Server.Perception.H3VisionLighting().ComputeVisible(
+                world, playerLocation, radius,
+                directionalVision ? headingDegrees : null,
+                directionalVision ? fovDegrees : null,
+                lightingMode, currentTime.TimeOfDay.TotalHours);
+
+            // Each visible cell's key is perceiver-anchored local i/j (player at 0,0). A cell with no
+            // stable local frame (a pentagon at extreme range) returns null and is omitted.
+            foreach (var (cell, lightLevel) in visible)
             {
                 var rel = topo.RelativeCoords(playerCell, cell);
                 if (rel is null)
@@ -615,8 +625,6 @@ Light sources found:
 
                 var terrainType = world.GetTerrainType(loc);
                 bool hasEntities = world.EntitiesByLocation.TryGetValue(loc, out var atLoc);
-                if (terrainType == null && !hasEntities)
-                    continue; // nothing generated here (off-shell / empty)
 
                 var visual = new Visual(loc, terrainType?.TileType);
 

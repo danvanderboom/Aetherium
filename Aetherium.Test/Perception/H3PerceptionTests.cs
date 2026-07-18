@@ -120,8 +120,10 @@ namespace Aetherium.Test.Perception
             var p = Compute();
             Assert.That(p.Visuals, Is.Not.Empty);
             Assert.That(p.Visuals.ContainsKey("0,0,0"), Is.True, "the perceiver's own cell must be in view");
-            // Size(20,20) => radius 10 => a gridDisk of ~331 cells; allow for pentagon-edge omissions.
-            Assert.That(p.Visuals.Count, Is.GreaterThan(200), "expected a full view disk, got " + p.Visuals.Count);
+            // Size(20,20) => radius 10 => a gridDisk of ~331 cells. Real terrain occludes part of it
+            // (mountains/forests cast shadows — see H3FovLightingTests), so this asserts a substantial
+            // lit disc remains visible rather than the full count.
+            Assert.That(p.Visuals.Count, Is.GreaterThan(100), "expected a substantial view disk, got " + p.Visuals.Count);
         }
 
         [Test]

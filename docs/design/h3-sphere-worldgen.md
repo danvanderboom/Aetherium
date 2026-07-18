@@ -1,11 +1,14 @@
 # Vision & Design: H3 Spherical Worlds and Sphere-Aware Procedural Generation
 
-**Status:** Living design. **Slice 1 is built and green, and the planet is walkable** — the worldgen
-pipeline is topology-aware, a sphere-native `H3TerrainGenerator` terraforms a whole planet at a chosen
-H3 resolution, a switchable sci-fi planet bundle (`aphelion-h3`) ships alongside the square Aphelion,
-**and player-relative perception now works on the sphere** (a `gridDisk` viewport with `cellToLocalIj`
-keys — a player can join and walk it). Sphere-native settlements/rivers/roads, transit, economy wiring,
-and FOV/lighting on the sphere are the phased roadmap in [§7](#7-roadmap).
+**Status:** Living design. **Slice 1 is built and green, and the planet is walkable with real sight** —
+the worldgen pipeline is topology-aware, a sphere-native `H3TerrainGenerator` terraforms a whole planet
+at a chosen H3 resolution, a switchable sci-fi planet bundle (`aphelion-h3`) ships alongside the square
+Aphelion, **player-relative perception works on the sphere** (a `gridDisk` viewport with `cellToLocalIj`
+keys), **and field-of-view + lighting are sphere-native** — mountains/forests/walls occlude line of
+sight, the directional cone restricts the forward arc, and light sources form pools with darkness
+shrinking the view, all via the same tested `ObstructsView`/topology-ray model as the square grid. A
+player can join and walk the planet and only sees what they should. Sphere-native settlements/rivers/
+roads, transit, and economy wiring are the phased roadmap in [§7](#7-roadmap).
 **Depends on / builds on:** [`h3-topology.md`](../h3-topology.md), [`grid-topologies.md`](../grid-topologies.md),
 [`economy-simulation.md`](../economy-simulation.md), [`transit-networks.md`](transit-networks.md).
 **Audience:** engine maintainers, OpenSpec proposal authors, game/campaign designers.
@@ -146,6 +149,7 @@ that logistics is content, small enough to generate in seconds and hold in memor
 | Sphere generator | `H3TerrainGenerator` — full-shell enumeration, 3-D elevation+moisture, percentile biomes | `WorldGen/Generators/Outdoor/H3TerrainGenerator.cs` |
 | Pipeline routing | `OutdoorLayoutPass` runs the H3 generator on `"h3"`; `IWorldGenerationPass.SupportsTopology` gate; four square-only passes opt out of `"h3"` | `WorldGen/IWorldGenerationPass.cs`, `Passes/OutdoorLayoutPass.cs`, `OutdoorValidationPass.cs`, `OutdoorInteractionsPass.cs`, `PortalNetworkPass.cs`, `EnvironmentalStoryPass.cs` |
 | Perception (walkable) | `IGridTopology.RelativeCoords` (raw diff default; H3 `cellToLocalIj` override); `PerceptionService` routes H3 worlds to a `gridDisk` viewport with perceiver-anchored local-i/j keys | `Topology/IGridTopology.cs`, `Topology/H3Topology.cs`, `PerceptionService.cs` |
+| FOV + lighting (sphere-native) | `H3VisionLighting` runs the square occlusion/light ray model (reusing `FovCalculator.GetCellOpacity`, `Topology.Line`/`Delta`) over the H3 disk: LOS occlusion, directional cone, point-light pools + darkness range | `Perception/H3VisionLighting.cs`, `PerceptionService.cs` |
 | Bundle | `aphelion-h3` — the switchable sci-fi planet (topology h3, generator h3-terrain, res 4) | `Data/Games/aphelion-h3/game.yaml` |
 | Tests | H3 full-shell coverage, pentagon handling, biome variety, determinism, spawn, neighbour packing; 3-D noise range/determinism/continuity; relative-coord origin/injectivity; H3 perception frame + walk-recentre; bundle validates with `topology: h3` | `Aetherium.Test/WorldGen/H3TerrainGeneratorTests.cs`, `PerlinNoise3DTests.cs`, `Perception/H3PerceptionTests.cs`, `Games/GameDefinitionRegistryTests.cs` |
 
@@ -206,7 +210,21 @@ already exists:
   already implements). Tested by `H3RelativeCoordsTests` (origin, injectivity over a disk) and
   `H3PerceptionFrameTests` (H3 frame centred on the player, disk of terrained cells, frame recentres as
   the player walks).
-- **P1 — Sphere-native rivers, coasts, and roads (+ FOV/lighting occlusion).** Replace the square carvers: rivers as steepest-
+- **P0.5 — FOV + lighting on the sphere. ✅ BUILT.** `PerceptionService.ComputeH3Perception` no longer
+  shows a flat, fully-lit disc: `Aetherium.Server/Perception/H3VisionLighting.cs` runs the engine's
+  existing occlusion and light-propagation model — which was already topology-general (occlusion via
+  `Topology.Line`, distance/cone via `Topology.Delta`, opacity via the shared
+  `FovCalculator.GetCellOpacity`) — over the H3 gridDisk instead of a rectangle. Result: mountains,
+  forests (cumulative 0.5 opacity), and walls occlude line of sight; the directional cone (heading + FOV)
+  restricts the forward arc; light sources cast distance-attenuated, occlusion-blocked pools and darkness
+  shrinks the effective view range — identical behaviour to the square grid. Cost is per-cell raycast
+  (~45 ms for a radius-20 daylight frame at res 4, comparable to the square path and within the
+  perception debounce). Tested by `H3FovLightingTests` (a mountain ring blocks everything beyond; a lone
+  obstacle only casts a wedge; the cone hides what's behind you; darkness collapses the view while a
+  torch lights a pool). **Not yet sphere-native:** the vertical 3-D occlusion slab (`ColumnViewOpacity`/
+  `VerticalVisibleBands`) is Z-axis engine machinery orthogonal to the XY tiling — it applies to H3
+  unchanged for a single surface level, and multi-level H3 is future work.
+- **P1 — Sphere-native rivers, coasts, and roads.** Replace the square carvers: rivers as steepest-
   descent over `topology.Neighbors`, coasts read from the `Water` field, roads as `topology.Line`
   (great-circle cell paths, which H3 already implements). Ungates the river/road half of the outdoor
   pipeline for H3.
