@@ -71,6 +71,83 @@ namespace Aetherium.Core
         /// <summary>Hard cap on slab depth per direction, so a misconfigured world can't make perception unbounded.</summary>
         public int SlabDepthCap { get; set; } = 8;
 
+        /// <summary>
+        /// When true, the emitted slab depth adapts per frame to local vertical complexity: it expands
+        /// toward <see cref="SlabDepthBelow"/>/<see cref="SlabDepthAbove"/> to cover occupied bands near the
+        /// viewer and collapses to single-Z over flat terrain. Always bounded by those budgets and
+        /// <see cref="SlabDepthCap"/>, so it never emits more than the configured maximum. Default false keeps
+        /// the fixed configured depth (byte-identical to non-adaptive behavior).
+        /// </summary>
+        public bool AutoSlab { get; set; } = false;
+
+        /// <summary>
+        /// Neighborhood radius (in cells) probed around the viewer's column when <see cref="AutoSlab"/> is on.
+        /// 0 = the viewer's own column only; 1 = a 3×3 footprint, so an interchange the viewer is standing
+        /// beside still expands the slab.
+        /// </summary>
+        public int AutoSlabProbeRadius { get; set; } = 1;
+
+        /// <summary>
+        /// When true, perception picks the default lighting mode from the viewer's band (context tint, 5.4):
+        /// underground → torch/enclosed, skyway → sunlight, surface → ambient (see <see cref="Model.BandContext"/>).
+        /// Opt-in, default off (the caller's requested lighting mode is used unchanged).
+        /// </summary>
+        public bool AutoContextTint { get; set; } = false;
+
+        /// <summary>Band at/above which context tint treats the column as an open skyway (sunlit). Default 1.</summary>
+        public int SkyBandThreshold { get; set; } = 1;
+
+        /// <summary>
+        /// Effective per-direction slab depth for a viewer at (<paramref name="x"/>, <paramref name="y"/>,
+        /// <paramref name="z"/>). Returns the configured (below, above) clamped to <see cref="SlabDepthCap"/>
+        /// when <see cref="AutoSlab"/> is off; when on, returns the distance to the furthest occupied band
+        /// within that budget in each direction (0 when flat), so the slab covers interchanges and collapses
+        /// over open terrain. Both the vision and lighting passes call this so depth and emission agree.
+        /// </summary>
+        public (int below, int above) EffectiveSlabDepth(int x, int y, int z)
+        {
+            int maxBelow = Math.Min(SlabDepthBelow, SlabDepthCap);
+            int maxAbove = Math.Min(SlabDepthAbove, SlabDepthCap);
+            if (!AutoSlab || (maxBelow == 0 && maxAbove == 0))
+                return (maxBelow, maxAbove);
+
+            int r = Math.Max(0, AutoSlabProbeRadius);
+            int effBelow = 0, effAbove = 0;
+            for (int dy = -r; dy <= r; dy++)
+            {
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    int cx = x + dx, cy = y + dy;
+                    // Extend each direction to the furthest occupied band; starting past the current
+                    // effective depth avoids re-scanning bands another probe cell already covered.
+                    for (int d = effAbove + 1; d <= maxAbove; d++)
+                        if (SlabColumnHasContent(cx, cy, z + d)) effAbove = d;
+                    for (int d = effBelow + 1; d <= maxBelow; d++)
+                        if (SlabColumnHasContent(cx, cy, z - d)) effBelow = d;
+                }
+            }
+            return (effBelow, effAbove);
+        }
+
+        /// <summary>
+        /// True when the cell at (<paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/>) carries
+        /// slab content — terrain, or a non-terrain entity. Mirrors the "hasContent" test in the vision slab
+        /// loop so the adaptive depth and the emitted cells stay in lock-step.
+        /// </summary>
+        private bool SlabColumnHasContent(int x, int y, int z)
+        {
+            var loc = new WorldLocation(x, y, z);
+            if (GetTerrainType(loc) != null)
+                return true;
+            if (EntitiesByLocation.TryGetValue(loc, out var entities))
+            {
+                foreach (var entity in entities.Values)
+                    if (!(entity is Terrain))
+                        return true;
+            }
+            return false;
+        }
+
         /// <summary>Optional semicircular cruising-altitude rule used by flight-plan generators.</summary>
         public CruiseRule? CruiseRule { get; set; }
 

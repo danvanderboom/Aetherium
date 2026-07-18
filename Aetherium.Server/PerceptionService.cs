@@ -136,6 +136,13 @@ namespace Aetherium.Server
             bool absoluteCoordinates = false)
         {
             var perfStart = PerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
+            // Context tint (add-adaptive-depth-visualization 5.4): when the world opts in, derive the default
+            // lighting mode from the viewer's band (underground → torch, skyway → sunlight, surface → ambient)
+            // so vertical context reads at a glance. Opt-in; default off leaves the caller's mode unchanged.
+            if (world.AutoContextTint)
+                lightingMode = Model.BandContext.SuggestLightingMode(playerLocation.Z, world.SkyBandThreshold);
+
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
             var worldHeight = viewportSize.Height;
@@ -225,8 +232,7 @@ Light sources found:
 
                 // Coarse per-band lighting for the 3D slab, so off-focus cells the vision pass emits carry a
                 // sensible (dimmed-by-depth) light level rather than rendering black. No-op when the slab is off.
-                var slabBelow = Math.Min(world.SlabDepthBelow, world.SlabDepthCap);
-                var slabAbove = Math.Min(world.SlabDepthAbove, world.SlabDepthCap);
+                var (slabBelow, slabAbove) = world.EffectiveSlabDepth(playerLocation.X, playerLocation.Y, playerLocation.Z);
                 lightingSystem.AddCoarseSlabLighting(world, lightFrame, bounds, playerLocation.Z, slabBelow, slabAbove);
             }
 
@@ -290,7 +296,11 @@ Light sources found:
                 // populated only when the caller supplied the perceiving entity. Self-only —
                 // it reads this entity's components and nothing else.
                 Interoception = self is null ? null : BuildInteroception(self),
-                
+
+                // Flight envelope (add-adaptive-depth-visualization 5.3): the perceiver's band range +
+                // current band, populated only when they carry a Flight component. Drives the altitude gauge.
+                FlightEnvelope = BuildFlightEnvelope(self, playerLocation),
+
                 // Add mode information
                 CurrentLightingMode = lightingMode,
                 CurrentVisionMode = visionMode,
@@ -533,6 +543,26 @@ Light sources found:
             var regionX = location.X / 64;
             var regionY = location.Y / 64;
             return $"region:{regionX},{regionY},{location.Z}";
+        }
+
+        /// <summary>
+        /// Projects the perceiver's Flight component into the altitude-gauge envelope, or null when
+        /// they have no Flight (non-flyers get no gauge). CurrentBand is the real Z, surfaced here
+        /// because relative-coordinate perception reports the player at Z 0. Reads ONLY <paramref name="self"/>.
+        /// </summary>
+        private static FlightEnvelopeDto? BuildFlightEnvelope(Entity? self, WorldLocation playerLocation)
+        {
+            if (self is null || !self.Has<Flight>())
+                return null;
+
+            var flight = self.Get<Flight>();
+            return new FlightEnvelopeDto
+            {
+                MinBand = flight.MinBand,
+                MaxBand = flight.MaxBand,
+                CurrentBand = playerLocation.Z,
+                State = flight.State.ToString(),
+            };
         }
 
         /// <summary>

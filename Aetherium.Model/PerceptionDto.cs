@@ -82,6 +82,13 @@ namespace Aetherium.Model
         public InteroceptionDto? Interoception { get; set; }
 
         /// <summary>
+        /// The perceiver's flight envelope (band range + current band + state), present only
+        /// when they can fly/pilot. Drives the altitude gauge. Null for non-flyers — additive
+        /// and non-breaking (see <see cref="FlightEnvelopeDto"/>).
+        /// </summary>
+        public FlightEnvelopeDto? FlightEnvelope { get; set; }
+
+        /// <summary>
         /// Monotonic count of the perceiving player's own successful anchor-changing moves
         /// (steps + level changes) at the moment this frame was computed. Starts at 1; a
         /// value of 0 means an unsequenced legacy producer. Lets clients order frames
