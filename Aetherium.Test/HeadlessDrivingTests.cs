@@ -848,11 +848,13 @@ namespace Aetherium.Test
         /// <summary>
         /// Provisions a recognition encounter: a world (recognition optionally enabled, with a large
         /// range so two auto-placed characters are always in range), two headless characters, and one
-        /// map-grain tick to run the sweep. Returns the worldId and the player Characters' actual entity
+        /// map-grain tick to run the sweep. Returns the worldId, the player Characters' actual entity
         /// ids discovered from the world snapshot (a headless character's EntityId is a fresh id, not the
-        /// SessionId — an operator likewise discovers ids via `world dump`).
+        /// SessionId — an operator likewise discovers ids via `world dump`), and every entity id in the
+        /// world (players + any generator-placed monster NPCs — the large range sweeps those in too, so
+        /// a recognized individual may legitimately be a monster, not just one of the two players).
         /// </summary>
-        private async Task<(string worldId, List<string> characterIds)> SetUpRecognitionEncounterAsync(bool enabled)
+        private async Task<(string worldId, List<string> characterIds, HashSet<string> allEntityIds)> SetUpRecognitionEncounterAsync(bool enabled)
         {
             var mgmt = Mgmt();
             var request = new CreateWorldRequest
@@ -877,15 +879,17 @@ namespace Aetherium.Test
             var mapId = sdoc.RootElement.GetProperty("MapId").GetString()!;
             await _cluster.GrainFactory.GetGrain<IGameMapGrain>(mapId).TickAsync(TimeSpan.FromSeconds(1));
 
-            // Re-snapshot after the tick and pull the player Characters' ids (Monster : Character reports
-            // Type "Monster", so Type=="Character" isolates the two players).
+            // Re-snapshot after the tick. Type=="Character" isolates the two players (Monster : Character
+            // reports Type "Monster"); the full entity id set covers everything the sweep could recognize.
             using var after = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
-            var characterIds = after.RootElement.GetProperty("Entities").EnumerateArray()
+            var entities = after.RootElement.GetProperty("Entities").EnumerateArray().ToList();
+            var characterIds = entities
                 .Where(e => e.GetProperty("Type").GetString() == "Character")
                 .Select(e => e.GetProperty("EntityId").GetString()!)
                 .ToList();
+            var allEntityIds = entities.Select(e => e.GetProperty("EntityId").GetString()!).ToHashSet();
 
-            return (worldId, characterIds);
+            return (worldId, characterIds, allEntityIds);
         }
 
         // Spec: identity-recognition / Recognition Proximity Sweep ("PCs and NPCs both participate")
@@ -894,7 +898,7 @@ namespace Aetherium.Test
         public async Task Recognition_Sweep_RecordsCharacter_ReadableViaApi()
         {
             var mgmt = Mgmt();
-            var (worldId, characterIds) = await SetUpRecognitionEncounterAsync(enabled: true);
+            var (worldId, characterIds, allEntityIds) = await SetUpRecognitionEncounterAsync(enabled: true);
             Assert.That(characterIds.Count, Is.GreaterThanOrEqualTo(2), "two player characters were provisioned");
 
             // At least one character now recognizes another individual, exposed via the read API with
@@ -915,8 +919,9 @@ namespace Aetherium.Test
             Assert.That(sample.GetProperty("Encounters").GetInt32(), Is.GreaterThanOrEqualTo(1));
             Assert.That(sample.TryGetProperty("EffectiveFamiliarity", out _), Is.True, "DTO exposes EffectiveFamiliarity");
             Assert.That(sample.TryGetProperty("Permanent", out _), Is.True, "DTO exposes Permanent");
-            // The recognized individual is one of the world's characters.
-            Assert.That(characterIds, Does.Contain(sample.GetProperty("EntityId").GetString()));
+            // The recognized individual is a real entity in the world — with the range this wide, the
+            // sweep may legitimately recognize a generator-placed monster NPC, not just the two players.
+            Assert.That(allEntityIds, Does.Contain(sample.GetProperty("EntityId").GetString()));
         }
 
         // Spec: identity-recognition / Per-World Recognition Configuration — Scenario "Opt-in default off"
@@ -924,7 +929,7 @@ namespace Aetherium.Test
         public async Task Recognition_DisabledByDefault_NoState()
         {
             var mgmt = Mgmt();
-            var (worldId, characterIds) = await SetUpRecognitionEncounterAsync(enabled: false);
+            var (worldId, characterIds, _) = await SetUpRecognitionEncounterAsync(enabled: false);
             Assert.That(characterIds, Is.Not.Empty);
 
             foreach (var id in characterIds)
@@ -942,7 +947,7 @@ namespace Aetherium.Test
             // Unknown world.
             Assert.That(await mgmt.GetRecognitionAsync($"nope-{Guid.NewGuid()}", "x"), Is.Null);
 
-            var (worldId, characterIds) = await SetUpRecognitionEncounterAsync(enabled: true);
+            var (worldId, characterIds, _) = await SetUpRecognitionEncounterAsync(enabled: true);
 
             // Find a character that actually has recognition state.
             string? known = null;
