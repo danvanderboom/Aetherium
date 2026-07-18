@@ -199,9 +199,28 @@ namespace Aetherium.Server
 	public void ApplyDelta(Aetherium.Server.MultiWorld.MapDelta delta)
 	{
 		if (delta is null) return;
-
 		lock (_stateLock)
-		{
+			ApplyDeltaLocked(delta);
+	}
+
+	/// <summary>
+	/// Applies a batch of deltas under a SINGLE lock acquisition. The NPC tick fans out one
+	/// move delta per roaming monster; applying them one-at-a-time meant one lock acquisition
+	/// per monster per tick, each contending with the ~100ms perception flush that holds the
+	/// same lock — which stretched even a 20-monster tick to ~1.7s and starved player input on
+	/// the single-threaded map grain. Batching collapses that to one lock hold per tick.
+	/// </summary>
+	public void ApplyDeltas(System.Collections.Generic.IReadOnlyList<Aetherium.Server.MultiWorld.MapDelta> deltas)
+	{
+		if (deltas is null || deltas.Count == 0) return;
+		lock (_stateLock)
+			foreach (var delta in deltas)
+				if (delta is not null)
+					ApplyDeltaLocked(delta);
+	}
+
+	private void ApplyDeltaLocked(Aetherium.Server.MultiWorld.MapDelta delta)
+	{
 			switch (delta)
 			{
 				case Aetherium.Server.MultiWorld.EntityMovedDelta moved:
@@ -271,7 +290,6 @@ namespace Aetherium.Server
 					Console.WriteLine($"[GameSession] Ignoring unknown delta type {delta.GetType().Name}");
 					break;
 			}
-		}
 	}
 
 	private void ApplyComponentFieldChanged(Aetherium.Server.MultiWorld.ComponentFieldChangedDelta delta)
@@ -681,6 +699,18 @@ namespace Aetherium.Server
 		{
 			var gameTime = GetCurrentGameTime();
 			return gameTime.TimeOfDay.TotalHours % 24.0;
+		}
+
+		/// <summary>
+		/// Freeze the in-game clock at a fixed hour of day (0-24), disabling the day/night
+		/// cycle. Always-daylight outdoor worlds use this so the sun never sets — otherwise a
+		/// session that happens to start at a night hour renders the whole map dark (sunlight
+		/// intensity is zero below the horizon, which then collapses the visible range).
+		/// </summary>
+		public void SetFixedTimeOfDay(double hourOfDay)
+		{
+			GameStartTime = DateTime.UtcNow.Date.AddHours(((hourOfDay % 24.0) + 24.0) % 24.0);
+			TimeScale = 0.0; // frozen: GetCurrentGameTime now always returns GameStartTime
 		}
 
 		public Aetherium.Core.MoveOutcome MoveView(Aetherium.Model.RelativeDirection direction, int distance = 1)

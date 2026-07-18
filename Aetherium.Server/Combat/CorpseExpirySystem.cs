@@ -14,8 +14,10 @@ namespace Aetherium.Server.Combat
         {
             if (world == null || policy == null) return;
 
-            // Snapshot ids first: removing entries from World.Entities while enumerating it throws.
-            var expired = world.Entities.Values
+            // Only characters (players/monsters) ever become corpses, so iterate the Characters
+            // index — not world.Entities, which on a large outdoor map is ~150k tile entities whose
+            // per-tick scan cost seconds. Snapshot ids first: removing entries mid-enumeration throws.
+            var expired = world.Characters.Values
                 .Where(e => e.Has<Corpse>() && e.Has<CorpseAge>())
                 .Select(e =>
                 {

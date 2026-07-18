@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/FirstLight.unity
-    guid: 0cb627c7dc38c354a9cb5769fd48ac03
+    path: Assets/Scenes/Overworld.unity
+    guid: 2ad9ce095787c2a498426e1ea92d680c
   m_configObjects: {}

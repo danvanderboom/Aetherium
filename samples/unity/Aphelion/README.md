@@ -74,6 +74,34 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
    Invoke-RestMethod -Method Post "http://localhost:50310/api/management/games/aphelion/instances"
    ```
 
+## Overworld sandbox scene
+
+This project also hosts the **Overworld** sample — a large open world (no monsters) that
+exercises the procedural-generation, door/key, and window systems. Menu:
+**Aetherium → Build Overworld Scene** creates `Assets/Scenes/Overworld.unity` with primitive
+terrain stand-ins (plains, forest, desert, hills, mountains, water, roads, walls, floors, and
+a **translucent window wall**), an `OverworldTheme`, and the client rig.
+
+To run it:
+
+1. Start the server (it auto-discovers the `overworld` bundle in `Data/Games/`), then create an
+   instance and copy the returned world id:
+   ```powershell
+   Invoke-RestMethod -Method Post "http://localhost:50310/api/management/games/overworld/instances"
+   ```
+2. **Aetherium → Build Overworld Scene**, then paste the world id into the `AetheriumClient`
+   rig's `worldId` field in the Inspector.
+3. Press **Play.** The world defaults to **daylight** (this is a sunlit sandbox). Controls:
+   - **WASD** — move by compass; **← / →** turn; **↑ / ↓** step along your heading
+   - **E** — interact: pick up an adjacent item (e.g. a key), open/close an adjacent door, or
+     unlock a locked door with a key you're carrying
+   - **L** — toggle daylight vs. the carried lamp (interiors are lit through windows and the
+     door you came in by; making walls truly shadow the sun is the next lighting pass)
+
+   Three cities (a grid capital, an organic town, a sparse outpost) sit in the wilderness,
+   joined by roads. One building in the capital is locked — its brass key is on the street
+   nearby. Windows are the pale cyan panes you can see through but not walk through.
+
 ## What lands next (M0)
 
 The graybox station kit replacing the primitive stand-ins, damage numbers, pickups/doors,

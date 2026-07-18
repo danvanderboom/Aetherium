@@ -10,7 +10,11 @@ namespace Aetherium.Server.Combat
         {
             if (world == null) return;
 
-            foreach (var entity in world.Entities.Values)
+            // Only characters (players/monsters) ever carry Dying. Iterate the Characters index
+            // (a handful of entries) rather than world.Entities, which on a large outdoor map is
+            // ~150k tile entities — scanning all of them every tick cost seconds and starved player
+            // input on the single-threaded map grain.
+            foreach (var entity in world.Characters.Values)
             {
                 if (!entity.Has<Dying>())
                     continue;

@@ -6,11 +6,21 @@ namespace Aetherium.Unity
 {
     /// <summary>
     /// Reveals terrain as placed prefabs (docs/design/unity-sample/unity-client-library.md):
-    /// every remembered cell gets a view at its client-space position, converted to local
-    /// space through the shared, drift-tested layout math (square identity, hex pointy-top,
-    /// triangle parity) — so client visuals and server geometry always agree about where a
-    /// cell is. Cells that slip out of view dim (explored-but-dark memory rendering); a
+    /// every remembered cell near the player gets a view at its client-space position, converted
+    /// to local space through the shared, drift-tested layout math (square identity, hex
+    /// pointy-top, triangle parity) — so client visuals and server geometry always agree about
+    /// where a cell is. Cells that slip out of view dim (explored-but-dark memory rendering); a
     /// re-anchor clears everything for a hard cut. A default a game can replace wholesale.
+    ///
+    /// <para><b>Bounded to the neighborhood.</b> The client only materializes cells within
+    /// <see cref="renderRadius"/> of the player and pools everything beyond it, so the live
+    /// GameObject count is a function of the view window — <em>not</em> of how much of the world
+    /// you have explored. This is what keeps movement responsive on very large worlds: perception
+    /// is already O(view) server-side, and rendering must be O(view) too, never O(map) or
+    /// O(explored-area). Per-cell brightness is pushed through a <see cref="MaterialPropertyBlock"/>
+    /// on a shared, instanced material rather than by cloning a material per cell — so thousands of
+    /// tiles collapse into a handful of GPU-instanced draw calls instead of thousands of unbatchable
+    /// ones (the original per-cell <c>renderer.materials</c> clone was the main frame-rate sink).</para>
     /// </summary>
     [RequireComponent(typeof(AetheriumClientBehaviour))]
     public sealed class GridMapView : MonoBehaviour
@@ -27,8 +37,18 @@ namespace Aetherium.Unity
                  "gradient instead of a hard-edged disc (shadow clipping then reads as " +
                  "lighting, not a malformed circle).")]
         [SerializeField] private float inViewFloor = 0.3f;
+        [Tooltip("Only cells within this many grid cells of the player are kept as live " +
+                 "GameObjects; anything farther is despawned and re-materialized if you return. " +
+                 "Bounds render cost to the neighborhood so world size doesn't affect frame rate. " +
+                 "Keep this >= the server vision range (game.yaml player.vision.range) plus a small " +
+                 "margin, or explored-but-dark cells will pop at the edge of view.")]
+        [SerializeField] private int renderRadius = 26;
+
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor"); // URP/HDRP main color
+        private static readonly int ColorId = Shader.PropertyToID("_Color");         // Built-in main color
 
         private readonly Dictionary<GridPoint, CellView> _cells = new Dictionary<GridPoint, CellView>();
+        private MaterialPropertyBlock _mpb;
         private AetheriumClientBehaviour _client;
 
         private sealed class CellView
@@ -36,14 +56,17 @@ namespace Aetherium.Unity
             public GameObject GameObject;
             public string TerrainName;
             public float Brightness = -1f; // unset; first sync always applies
-            /// <summary>Original material colors, captured at creation so brightness is
-            /// an absolute assignment (multiplying in place could never brighten back).</summary>
-            public List<(Material Material, Color BaseColor)> BaseColors;
+            public Renderer[] Renderers;
+            /// <summary>The prefab's shared base color per renderer, captured at creation so
+            /// brightness is an absolute assignment (multiplying in place could never brighten
+            /// back). Read from the SHARED material — the view never clones a material.</summary>
+            public Color[] BaseColors;
         }
 
         private void Awake()
         {
             _client = GetComponent<AetheriumClientBehaviour>();
+            _mpb = new MaterialPropertyBlock();
             _client.FrameReceived += _ => SyncFromMemory();
             _client.Reanchored += _ => Clear();
         }
@@ -66,11 +89,29 @@ namespace Aetherium.Unity
             if (store == null)
                 return;
 
+            var anchor = store.Anchor;
+            long radiusSq = (long)renderRadius * renderRadius;
+
             foreach (var remembered in store.Memory)
             {
                 var terrainName = remembered.Terrain != null ? remembered.Terrain.Name : null;
                 if (terrainName == null)
                     continue;
+
+                // Window cull: keep only the neighborhood live. Cells beyond the radius (or on
+                // another level) are despawned; they re-materialize from memory if you walk back.
+                long dx = remembered.Position.X - anchor.X;
+                long dy = remembered.Position.Y - anchor.Y;
+                bool near = remembered.Position.Z == anchor.Z && (dx * dx + dy * dy) <= radiusSq;
+                if (!near)
+                {
+                    if (_cells.TryGetValue(remembered.Position, out var stale))
+                    {
+                        Destroy(stale.GameObject);
+                        _cells.Remove(remembered.Position);
+                    }
+                    continue;
+                }
 
                 if (!_cells.TryGetValue(remembered.Position, out var cell))
                 {
@@ -107,23 +148,55 @@ namespace Aetherium.Unity
             instance.name = $"cell:{position}";
             instance.SetActive(true);
 
-            // Capture base colors once so dim/undim assigns absolute values.
-            // URP/HDRP shaders name the main color _BaseColor, Built-in names it _Color;
-            // Material.color maps to whichever is the shader's [MainColor], so accept both.
-            var baseColors = new List<(Material, Color)>();
-            foreach (var renderer in instance.GetComponentsInChildren<Renderer>())
-                foreach (var material in renderer.materials) // per-instance; fine at M0 scale
-                    if (material.HasProperty("_BaseColor") || material.HasProperty("_Color"))
-                        baseColors.Add((material, material.color));
+            // Capture base colors from the SHARED material (never .materials/.material, whose
+            // getters clone a unique material per cell and make every tile its own unbatchable
+            // draw call). Per-cell brightness rides a MaterialPropertyBlock instead; enabling
+            // instancing on the shared material lets those per-cell colors GPU-instance into one
+            // draw call per terrain type.
+            var renderers = instance.GetComponentsInChildren<Renderer>();
+            var baseColors = new Color[renderers.Length];
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var shared = renderers[i].sharedMaterial;
+                if (shared != null)
+                {
+                    shared.enableInstancing = true;
+                    baseColors[i] = shared.HasProperty(BaseColorId) ? shared.GetColor(BaseColorId)
+                        : shared.HasProperty(ColorId) ? shared.GetColor(ColorId)
+                        : Color.white;
+                }
+                else
+                {
+                    baseColors[i] = Color.white;
+                }
+            }
 
-            return new CellView { GameObject = instance, TerrainName = terrainName, BaseColors = baseColors };
+            return new CellView
+            {
+                GameObject = instance,
+                TerrainName = terrainName,
+                Renderers = renderers,
+                BaseColors = baseColors,
+            };
         }
 
-        private static void ApplyDim(CellView cell, float brightness)
+        private void ApplyDim(CellView cell, float brightness)
         {
-            foreach (var (material, baseColor) in cell.BaseColors)
-                material.color = new Color(
+            for (int i = 0; i < cell.Renderers.Length; i++)
+            {
+                var renderer = cell.Renderers[i];
+                if (renderer == null)
+                    continue;
+                var baseColor = cell.BaseColors[i];
+                var color = new Color(
                     baseColor.r * brightness, baseColor.g * brightness, baseColor.b * brightness, baseColor.a);
+
+                renderer.GetPropertyBlock(_mpb);
+                var shared = renderer.sharedMaterial;
+                if (shared == null || shared.HasProperty(BaseColorId)) _mpb.SetColor(BaseColorId, color);
+                if (shared != null && shared.HasProperty(ColorId)) _mpb.SetColor(ColorId, color);
+                renderer.SetPropertyBlock(_mpb);
+            }
         }
 
         private void Clear()

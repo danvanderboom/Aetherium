@@ -25,6 +25,39 @@ namespace Aetherium.Server
         private readonly WeatherSystem? weatherSystem;
         private readonly SeasonManager? seasonManager;
 
+        // --- opt-in perf instrumentation (set AETHERIUM_PERF=1) ---
+        // Every perception compute runs the same code path (player moves, NPC-driven flushes,
+        // and agent frames all funnel through ComputePerception), so a single rate+cost line
+        // shows both how expensive one frame is and how many the server is being asked to
+        // produce per second (a roaming-NPC flush storm shows up as a high idle rate).
+        private static readonly bool PerfLog = Environment.GetEnvironmentVariable("AETHERIUM_PERF") == "1";
+        private static readonly object PerfGate = new object();
+        private static long _perfCount;
+        private static double _perfMs;
+        private static double _perfWorstMs;
+        private static long _perfWindowStartMs = -1;
+
+        private static void RecordPerf(double ms)
+        {
+            lock (PerfGate)
+            {
+                var now = Environment.TickCount64;
+                if (_perfWindowStartMs < 0) _perfWindowStartMs = now;
+                _perfCount++;
+                _perfMs += ms;
+                if (ms > _perfWorstMs) _perfWorstMs = ms;
+                var elapsed = now - _perfWindowStartMs;
+                if (elapsed >= 2000)
+                {
+                    Console.WriteLine(
+                        $"[PERF] perception: {_perfCount} calls in {elapsed}ms " +
+                        $"({_perfCount * 1000.0 / elapsed:F1}/s), avg {_perfMs / Math.Max(1, _perfCount):F1}ms, " +
+                        $"worst {_perfWorstMs:F1}ms");
+                    _perfCount = 0; _perfMs = 0; _perfWorstMs = 0; _perfWindowStartMs = now;
+                }
+            }
+        }
+
         public PerceptionService(
             WorldClock? worldClock = null,
             WeatherSystem? weatherSystem = null,
@@ -101,6 +134,7 @@ namespace Aetherium.Server
             GameSession? session = null,
             Entity? self = null)
         {
+            var perfStart = PerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
             var worldHeight = viewportSize.Height;
@@ -471,18 +505,15 @@ Light sources found:
             // Add audio perception
             perception.Audio = ComputeAudioPerception(world, playerLocation, heatTracker, currentTime);
 
-            // Apply sunlight calculation if using sunlight mode
-            if (lightingMode == LightingMode.Sunlight && worldClock != null)
-            {
-                var timeOfDay = worldClock.GetTimeOfDay();
-                sunlightCalculator.ComputeSunlight(
-                    world,
-                    bounds,
-                    playerLocation.Z,
-                    timeOfDay,
-                    lightFrame);
-            }
+            // NOTE: sunlight is already computed once, above, by ComputeLightingWithMode(...Sunlight...)
+            // using this call's `currentTime` (which honors a session's fixed-noon daylight freeze).
+            // A second ComputeSunlight used to run here off the *global* WorldClock — but it fired
+            // AFTER the Visuals DTOs were built from the first pass's light levels, so its output never
+            // reached the client. It was pure dead work (a full per-cell shadow raytrace, ~half the
+            // frame's cost on a wide daylight viewport) and, worse, used the wrong clock. Removed.
 
+            if (PerfLog)
+                RecordPerf(System.Diagnostics.Stopwatch.GetElapsedTime(perfStart).TotalMilliseconds);
             return perception;
         }
 
