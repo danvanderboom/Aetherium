@@ -660,6 +660,58 @@ namespace Aetherctl.Commands
                 }
             });
 
+            // dump: omniscient, FOV-independent snapshot of a world's tiles and entities
+            var dumpCmd = new Command("dump", "Dump a world's tiles and entities (omniscient snapshot)");
+            var dumpWorldIdArg = new Argument<string>("worldId", "World ID");
+            dumpCmd.AddArgument(dumpWorldIdArg);
+            dumpCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var worldId = parseResult.GetValueForArgument(dumpWorldIdArg);
+
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var mgmt = factory.GetGameManagement();
+                    var json = await mgmt.GetWorldSnapshotAsync(worldId);
+
+                    if (string.IsNullOrEmpty(json))
+                    {
+                        Common.WriteError(parseResult, $"No snapshot for world '{worldId}' (unknown world, not initialized in this process, or operator access disabled).");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    if (Common.IsJsonOutput(parseResult))
+                    {
+                        Console.WriteLine(json);
+                    }
+                    else
+                    {
+                        var snapshot = System.Text.Json.JsonSerializer.Deserialize<Aetherium.Model.WorldSnapshotDto>(json);
+                        if (snapshot == null)
+                        {
+                            Common.WriteError(parseResult, "Failed to parse world snapshot.");
+                            Environment.Exit(1);
+                            return;
+                        }
+                        Console.WriteLine($"World: {snapshot.WorldId}");
+                        Console.WriteLine($"  Map: {snapshot.MapId}");
+                        Console.WriteLine($"  Bounds: {snapshot.Width} x {snapshot.Height} x {snapshot.Depth}");
+                        Console.WriteLine($"  Entities: {snapshot.EntityCount}{(snapshot.Truncated ? " (truncated)" : "")}");
+                        Console.WriteLine($"  Occupied tiles: {snapshot.TileCount}");
+                        foreach (var g in snapshot.Entities.GroupBy(e => e.Type).OrderByDescending(g => g.Count()))
+                            Console.WriteLine($"    {g.Key}: {g.Count()}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Error dumping world: {ex.Message}");
+                    Environment.Exit(1);
+                }
+            });
+
             worldCmd.AddCommand(createCmd);
             worldCmd.AddCommand(listCmd);
             worldCmd.AddCommand(infoCmd);
@@ -670,6 +722,7 @@ namespace Aetherctl.Commands
             worldCmd.AddCommand(getAclCmd);
             worldCmd.AddCommand(inviteCmd);
             worldCmd.AddCommand(acceptInviteCmd);
+            worldCmd.AddCommand(dumpCmd);
             root.AddCommand(worldCmd);
         }
     }

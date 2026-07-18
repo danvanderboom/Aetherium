@@ -16,6 +16,12 @@ namespace Aetherium.Server
 		public string SessionId { get; set; } = Guid.NewGuid().ToString();
 		public string ConnectionId { get; set; } = string.Empty;
 		public string? WorldId { get; set; } // Multi-world support - which world is this session in?
+
+		/// <summary>
+		/// True when this session was provisioned headlessly (no interactive SignalR client).
+		/// Used to distinguish operator/automation sessions from client-backed ones (e.g. for idle reaping).
+		/// </summary>
+		public bool IsHeadless { get; set; } = false;
 		public World World { get; set; }
 		public Character? Player { get; set; }
 		public WorldLocation? ViewLocation { get; set; }
@@ -143,7 +149,7 @@ namespace Aetherium.Server
 		}
 	}
 
-	public Aetherium.Model.PerceptionDto GetPerception()
+	public Aetherium.Model.PerceptionDto GetPerception(bool absoluteCoordinates = false)
 	{
 		if (ViewLocation == null)
 			throw new InvalidOperationException("ViewLocation is null");
@@ -171,7 +177,8 @@ namespace Aetherium.Server
 			GetCurrentGameTime(),
 			DirectionalVisionMode,
 			DirectionalVisionMode ? (int?)HeadingDegrees : null,
-			fovDegrees);
+			fovDegrees,
+			absoluteCoordinates: absoluteCoordinates);
 	}
 
 		/// <summary>

@@ -96,7 +96,8 @@ namespace Aetherium.Server
             int? headingDegrees,
             int? fovDegrees,
             InteractionSystem? interactionSystem = null,
-            GameSession? session = null)
+            GameSession? session = null,
+            bool absoluteCoordinates = false)
         {
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
@@ -214,11 +215,14 @@ Light sources found:
                 catch { /* ignore file write errors */ }
             }
 
-            // Convert to DTO with RELATIVE coordinates only (player is always at 0,0,0)
+            // Convert to DTO. By default coordinates are RELATIVE (player is always at 0,0,0) so
+            // clients never learn absolute world coordinates. Operators may opt into absolute
+            // coordinates for debugging via absoluteCoordinates=true (gated on the management path).
             var perception = new PerceptionDto
             {
-                // PlayerLocation is always (0,0,0) - client should not know absolute world coordinates
-                PlayerLocation = new WorldLocationDto(0, 0, 0),
+                PlayerLocation = absoluteCoordinates
+                    ? new WorldLocationDto(playerLocation.X, playerLocation.Y, playerLocation.Z)
+                    : new WorldLocationDto(0, 0, 0),
                 PlayerHeading = playerHeading.ToDto(),
                 HeadingDegrees = headingDegrees ?? ConvertDirectionToDegrees(playerHeading),
                 IsDirectionalVision = directionalVision,

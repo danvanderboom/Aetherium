@@ -303,6 +303,11 @@ namespace Aetherium.Server
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<SpawnManager>());
                     siloBuilder.Services.AddSingleton(sp => sp.GetRequiredService<IEventScheduler>());
                     
+                    // In-process bridge exposing live map worlds to operator tooling
+                    // (headless sessions + world snapshots). Silo-local singleton shared by
+                    // GameMapGrain (publisher) and GameManagementGrain (consumer).
+                    siloBuilder.Services.AddSingleton<Aetherium.Server.Services.WorldRegistry>();
+
                     // Register GameSessionManager for GameManagementGrain
                     siloBuilder.Services.AddSingleton<GameSessionManager>(sp =>
                     {

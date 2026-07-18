@@ -1,5 +1,6 @@
 using Orleans;
 using Orleans.Runtime;
+using Microsoft.Extensions.DependencyInjection;
 using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Entities;
@@ -96,6 +97,11 @@ namespace Aetherium.Server.MultiWorld
 
             _world = result.World;
 
+            // Publish the live world to the in-process registry so operator/debug tooling
+            // (headless sessions, world snapshots) can read/drive it directly.
+            var worldRegistry = ServiceProvider.GetService<Aetherium.Server.Services.WorldRegistry>();
+            worldRegistry?.Register(worldId, mapId, _world);
+
             // Partition map into regions and initialize region grains
             await PartitionIntoRegionsAsync();
 
@@ -162,8 +168,13 @@ namespace Aetherium.Server.MultiWorld
 
         public Task<string?> GetWorldAsync()
         {
-            // TODO: Return serialized world when implemented
-            return Task.FromResult<string?>(null);
+            if (_world == null || _mapState.State == null)
+                return Task.FromResult<string?>(null);
+
+            // Serialize an omniscient snapshot (tiles + entities) of this map's live world.
+            var snapshot = Aetherium.Server.Management.WorldSnapshotBuilder.Build(
+                _world, _mapState.State.WorldId, _mapState.State.MapId);
+            return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(snapshot));
         }
 
         public Task<MapMetadata?> GetMetadataAsync()

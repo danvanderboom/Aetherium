@@ -46,6 +46,16 @@ namespace Aetherium.Server.Management
         Task<string> InvitePlayerAsync(string worldId, string playerId);
         Task<OperationResult> AcceptInviteAsync(string inviteId);
 
+        // Operator / headless driving (see specs: game-management-grain)
+        // Provisions a client-less session in an existing world and returns its sessionId.
+        Task<HeadlessSessionResult> CreateHeadlessSessionAsync(string worldId, int? startX, int? startY, int? startZ, string? profile);
+        // Operator perception with optional absolute (un-relativized) world coordinates.
+        Task<string?> GetPerceptionAsync(string sessionId, bool absoluteCoordinates); // JSON-serialized PerceptionDto
+        // Omniscient, FOV-independent snapshot of a world's tiles/entities (JSON WorldSnapshotDto).
+        Task<string?> GetWorldSnapshotAsync(string worldId);
+        // Terminates headless sessions idle beyond maxIdleSeconds; returns the number reaped.
+        Task<int> ReapIdleHeadlessSessionsAsync(int maxIdleSeconds);
+
         // Gameplay control + perception (for agents)
         Task<string?> GetPerceptionAsync(string sessionId); // JSON-serialized PerceptionDto
         Task<OperationResult> MoveAsync(string sessionId, string direction);

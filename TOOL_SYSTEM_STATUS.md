@@ -104,7 +104,8 @@
 - [x] Narrative commands (`narrative create|load|show|delete|list`)
 - [x] Server management (`server add|list|remove|connect`, `login`, `status`)
 - [x] Test suite (18 tests passing)
-- [x] Session termination (`session close <sessionId>`); session create pending server API
+- [x] Session termination (`session close <sessionId>`)
+- [x] Headless driving (`session create --world`, `perception get [--absolute]`, `world dump`) — see OpenSpec change `add-aetherctl-headless-driving`. Follow-ups intentionally out of scope: scripted/batch action sequences, runtime world-building (`SpawnEntityTool`), activating the dormant `Memory` component, CLI telemetry/replay surface, region-bounded snapshots, and a multi-character scenario harness.
 - [ ] Delegation commands
 
 ### Phase 10: Documentation (In Progress)
