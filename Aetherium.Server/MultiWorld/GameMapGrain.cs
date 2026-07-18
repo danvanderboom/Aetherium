@@ -1207,6 +1207,10 @@ namespace Aetherium.Server.MultiWorld
 
             var tickTs0 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
+            // Advance autonomous flyers (flight plans) on this map's world.
+            if (_world != null)
+                Aetherium.Server.Flying.FlightPlanSystem.Step(_world);
+
             // Tick all regions in parallel with game time
             var tickTasks = _regions.Values
                 .Select(region => region.TickAsync(gameTimeElapsed))
@@ -1892,8 +1896,22 @@ namespace Aetherium.Server.MultiWorld
             {
                 var location = new WorldLocation(request.X, request.Y, request.Z);
 
-                // Check if location is valid
-                if (!_world.PassableTerrain(location))
+                var flies = request.Flies || IsFlyingCreatureType(request.CreatureType);
+
+                // Validate placement. Flyers spawn airborne and are validated against altitude bands and
+                // per-band obstruction rather than ground passability, so they may occupy open air.
+                if (flies)
+                {
+                    if (location.Z < request.MinBand || location.Z > request.MaxBand)
+                    {
+                        return new SpawnEntityResult { Success = false, ErrorMessage = "Spawn band is outside the flyer's range" };
+                    }
+                    if (_world.ColumnObstructsMovement(location.X, location.Y, location.Z))
+                    {
+                        return new SpawnEntityResult { Success = false, ErrorMessage = "Air location is obstructed" };
+                    }
+                }
+                else if (!_world.PassableTerrain(location))
                 {
                     return new SpawnEntityResult { Success = false, ErrorMessage = "Location is not passable" };
                 }
@@ -1965,6 +1983,25 @@ namespace Aetherium.Server.MultiWorld
 
                 // Set location and add to world
                 entity.Set(location);
+
+                if (flies)
+                {
+                    entity.Set(new Flight
+                    {
+                        State = FlightState.Airborne,
+                        MinBand = request.MinBand,
+                        MaxBand = request.MaxBand,
+                        CruiseBand = location.Z,
+                        CanLand = request.CanLand
+                    });
+
+                    // Attach the stock interaction profile for this flyer kind (hackable satellite, summonable
+                    // taxi, attackable drone, …) so it can be hacked/summoned/attacked/inspected.
+                    var profile = Aetherium.Server.Flying.FlyerProfiles.ForCreatureType(request.CreatureType);
+                    if (profile != null)
+                        entity.Set(profile);
+                }
+
                 _world.AddEntity(entity);
 
                 return new SpawnEntityResult { Success = true, EntityId = entity.EntityId };
@@ -1972,6 +2009,28 @@ namespace Aetherium.Server.MultiWorld
             catch (Exception ex)
             {
                 return new SpawnEntityResult { Success = false, ErrorMessage = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// Whether a creature-type name denotes a flyer that should spawn airborne with a Flight component.
+        /// </summary>
+        public static bool IsFlyingCreatureType(string creatureType)
+        {
+            switch ((creatureType ?? string.Empty).ToLowerInvariant())
+            {
+                case "bird":
+                case "drone":
+                case "satellite":
+                case "aircraft":
+                case "airplane":
+                case "helicopter":
+                case "airship":
+                case "dropship":
+                case "spaceship":
+                    return true;
+                default:
+                    return false;
             }
         }
 

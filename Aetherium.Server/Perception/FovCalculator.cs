@@ -87,6 +87,55 @@ namespace Aetherium.Systems
             }
         }
 
+        /// <summary>An intervening band at or above this opacity blocks the vertical line of sight.</summary>
+        public const double OpaqueThreshold = 1.0 - 1e-9;
+
+        /// <summary>
+        /// Sight opacity of band <paramref name="z"/> in column (x,y) for the vertical (up/down) line-of-sight test.
+        /// Combines the opacity of things exactly at that cell (terrain tile + entities, via
+        /// <see cref="GetCellOpacity"/>) with any Height-spanning <see cref="ObstructsView"/> obstruction that
+        /// covers the band (via <see cref="World.ColumnViewOpacity"/>). A glass skylight (Opacity 0) contributes
+        /// nothing even though it blocks movement, so a viewer sees through it.
+        /// </summary>
+        public static double BandVerticalOpacity(World world, int x, int y, int z)
+        {
+            var cell = new WorldLocation(x, y, z);
+            var exact = GetCellOpacity(world, cell);
+            var spanning = world.ColumnViewOpacity(x, y, z);
+            return Math.Max(exact, spanning);
+        }
+
+        /// <summary>
+        /// The bands (absolute Z, excluding the origin band) that are vertically visible in column (x,y): marching
+        /// up and down from <paramref name="originZ"/> within the slab, each band is visible up to and including the
+        /// first opaque band, which stops the ray (its surface — e.g. a bridge underside — is seen, nothing beyond).
+        /// Depth is bounded by the slab range clamped to the world band range.
+        /// </summary>
+        public List<int> VerticalVisibleBands(World world, int x, int y, int originZ, int depthBelow, int depthAbove)
+        {
+            var bands = new List<int>();
+            if (depthBelow <= 0 && depthAbove <= 0)
+                return bands;
+
+            int ceil = Math.Min(world.MaxBand, originZ + Math.Max(0, depthAbove));
+            for (int z = originZ + 1; z <= ceil; z++)
+            {
+                bands.Add(z);
+                if (BandVerticalOpacity(world, x, y, z) >= OpaqueThreshold)
+                    break; // opaque band: its surface is visible, nothing above it
+            }
+
+            int floor = Math.Max(world.MinBand, originZ - Math.Max(0, depthBelow));
+            for (int z = originZ - 1; z >= floor; z--)
+            {
+                bands.Add(z);
+                if (BandVerticalOpacity(world, x, y, z) >= OpaqueThreshold)
+                    break; // opaque band: its surface is visible, nothing below it
+            }
+
+            return bands;
+        }
+
         public static double GetCellOpacity(World world, WorldLocation location)
         {
             double opacity = 0.0;

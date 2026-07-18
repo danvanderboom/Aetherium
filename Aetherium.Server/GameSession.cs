@@ -988,6 +988,92 @@ namespace Aetherium.Server
 			}
 		}
 
+		public bool Land()
+		{
+			if (Player == null)
+				return false;
+
+			var landed = Aetherium.Server.Flying.FlightController.TryLand(World, Player);
+			if (landed)
+				SyncViewToPlayer();
+			return landed;
+		}
+
+		public bool Takeoff()
+		{
+			if (Player == null)
+				return false;
+
+			var airborne = Aetherium.Server.Flying.FlightController.TryTakeoff(World, Player);
+			if (airborne)
+				SyncViewToPlayer();
+			return airborne;
+		}
+
+		private void SyncViewToPlayer()
+		{
+			if (Player == null)
+				return;
+
+			var loc = Player.Get<WorldLocation>();
+			ViewLocation = new WorldLocation(loc.X, loc.Y, loc.Z);
+		}
+
+		private Character? ResolveFlyer(string entityId) =>
+			World.Entities.TryGetValue(entityId, out var e) ? e as Character : null;
+
+		/// <summary>The altitude-aware affordances a flyer offers the player (hack/summon/attack/inspect).</summary>
+		public System.Collections.Generic.IReadOnlyList<Aetherium.Server.Flying.FlyerAffordanceState> FlyerAffordances(string targetEntityId)
+		{
+			if (Player == null)
+				return new System.Collections.Generic.List<Aetherium.Server.Flying.FlyerAffordanceState>();
+
+			var target = ResolveFlyer(targetEntityId);
+			if (target == null)
+				return new System.Collections.Generic.List<Aetherium.Server.Flying.FlyerAffordanceState>();
+
+			return Aetherium.Server.Flying.FlyerInteractionSystem.Affordances(World, Player, target);
+		}
+
+		/// <summary>Hack a flyer over an uplink (band-agnostic, range-gated), e.g. an orbital satellite.</summary>
+		public Aetherium.Server.Flying.FlyerInteractionOutcome Hack(string targetEntityId)
+		{
+			if (Player == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No player");
+
+			var target = ResolveFlyer(targetEntityId);
+			if (target == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No such target");
+
+			return Aetherium.Server.Flying.FlyerInteractionSystem.TryHack(World, Player, target);
+		}
+
+		/// <summary>Summon/hail an air taxi: it plans an AdHoc route to the player and lands to board.</summary>
+		public Aetherium.Server.Flying.FlyerInteractionOutcome Summon(string targetEntityId)
+		{
+			if (Player == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No player");
+
+			var target = ResolveFlyer(targetEntityId);
+			if (target == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No such target");
+
+			return Aetherium.Server.Flying.FlyerInteractionSystem.TrySummon(World, Player, target);
+		}
+
+		/// <summary>Attack/shoot a flyer: range-gated and band-limited, so orbit is out of reach.</summary>
+		public Aetherium.Server.Flying.FlyerInteractionOutcome Attack(string targetEntityId)
+		{
+			if (Player == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No player");
+
+			var target = ResolveFlyer(targetEntityId);
+			if (target == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No such target");
+
+			return Aetherium.Server.Flying.FlyerInteractionSystem.TryAttack(World, Player, target);
+		}
+
 		public void JumpToRandomLocation()
 		{
 			lock (_stateLock)
