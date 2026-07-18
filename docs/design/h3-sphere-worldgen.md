@@ -225,9 +225,8 @@ already exists:
   (~45 ms for a radius-20 daylight frame at res 4, comparable to the square path and within the
   perception debounce). Tested by `H3FovLightingTests` (a mountain ring blocks everything beyond; a lone
   obstacle only casts a wedge; the cone hides what's behind you; darkness collapses the view while a
-  torch lights a pool). **Not yet sphere-native:** the vertical 3-D occlusion slab (`ColumnViewOpacity`/
-  `VerticalVisibleBands`) is Z-axis engine machinery orthogonal to the XY tiling — it applies to H3
-  unchanged for a single surface level, and multi-level H3 is future work.
+  torch lights a pool). The vertical 3-D occlusion slab (`ColumnViewOpacity`/`VerticalVisibleBands`) is
+  Z-axis machinery orthogonal to the XY tiling; it is now wired into the H3 path too — see **P4.5**.
 - **P1 — Sphere-native rivers, coasts, and roads. ✅ BUILT.** `H3RiverCarver` traces rivers by steepest
   descent over `topology.Neighbors` down the elevation field (spaced high headwaters → sea), widening
   downstream into multi-lane channels. `H3RoadNetwork` connects settlements along `topology.Line`
