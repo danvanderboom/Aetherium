@@ -58,10 +58,11 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
 
    **Creature memory:** a creature that leaves your view (you turned away, or it slipped
    past the lamp) lingers as a last-seen impression: the model stays where you saw it and
-   dims, while a crisp translucent circle in the creature's color — starting at the
-   creature's own size — expands smoothly on the floor around it, about one cell of radius
-   per second, marking where it could plausibly be by now. Turn back and you SEE the
-   memory (the circle means "somewhere in here", so an empty spot doesn't erase it);
+   dims, while a translucent circle in the creature's color — starting clear and sharp at
+   the creature's own size — expands smoothly on the floor around it, about one cell of
+   radius per second, dispersing from a crisp disc into a soft diffuse cloud as it grows:
+   a probability waveform spreading as its position grows uncertain. Turn back and you SEE
+   the memory (the circle means "somewhere in here", so an empty spot doesn't erase it);
    re-spotting the actual creature replaces its ghost instantly, and after ~5 seconds the
    impression fades out on its own. Tune `ghostSeconds` / `ghostSpreadCellsPerSecond` /
    `ghostGlowStartCells` / `ghostGlowOpacity` on the EntityViewRegistry component live in

@@ -13,13 +13,15 @@ namespace Aetherium.Unity
     /// <para><b>Creature memory (ghosts):</b> a creature that leaves view (you turned away,
     /// it stepped past your lamp) does not blink out — the mind keeps a last-seen impression.
     /// Unlike terrain memory, a memory of a MOVING thing decays: the model lingers in place,
-    /// dimming, while a translucent circle of the creature's color — starting at the
-    /// creature's own footprint — expands smoothly outward on the floor (~1 cell of radius
-    /// per second). The growing circle IS the positional uncertainty, "by now it could be
-    /// anywhere in here" — so turning back to look shows you the memory rather than erasing
-    /// it (an empty center cell disproves nothing once the circle outgrows it). Re-seeing
-    /// the actual creature replaces its ghost instantly; otherwise both model and circle dim
-    /// to nothing and disperse. A default a game can replace wholesale.</para>
+    /// dimming, while a translucent circle of the creature's color — starting clear and
+    /// sharp at the creature's own footprint — expands smoothly outward on the floor
+    /// (~1 cell of radius per second), dispersing from a crisp disc into a diffuse cloud as
+    /// it grows: a probability waveform spreading as the position grows uncertain. The
+    /// circle means "by now it could be anywhere in here" — so turning back to look shows
+    /// you the memory rather than erasing it. Re-seeing the actual creature replaces its
+    /// ghost instantly; otherwise both model and circle dim to nothing and disperse.
+    /// Rendered by the bundled Aetherium/GhostCircle shader. A default a game can replace
+    /// wholesale.</para>
     /// </summary>
     [RequireComponent(typeof(AetheriumClientBehaviour))]
     public sealed class EntityViewRegistry : MonoBehaviour
@@ -48,6 +50,8 @@ namespace Aetherium.Unity
         [Tooltip("Peak opacity of the uncertainty circle (it dims in lockstep with the " +
                  "fading model).")]
         [SerializeField] private float ghostGlowOpacity = 0.45f;
+
+        private static readonly int FuzzProperty = Shader.PropertyToID("_Fuzz");
 
         private readonly Dictionary<string, EntityView> _views = new Dictionary<string, EntityView>();
         private readonly Dictionary<string, GhostView> _ghosts = new Dictionary<string, GhostView>();
@@ -190,35 +194,29 @@ namespace Aetherium.Unity
             return best;
         }
 
-        /// <summary>An unlit alpha-blended material for the uncertainty circle — unlit so it
-        /// reads as emission (memory-glow), not as a lit surface the lamp should affect.</summary>
+        /// <summary>The uncertainty circle's material: the bundled GhostCircle shader — unlit
+        /// (memory-glow, not a lamp-lit surface), natively transparent, and with the _Fuzz
+        /// dispersion the fade drives each frame. Falls back to a textured sprite quad if the
+        /// shader hasn't imported (crisp only — still visible, loud beats invisible).</summary>
         private static Material CreateGlowMaterial(Color color)
         {
-            var urpUnlit = Shader.Find("Universal Render Pipeline/Unlit");
+            var circleShader = Shader.Find("Aetherium/GhostCircle");
             Material material;
-            if (urpUnlit != null)
+            if (circleShader != null)
             {
-                material = new Material(urpUnlit);
-                // The standard runtime recipe for a transparent URP surface.
-                material.SetFloat("_Surface", 1f);
-                material.SetOverrideTag("RenderType", "Transparent");
-                material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                material.SetInt("_ZWrite", 0);
-                material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                material = new Material(circleShader);
             }
             else
             {
-                material = new Material(Shader.Find("Sprites/Default")); // built-in fallback, alpha-blended
+                material = new Material(Shader.Find("Sprites/Default"));
+                material.mainTexture = CircleTexture();
             }
-            material.mainTexture = CircleTexture();
             material.color = color;
             return material;
         }
 
         /// <summary>A flat quad hovering just above the floor slab (whose top sits at the
-        /// cell's y), textured with the crisp circle; Update scales it as uncertainty grows.</summary>
+        /// cell's y), rendering the circle; Update scales it as uncertainty grows.</summary>
         private GameObject CreateGlowDisc(GridPoint cell, Material glowMaterial)
         {
             var disc = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -227,6 +225,8 @@ namespace Aetherium.Unity
             disc.transform.SetParent(transform, false);
             disc.transform.position = CellToWorld(cell) + new Vector3(0f, 0.02f, 0f);
             disc.transform.rotation = Quaternion.Euler(90f, 0f, 0f); // face up
+            float startDiameter = ghostGlowStartCells * cellSize;
+            disc.transform.localScale = new Vector3(startDiameter, startDiameter, 1f);
             var renderer = disc.GetComponent<MeshRenderer>();
             renderer.sharedMaterial = glowMaterial;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -330,10 +330,14 @@ namespace Aetherium.Unity
                 ghost.GlowMaterial.color = new Color(glow.r, glow.g, glow.b, brightness * ghostGlowOpacity);
 
                 // Expand smoothly: the circle gains ~a cell of radius per second (tunable) —
-                // the region the creature could plausibly have reached since you saw it.
+                // the region the creature could plausibly have reached since you saw it —
+                // while dispersing from a clear, sharp-rimmed disc into a diffuse cloud:
+                // the probability waveform spreading as the position grows uncertain.
                 float diameter = (ghostGlowStartCells * 0.5f + elapsed * ghostSpreadCellsPerSecond)
                     * 2f * cellSize;
                 ghost.GlowDisc.transform.localScale = new Vector3(diameter, diameter, 1f);
+                if (ghost.GlowMaterial.HasProperty(FuzzProperty))
+                    ghost.GlowMaterial.SetFloat(FuzzProperty, Mathf.Lerp(0.05f, 1f, fraction));
             }
 
             if (expired != null)
