@@ -495,5 +495,148 @@ namespace Aetherium.Test
             Assert.That(rb.Count, Is.EqualTo(1));
             Assert.That(ra.All(r => r.Success) && rb.All(r => r.Success), Is.True);
         }
+
+        // ---- Runtime world-building (change: add-aetherctl-runtime-worldbuilding) ----
+
+        private static readonly string[] PassableTerrains = { "Indoors", "Upstairs", "Downstairs", "Road", "Plains", "Forest", "Cave" };
+
+        /// <summary>Finds a passable tile with no character on it, using the world snapshot.</summary>
+        private async Task<(int x, int y, int z)> FindFreePassableTileAsync(string worldId)
+        {
+            var json = await Mgmt().GetWorldSnapshotAsync(worldId);
+            Assert.That(json, Is.Not.Null);
+            using var doc = JsonDocument.Parse(json!);
+            var root = doc.RootElement;
+
+            var occupied = root.GetProperty("Entities").EnumerateArray()
+                .Where(e => e.GetProperty("Type").GetString() == "Character")
+                .Select(e =>
+                {
+                    var l = e.GetProperty("Location");
+                    return (l.GetProperty("X").GetInt32(), l.GetProperty("Y").GetInt32(), l.GetProperty("Z").GetInt32());
+                })
+                .ToHashSet();
+
+            foreach (var t in root.GetProperty("Tiles").EnumerateArray())
+            {
+                if (!PassableTerrains.Contains(t.GetProperty("Terrain").GetString()))
+                    continue;
+                var l = t.GetProperty("Location");
+                var loc = (l.GetProperty("X").GetInt32(), l.GetProperty("Y").GetInt32(), l.GetProperty("Z").GetInt32());
+                if (!occupied.Contains(loc))
+                    return loc;
+            }
+
+            Assert.Fail("no free passable tile found");
+            return default;
+        }
+
+        // Spec: game-management-grain / Runtime World Tool Execution
+        //       Scenario "Spawn a creature into a running world"
+        [Test]
+        public async Task WorldTool_SpawnEntity_AddsCreatureVisibleInSnapshot()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var (x, y, z) = await FindFreePassableTileAsync(worldId);
+
+            var result = await mgmt.ExecuteWorldToolAsync(worldId, "spawnentity", new Dictionary<string, object>
+            {
+                ["x"] = x, ["y"] = y, ["z"] = z, ["entityType"] = "monster"
+            });
+
+            Assert.That(result.Success, Is.True, result.Message);
+            Assert.That(result.Data, Is.Not.Null);
+            var entityId = result.Data!["entityId"].ToString();
+
+            using var doc = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var found = doc.RootElement.GetProperty("Entities").EnumerateArray()
+                .Any(e => e.GetProperty("EntityId").GetString() == entityId);
+            Assert.That(found, Is.True, "spawned entity should appear in the world snapshot");
+        }
+
+        // Spec: game-management-grain / Runtime World Tool Execution
+        //       Scenario "Execute a world-building tool at runtime" (setterrain + destroyentity)
+        [Test]
+        public async Task WorldTool_SetTerrainAndDestroyEntity_Work()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var (x, y, z) = await FindFreePassableTileAsync(worldId);
+
+            // setterrain: reuse a PASSABLE terrain name that exists in this world, so the tile
+            // stays passable for the spawn below (a wall terrain would make it unspawnable).
+            using (var doc = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!))
+            {
+                var terrainName = doc.RootElement.GetProperty("Tiles").EnumerateArray()
+                    .Select(t => t.GetProperty("Terrain").GetString()!)
+                    .First(n => PassableTerrains.Contains(n));
+                var setResult = await mgmt.ExecuteWorldToolAsync(worldId, "setterrain", new Dictionary<string, object>
+                {
+                    ["x"] = x, ["y"] = y, ["z"] = z, ["terrainType"] = terrainName
+                });
+                Assert.That(setResult.Success, Is.True, setResult.Message);
+            }
+
+            // destroyentity: spawn then destroy, and verify it is gone from the snapshot.
+            var spawn = await mgmt.ExecuteWorldToolAsync(worldId, "spawnentity", new Dictionary<string, object>
+            {
+                ["x"] = x, ["y"] = y, ["z"] = z, ["entityType"] = "snake"
+            });
+            Assert.That(spawn.Success, Is.True, spawn.Message);
+            var entityId = spawn.Data!["entityId"].ToString()!;
+
+            var destroy = await mgmt.ExecuteWorldToolAsync(worldId, "destroyentity", new Dictionary<string, object>
+            {
+                ["entityId"] = entityId
+            });
+            Assert.That(destroy.Success, Is.True, destroy.Message);
+
+            using var after = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var stillThere = after.RootElement.GetProperty("Entities").EnumerateArray()
+                .Any(e => e.GetProperty("EntityId").GetString() == entityId);
+            Assert.That(stillThere, Is.False, "destroyed entity should be gone from the snapshot");
+        }
+
+        // Spec: game-management-grain / Runtime World Tool Execution
+        //       Scenarios "Unknown world or tool" + "Reject non-world-building tools"
+        [Test]
+        public async Task WorldTool_UnknownWorldToolOrNonWorldEditTool_Fail()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+
+            var unknownWorld = await mgmt.ExecuteWorldToolAsync($"nope-{Guid.NewGuid()}", "setterrain", new Dictionary<string, object>());
+            Assert.That(unknownWorld.Success, Is.False);
+            Assert.That(unknownWorld.Message.ToLowerInvariant(), Does.Contain("not found").Or.Contain("not initialized"));
+
+            var unknownTool = await mgmt.ExecuteWorldToolAsync(worldId, "no-such-tool", new Dictionary<string, object>());
+            Assert.That(unknownTool.Success, Is.False);
+            Assert.That(unknownTool.Message.ToLowerInvariant(), Does.Contain("tool not found"));
+
+            var characterTool = await mgmt.ExecuteWorldToolAsync(worldId, "move", new Dictionary<string, object>());
+            Assert.That(characterTool.Success, Is.False);
+            Assert.That(characterTool.Message.ToLowerInvariant(), Does.Contain("world_edit"));
+        }
+
+        // Spec: game-management-grain / Runtime World Tool Execution — Scenario "Operator gating"
+        [Test]
+        public async Task WorldTool_OperatorGate_Denies()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+
+            try
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, "1");
+                var denied = await mgmt.ExecuteWorldToolAsync(worldId, "setterrain", new Dictionary<string, object>());
+                Assert.That(denied.Success, Is.False);
+                Assert.That(denied.Message.ToLowerInvariant(), Does.Contain("operator access is disabled"));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, null);
+            }
+        }
     }
 }

@@ -55,6 +55,8 @@ namespace Aetherium.Server.Management
         Task<string?> GetWorldSnapshotAsync(string worldId);
         // Terminates headless sessions idle beyond maxIdleSeconds; returns the number reaped.
         Task<int> ReapIdleHeadlessSessionsAsync(int maxIdleSeconds);
+        // Executes a world-building tool (world_edit) against a live world at runtime.
+        Task<ToolExecutionResultDto> ExecuteWorldToolAsync(string worldId, string toolId, Dictionary<string, object> args);
 
         // Gameplay control + perception (for agents)
         Task<string?> GetPerceptionAsync(string sessionId); // JSON-serialized PerceptionDto

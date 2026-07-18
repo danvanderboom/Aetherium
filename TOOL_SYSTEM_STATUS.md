@@ -106,7 +106,8 @@
 - [x] Test suite (18 tests passing)
 - [x] Session termination (`session close <sessionId>`)
 - [x] Headless driving (`session create --world`, `perception get [--absolute]`, `world dump`) — see OpenSpec change `add-aetherctl-headless-driving`.
-- [x] Scripted / batch actions (`agent script <sessionId> --file`, `scenario run <file>`; server `ExecuteToolBatchAsync`) — see OpenSpec change `add-aetherctl-scripted-actions`. Drives deterministic action sequences to one or more characters. Remaining follow-ups intentionally out of scope: an `AgentRunner` scripted policy, conditionals/branching/assertions in scripts, cross-character synchronization, runtime world-building (`SpawnEntityTool`), activating the dormant `Memory` component, CLI telemetry/replay surface, and region-bounded snapshots.
+- [x] Scripted / batch actions (`agent script <sessionId> --file`, `scenario run <file>`; server `ExecuteToolBatchAsync`) — see OpenSpec change `add-aetherctl-scripted-actions`.
+- [x] Runtime world-building (`world spawn`, `world edit <toolId>`; server `ExecuteWorldToolAsync`; `SpawnEntityTool` implemented via `EntityFactory`) — see OpenSpec change `add-aetherctl-runtime-worldbuilding`. Remaining follow-ups: item/prefab spawning beyond creatures, `BuildStructureAsync`, an `AgentRunner` scripted policy, conditionals/assertions in scripts, cross-character synchronization, activating the dormant `Memory` component, and region-bounded snapshots.
 - [ ] Delegation commands
 
 ### Phase 10: Documentation (In Progress)

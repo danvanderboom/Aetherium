@@ -85,16 +85,34 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
             
             // Create location
             var location = new WorldLocation(x, y, z);
-            
-            // TODO: Full entity creation implementation would:
-            // 1. Create entity instance based on entityType (requires entity factory/prefab system)
-            // 2. Add components based on entityType and properties
-            // 3. Set location on entity
-            // 4. Add entity to world
-            
-            // For now, return not implemented since entity creation requires specific entity types
-            // which may need factory/prefab system
-            return ToolExecutionResult.Error($"SpawnEntityTool: Entity creation for type '{entityType}' requires entity factory/prefab system. Would spawn at ({x}, {y}, {z})");
+
+            var world = worldContext.World;
+
+            // Location must be passable terrain
+            if (!world.PassableTerrain(location))
+                return ToolExecutionResult.Error($"Location ({x}, {y}, {z}) is not passable");
+
+            // Location must not already hold a character
+            if (world.EntitiesByLocation.TryGetValue(location, out var entitiesAtLoc))
+            {
+                foreach (var existing in entitiesAtLoc.Values)
+                {
+                    if (existing is Aetherium.Character)
+                        return ToolExecutionResult.Error($"Location ({x}, {y}, {z}) is already occupied");
+                }
+            }
+
+            // Create the entity via the factory (creature types mirroring GameMapGrain.SpawnEntityAsync)
+            var entity = Aetherium.Server.Entities.EntityFactory.TryCreate(entityType!, world);
+            if (entity == null)
+                return ToolExecutionResult.Error($"Unsupported entity type '{entityType}'. Supported: {string.Join(", ", Aetherium.Server.Entities.EntityFactory.SupportedTypes)}");
+
+            entity.Set(location);
+            world.AddEntity(entity);
+
+            return ToolExecutionResult.Ok(
+                $"Spawned '{entityType}' at ({x}, {y}, {z})",
+                new Dictionary<string, object> { ["entityId"] = entity.EntityId });
         }
     }
 }

@@ -720,9 +720,134 @@ namespace Aetherctl.Commands
             worldCmd.AddCommand(shutdownCmd);
             worldCmd.AddCommand(setAclCmd);
             worldCmd.AddCommand(getAclCmd);
+            // edit: run any world-building (world_edit) tool against a live world
+            var editCmd = new Command("edit", "Execute a world-building tool against a running world");
+            var editWorldIdArg = new Argument<string>("worldId", "World ID");
+            var editToolIdArg = new Argument<string>("toolId", "World-building tool ID (e.g. spawnentity, setterrain, destroyentity)");
+            var editArgsOpt = new Option<string?>("--args", () => null, "Tool arguments as JSON object");
+            editCmd.AddArgument(editWorldIdArg);
+            editCmd.AddArgument(editToolIdArg);
+            editCmd.AddOption(editArgsOpt);
+            editCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var worldId = parseResult.GetValueForArgument(editWorldIdArg);
+                    var toolId = parseResult.GetValueForArgument(editToolIdArg);
+                    var argsJson = parseResult.GetValueForOption(editArgsOpt);
+
+                    Dictionary<string, object> args = new();
+                    if (!string.IsNullOrWhiteSpace(argsJson))
+                    {
+                        try
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(argsJson);
+                            foreach (var p in doc.RootElement.EnumerateObject())
+                                args[p.Name] = ActionScript.ToObject(p.Value);
+                        }
+                        catch (System.Text.Json.JsonException ex)
+                        {
+                            Common.WriteError(parseResult, $"Invalid --args JSON: {ex.Message}");
+                            Environment.Exit(1);
+                            return;
+                        }
+                    }
+
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var mgmt = factory.GetGameManagement();
+                    var result = await mgmt.ExecuteWorldToolAsync(worldId, toolId, args);
+
+                    if (Common.IsJsonOutput(parseResult))
+                    {
+                        Common.WriteOutput(parseResult, new { success = result.Success, message = result.Message, data = result.Data });
+                    }
+                    else
+                    {
+                        Console.WriteLine(result.Success
+                            ? $"✓ {toolId}: {result.Message}"
+                            : $"✗ {toolId} failed: {result.Message}");
+                    }
+
+                    if (!result.Success)
+                        Environment.Exit(1);
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Error executing world tool: {ex.Message}");
+                    Environment.Exit(1);
+                }
+            });
+
+            // spawn: convenience wrapper over the spawnentity tool
+            var spawnCmd = new Command("spawn", "Spawn a creature into a running world");
+            var spawnWorldIdArg = new Argument<string>("worldId", "World ID");
+            var spawnTypeOpt = new Option<string>("--type", "Creature type (monster, wolf, bear, bandit, snake, zombie)") { IsRequired = true };
+            var spawnAtOpt = new Option<string>("--at", "Location as x,y or x,y,z") { IsRequired = true };
+            spawnCmd.AddArgument(spawnWorldIdArg);
+            spawnCmd.AddOption(spawnTypeOpt);
+            spawnCmd.AddOption(spawnAtOpt);
+            spawnCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var worldId = parseResult.GetValueForArgument(spawnWorldIdArg);
+                    var type = parseResult.GetValueForOption(spawnTypeOpt);
+                    var at = parseResult.GetValueForOption(spawnAtOpt);
+
+                    var parts = (at ?? string.Empty).Split(',');
+                    if (parts.Length < 2
+                        || !int.TryParse(parts[0].Trim(), out var x)
+                        || !int.TryParse(parts[1].Trim(), out var y))
+                    {
+                        Common.WriteError(parseResult, "Invalid --at value; expected 'x,y' or 'x,y,z'");
+                        Environment.Exit(1);
+                        return;
+                    }
+                    int z = 0;
+                    if (parts.Length >= 3) int.TryParse(parts[2].Trim(), out z);
+
+                    var args = new Dictionary<string, object>
+                    {
+                        ["x"] = x,
+                        ["y"] = y,
+                        ["z"] = z,
+                        ["entityType"] = type!
+                    };
+
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var mgmt = factory.GetGameManagement();
+                    var result = await mgmt.ExecuteWorldToolAsync(worldId, "spawnentity", args);
+
+                    if (Common.IsJsonOutput(parseResult))
+                    {
+                        Common.WriteOutput(parseResult, new { success = result.Success, message = result.Message, data = result.Data });
+                    }
+                    else
+                    {
+                        Console.WriteLine(result.Success
+                            ? $"✓ {result.Message}{(result.Data != null && result.Data.TryGetValue("entityId", out var id) ? $" (entityId: {id})" : "")}"
+                            : $"✗ Spawn failed: {result.Message}");
+                    }
+
+                    if (!result.Success)
+                        Environment.Exit(1);
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Error spawning entity: {ex.Message}");
+                    Environment.Exit(1);
+                }
+            });
+
             worldCmd.AddCommand(inviteCmd);
             worldCmd.AddCommand(acceptInviteCmd);
             worldCmd.AddCommand(dumpCmd);
+            worldCmd.AddCommand(editCmd);
+            worldCmd.AddCommand(spawnCmd);
             root.AddCommand(worldCmd);
         }
     }

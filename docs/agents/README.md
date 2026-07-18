@@ -50,6 +50,11 @@ aetherctl agent script <sessionId> --file actions.json --json
 #                                   {"world":"<worldId>","at":"10,10,0","actions":[...]} ] }
 aetherctl scenario run scenario.json --concurrent --json
 
+# Runtime world-building (edit a RUNNING world, no regeneration)
+aetherctl world spawn <worldId> --type snake --at 12,8,0
+aetherctl world edit <worldId> setterrain --args '{"x":12,"y":9,"terrainType":"Forest"}'
+aetherctl world edit <worldId> destroyentity --args '{"entityId":"<id>"}'
+
 # Tools
 aetherctl tools list
 aetherctl tools describe move --json

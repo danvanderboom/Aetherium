@@ -59,5 +59,37 @@ namespace Aetherctl.Test.Commands
             Assert.NotNull(dumpCmd);
             Assert.Contains(dumpCmd!.Arguments, a => a.Name == "worldId");
         }
+
+        // Spec: aetherctl / World Edit Commands (change: add-aetherctl-runtime-worldbuilding)
+        [Fact]
+        public void WorldEdit_ExistsWithWorldIdToolIdAndArgs()
+        {
+            var root = new RootCommand();
+            WorldCommands.AddToRoot(root);
+
+            var worldCmd = root.Subcommands.First(c => c.Name == "world");
+            var editCmd = worldCmd.Subcommands.FirstOrDefault(c => c.Name == "edit");
+
+            Assert.NotNull(editCmd);
+            Assert.Contains(editCmd!.Arguments, a => a.Name == "worldId");
+            Assert.Contains(editCmd.Arguments, a => a.Name == "toolId");
+            Assert.Contains(editCmd.Options, o => o.Name == "args");
+        }
+
+        // Spec: aetherctl / World Edit Commands — spawn convenience (change: add-aetherctl-runtime-worldbuilding)
+        [Fact]
+        public void WorldSpawn_ExistsWithRequiredTypeAndAt()
+        {
+            var root = new RootCommand();
+            WorldCommands.AddToRoot(root);
+
+            var worldCmd = root.Subcommands.First(c => c.Name == "world");
+            var spawnCmd = worldCmd.Subcommands.FirstOrDefault(c => c.Name == "spawn");
+
+            Assert.NotNull(spawnCmd);
+            Assert.Contains(spawnCmd!.Arguments, a => a.Name == "worldId");
+            Assert.True(spawnCmd.Options.First(o => o.Name == "type").IsRequired);
+            Assert.True(spawnCmd.Options.First(o => o.Name == "at").IsRequired);
+        }
     }
 }

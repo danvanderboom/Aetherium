@@ -527,6 +527,46 @@ namespace Aetherium.Server.Management
             }
         }
 
+        public async Task<ToolExecutionResultDto> ExecuteWorldToolAsync(string worldId, string toolId, Dictionary<string, object> args)
+        {
+            if (!OperatorAccess.IsEnabled())
+                return new ToolExecutionResultDto { Success = false, Message = "Operator access is disabled" };
+
+            if (string.IsNullOrEmpty(worldId))
+                return new ToolExecutionResultDto { Success = false, Message = "World ID cannot be null or empty" };
+
+            var world = _liveWorlds?.Resolve(worldId);
+            if (world == null)
+                return new ToolExecutionResultDto { Success = false, Message = $"World not found or not initialized in this process: {worldId}" };
+
+            var toolRegistry = ServiceProvider.GetService(typeof(Aetherium.Server.Agents.Tools.AgentToolRegistry))
+                as Aetherium.Server.Agents.Tools.AgentToolRegistry;
+            if (toolRegistry == null)
+                return new ToolExecutionResultDto { Success = false, Message = "Tool registry not available" };
+
+            var tool = toolRegistry.GetTool(toolId);
+            if (tool == null)
+                return new ToolExecutionResultDto { Success = false, Message = $"Tool not found: {toolId}" };
+
+            // Only world-building tools may run here: character tools (move, pickup, ...) need a
+            // session context and must not execute through the god-view path.
+            if (!tool.RequiredCapabilities.Contains("world_edit"))
+                return new ToolExecutionResultDto { Success = false, Message = $"Tool '{toolId}' is not a world-building tool (requires world_edit)" };
+
+            try
+            {
+                var context = new Aetherium.Server.Agents.Tools.WorldBuildingToolContext(world, ServiceProvider);
+                var result = await tool.ExecuteAsync(context, args ?? new Dictionary<string, object>());
+                Console.WriteLine($"[GameManagementGrain] Executed world tool '{toolId}' on {worldId}: {(result.Success ? "Success" : "Failed")} - {result.Message}");
+                return result.ToDto();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error executing world tool {toolId} on {worldId}: {ex.Message}");
+                return new ToolExecutionResultDto { Success = false, Message = $"Error executing world tool: {ex.Message}" };
+            }
+        }
+
         public Task<string?> GetPerceptionAsync(string sessionId)
         {
             if (string.IsNullOrEmpty(sessionId))
