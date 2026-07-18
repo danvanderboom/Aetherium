@@ -32,6 +32,8 @@ namespace Aetherium.Unity.Rendering
             ["floor"] = new Color(0.70f, 0.68f, 0.64f),
             ["road"]  = new Color(0.30f, 0.30f, 0.32f),
             ["track"] = new Color(0.45f, 0.42f, 0.38f),
+            // Reserved marker color for the player in schematic views (cross-section).
+            ["player"] = new Color(0.95f, 0.85f, 0.20f),
         };
 
         /// <summary>
