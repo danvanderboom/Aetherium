@@ -17,6 +17,12 @@ namespace Aetherium.Unity.Model
         public Dictionary<string, VisualLite> Visuals { get; set; } = new Dictionary<string, VisualLite>();
         public Dictionary<string, TileTypeLite> TileTypes { get; set; } = new Dictionary<string, TileTypeLite>();
 
+        /// <summary>
+        /// The perceiver's flight envelope (band range + current band), present only when they can fly/pilot.
+        /// Drives the HUD altitude gauge. Null for non-flyers — additive, mirrors <c>PerceptionDto.FlightEnvelope</c>.
+        /// </summary>
+        public FlightEnvelopeLite? FlightEnvelope { get; set; }
+
         public PerceptionLite()
         {
         }
