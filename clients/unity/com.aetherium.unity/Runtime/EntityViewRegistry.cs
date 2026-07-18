@@ -47,9 +47,9 @@ namespace Aetherium.Unity
                  "creature's own footprint.")]
         [SerializeField] private float ghostGlowStartCells = 0.8f;
         [Range(0f, 1f)]
-        [Tooltip("Peak opacity of the uncertainty circle (it dims in lockstep with the " +
-                 "fading model).")]
-        [SerializeField] private float ghostGlowOpacity = 0.45f;
+        [Tooltip("Peak opacity of the uncertainty circle at spawn (it dims in lockstep with " +
+                 "the fading model).")]
+        [SerializeField] private float ghostGlowOpacity = 0.27f;
 
         private static readonly int FuzzProperty = Shader.PropertyToID("_Fuzz");
 
