@@ -658,6 +658,121 @@ namespace Aetherium.Test
             Assert.That((await telemetry.GetSnapshotsAsync(10)).Count, Is.EqualTo(0));
         }
 
+        // ---- Character memory (change: add-character-memory) ----
+
+        // Spec: character-memory / Perception-Time Memory Recording ("Record visible terrain and
+        //       entities") + game-management-grain / Character Memory Retrieval ("Retrieve memories")
+        [Test]
+        public async Task Memory_RecordsVisibleTerrain_CorroboratedBySnapshot()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // Perceiving (directly, and via an action) populates memory.
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.ExecuteToolBatchAsync(session.SessionId!, new List<ScriptedActionDto> { Move() }, false);
+
+            var memJson = await mgmt.GetMemoryAsync(session.SessionId!);
+            Assert.That(memJson, Is.Not.Null.And.Not.Empty);
+
+            using var memDoc = JsonDocument.Parse(memJson!);
+            var root = memDoc.RootElement;
+            Assert.That(root.GetProperty("TotalMemories").GetInt32(), Is.GreaterThan(0));
+
+            var terrainMemories = root.GetProperty("Memories").EnumerateArray()
+                .Where(m => m.GetProperty("ContentType").GetString() == "terrain")
+                .ToList();
+            Assert.That(terrainMemories.Count, Is.GreaterThan(0), "should remember visible terrain");
+
+            // Corroborate one remembered terrain against the omniscient snapshot.
+            var sample = terrainMemories[0];
+            var sLoc = sample.GetProperty("Location");
+            var (mx, my, mz) = (sLoc.GetProperty("X").GetInt32(), sLoc.GetProperty("Y").GetInt32(), sLoc.GetProperty("Z").GetInt32());
+            var content = sample.GetProperty("Content").GetString();
+
+            using var snapDoc = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var match = snapDoc.RootElement.GetProperty("Tiles").EnumerateArray().Any(t =>
+            {
+                var l = t.GetProperty("Location");
+                return l.GetProperty("X").GetInt32() == mx
+                    && l.GetProperty("Y").GetInt32() == my
+                    && l.GetProperty("Z").GetInt32() == mz
+                    && t.GetProperty("Terrain").GetString() == content;
+            });
+            Assert.That(match, Is.True, $"remembered terrain '{content}' at ({mx},{my},{mz}) should match the snapshot");
+        }
+
+        // Spec: character-memory / Perception-Time Memory Recording — Scenario "Reinforcement on re-encounter"
+        [Test]
+        public async Task Memory_RepeatedPerception_BumpsImpressions()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            var maxImpressions = doc.RootElement.GetProperty("Memories").EnumerateArray()
+                .Max(m => m.GetProperty("Impressions").GetInt32());
+            Assert.That(maxImpressions, Is.GreaterThanOrEqualTo(2), "re-perceiving the same content should bump impressions");
+        }
+
+        // Spec: character-memory / Per-World Memory Configuration — Scenario "Overrides via world
+        //       generation parameters" (MemoryEnabled=false records nothing)
+        [Test]
+        public async Task Memory_DisabledPerWorld_RecordsNothing()
+        {
+            var mgmt = Mgmt();
+            var request = new CreateWorldRequest
+            {
+                Name = "Memoryless World",
+                Description = "memory disabled via generator parameters",
+                GeneratorType = "maze",
+                MaxPlayers = 10,
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                GeneratorParameters = new Dictionary<string, object> { ["MemoryEnabled"] = false }
+            };
+            var worldId = await mgmt.CreateWorldAsync(request);
+
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            Assert.That(doc.RootElement.GetProperty("TotalMemories").GetInt32(), Is.EqualTo(0));
+        }
+
+        // Spec: game-management-grain / Character Memory Retrieval — Scenarios "Unknown session" + "Operator gating"
+        [Test]
+        public async Task Memory_UnknownSessionAndOperatorGate()
+        {
+            var mgmt = Mgmt();
+            Assert.That(await mgmt.GetMemoryAsync($"nope-{Guid.NewGuid()}"), Is.Null);
+
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            try
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, "1");
+                Assert.That(await mgmt.GetMemoryAsync(session.SessionId!), Is.Null);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, null);
+            }
+
+            Assert.That(await mgmt.GetMemoryAsync(session.SessionId!), Is.Not.Null);
+        }
+
         // Spec: game-management-grain / Runtime World Tool Execution — Scenario "Operator gating"
         [Test]
         public async Task WorldTool_OperatorGate_Denies()

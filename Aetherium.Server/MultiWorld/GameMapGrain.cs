@@ -97,6 +97,9 @@ namespace Aetherium.Server.MultiWorld
 
             _world = result.World;
 
+            // Per-world memory policy overrides (see OpenSpec change add-character-memory).
+            ApplyMemoryPolicy(_world, parameters);
+
             // Publish the live world to the in-process registry so operator/debug tooling
             // (headless sessions, world snapshots) can read/drive it directly.
             var worldRegistry = ServiceProvider.GetService<Aetherium.Server.Services.WorldRegistry>();
@@ -135,6 +138,28 @@ namespace Aetherium.Server.MultiWorld
             };
 
             await _mapState.WriteStateAsync();
+        }
+
+        /// <summary>
+        /// Applies memory-policy overrides from world generator parameters
+        /// (MemoryEnabled, MemoryMaxLocations, MemoryDecayHalfLifeSeconds).
+        /// </summary>
+        private static void ApplyMemoryPolicy(World world, Dictionary<string, object> parameters)
+        {
+            if (parameters == null)
+                return;
+
+            if (parameters.TryGetValue("MemoryEnabled", out var enabledObj)
+                && bool.TryParse(enabledObj?.ToString(), out var enabled))
+                world.MemoryPolicy.Enabled = enabled;
+
+            if (parameters.TryGetValue("MemoryMaxLocations", out var maxObj)
+                && int.TryParse(maxObj?.ToString(), out var max) && max > 0)
+                world.MemoryPolicy.MaxLocations = max;
+
+            if (parameters.TryGetValue("MemoryDecayHalfLifeSeconds", out var halfObj)
+                && double.TryParse(halfObj?.ToString(), out var half))
+                world.MemoryPolicy.DecayHalfLifeSeconds = half;
         }
 
         private static WorldGenerationTemplate ResolveTemplate(string generatorType)

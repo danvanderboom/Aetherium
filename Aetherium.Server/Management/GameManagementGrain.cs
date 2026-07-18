@@ -527,6 +527,58 @@ namespace Aetherium.Server.Management
             }
         }
 
+        public Task<string?> GetMemoryAsync(string sessionId)
+        {
+            // Memories carry absolute world coordinates — a god-view read, gated like
+            // absolute perception and world snapshots.
+            if (!OperatorAccess.IsEnabled())
+                return Task.FromResult<string?>(null);
+
+            if (string.IsNullOrEmpty(sessionId) || !_sessionIndex.TryGetValue(sessionId, out var metadata))
+                return Task.FromResult<string?>(null);
+
+            var session = _sessionManager.GetSession(metadata.ConnectionId);
+            var player = session?.Player;
+            if (session == null || player == null || !player.Has<Aetherium.Components.Memory>())
+                return Task.FromResult<string?>(null);
+
+            TouchSession(sessionId);
+            try
+            {
+                var memory = player.Get<Aetherium.Components.Memory>();
+                var halfLife = session.World.MemoryPolicy.DecayHalfLifeSeconds;
+
+                var dto = new CharacterMemoryDto
+                {
+                    SessionId = sessionId,
+                    LocationsTracked = memory.LocationsTracked,
+                    TotalMemories = memory.SpaceTimeMemoriesTracked,
+                    TotalImpressions = memory.SpaceTimeMemoryImpressions
+                };
+
+                foreach (var m in memory.AllSpaceTimeMemories)
+                {
+                    dto.Memories.Add(new MemoryEntryDto
+                    {
+                        Location = new WorldLocationDto(m.Location.X, m.Location.Y, m.Location.Z),
+                        ContentType = m.ContentType,
+                        Content = m.Content,
+                        Strength = m.Strength,
+                        EffectiveStrength = Aetherium.Core.MemoryPolicy.EffectiveStrength(m.Strength, m.TimeSinceLastSeen, halfLife),
+                        Impressions = m.Impressions,
+                        LastEventTime = m.LastEventTime
+                    });
+                }
+
+                return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(dto));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error reading memory for session {sessionId}: {ex.Message}");
+                return Task.FromResult<string?>(null);
+            }
+        }
+
         public async Task<ToolExecutionResultDto> ExecuteWorldToolAsync(string worldId, string toolId, Dictionary<string, object> args)
         {
             if (!OperatorAccess.IsEnabled())

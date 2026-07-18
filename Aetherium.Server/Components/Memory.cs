@@ -32,7 +32,9 @@ namespace Aetherium.Components
         {
             SpaceTimeMemories.TryAdd(newMemory.Location, new List<SpaceTimeMemory>());
 
-            var locationMemories = SpaceTimeMemories[newMemory.Location].ToList();
+            // NOTE: must mutate the stored list — a .ToList() copy here silently dropped
+            // every new memory (the component was dormant partly because of this bug).
+            var locationMemories = SpaceTimeMemories[newMemory.Location];
 
             var matchingMemory = locationMemories.FirstOrDefault(m => 
                 m.Location == newMemory.Location 

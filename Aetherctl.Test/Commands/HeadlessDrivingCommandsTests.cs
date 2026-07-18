@@ -76,6 +76,21 @@ namespace Aetherctl.Test.Commands
             Assert.Contains(editCmd.Options, o => o.Name == "args");
         }
 
+        // Spec: aetherctl / Memory Inspection Command (change: add-character-memory)
+        [Fact]
+        public void MemoryGet_ExistsWithSessionIdArgument()
+        {
+            var root = new RootCommand();
+            MemoryCommands.AddToRoot(root);
+
+            var memoryCmd = root.Subcommands.FirstOrDefault(c => c.Name == "memory");
+            Assert.NotNull(memoryCmd);
+
+            var getCmd = memoryCmd!.Subcommands.FirstOrDefault(c => c.Name == "get");
+            Assert.NotNull(getCmd);
+            Assert.Contains(getCmd!.Arguments, a => a.Name == "sessionId");
+        }
+
         // Spec: aetherctl / World Edit Commands — spawn convenience (change: add-aetherctl-runtime-worldbuilding)
         [Fact]
         public void WorldSpawn_ExistsWithRequiredTypeAndAt()

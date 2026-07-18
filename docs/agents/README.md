@@ -55,6 +55,13 @@ aetherctl world spawn <worldId> --type snake --at 12,8,0
 aetherctl world edit <worldId> setterrain --args '{"x":12,"y":9,"terrainType":"Forest"}'
 aetherctl world edit <worldId> destroyentity --args '{"entityId":"<id>"}'
 
+# Character memory — what has this character actually seen?
+# Recorded automatically at perception time (terrain + entities in view);
+# per-world config via generator params: MemoryEnabled, MemoryMaxLocations,
+# MemoryDecayHalfLifeSeconds. Operator-gated (absolute coordinates).
+aetherctl memory get <sessionId>
+aetherctl memory get <sessionId> --json
+
 # Agent telemetry (per-step snapshots, analysis, failed-run replays)
 aetherctl telemetry snapshots <agentId> --limit 20
 aetherctl telemetry analysis <agentId> --json

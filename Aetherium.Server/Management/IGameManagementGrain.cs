@@ -57,6 +57,8 @@ namespace Aetherium.Server.Management
         Task<int> ReapIdleHeadlessSessionsAsync(int maxIdleSeconds);
         // Executes a world-building tool (world_edit) against a live world at runtime.
         Task<ToolExecutionResultDto> ExecuteWorldToolAsync(string worldId, string toolId, Dictionary<string, object> args);
+        // A character's accumulated memories (JSON CharacterMemoryDto); operator-gated god-view read.
+        Task<string?> GetMemoryAsync(string sessionId);
 
         // Gameplay control + perception (for agents)
         Task<string?> GetPerceptionAsync(string sessionId); // JSON-serialized PerceptionDto

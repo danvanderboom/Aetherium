@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using Aetherium;
 using Aetherium.Components;
 using Aetherium.Core;
@@ -166,10 +167,10 @@ namespace Aetherium.Server
 			fovDegrees = hasHeading?.FieldOfViewDegrees ?? 120; // Default 120 for humans
 		}
 
-		return perceptionService.ComputePerception(
-			World, 
-			ViewLocation, 
-			Heading, 
+		var perception = perceptionService.ComputePerception(
+			World,
+			ViewLocation,
+			Heading,
 			ViewportSize,
 			CurrentLightingMode,
 			CurrentVisionMode,
@@ -179,6 +180,70 @@ namespace Aetherium.Server
 			DirectionalVisionMode ? (int?)HeadingDegrees : null,
 			fovDegrees,
 			absoluteCoordinates: absoluteCoordinates);
+
+		// Record what the character just perceived into their Memory component
+		// (see OpenSpec change add-character-memory).
+		RecordMemories(perception);
+
+		return perception;
+	}
+
+	/// <summary>
+	/// Records the visible tiles' terrain and visible non-terrain entities into the player
+	/// character's Memory component, at absolute world locations. Governed by the world's
+	/// per-world MemoryPolicy; enforces the location cap oldest-first.
+	/// </summary>
+	private void RecordMemories(Aetherium.Model.PerceptionDto perception)
+	{
+		var policy = World.MemoryPolicy;
+		if (!policy.Enabled || Player == null || ViewLocation == null || !Player.Has<Memory>())
+			return;
+
+		var memory = Player.Get<Memory>();
+
+		foreach (var key in perception.Visuals.Keys)
+		{
+			// Visuals keys are relative "x,y,z" offsets from the player; convert to absolute.
+			var parts = key.Split(',');
+			if (parts.Length != 3
+				|| !int.TryParse(parts[0], out var rx)
+				|| !int.TryParse(parts[1], out var ry)
+				|| !int.TryParse(parts[2], out var rz))
+				continue;
+
+			var loc = new WorldLocation(ViewLocation.X + rx, ViewLocation.Y + ry, ViewLocation.Z + rz);
+
+			var terrainName = World.GetTerrain(loc)?.Type?.Name;
+			if (terrainName != null)
+				memory.Remember(loc, "terrain", terrainName);
+
+			if (World.EntitiesByLocation.TryGetValue(loc, out var atLoc))
+			{
+				foreach (var entity in atLoc.Values)
+				{
+					if (entity is Aetherium.Entities.Terrain || entity.EntityId == Player.EntityId)
+						continue;
+					memory.Remember(loc, "entity", $"{entity.GetType().Name}:{entity.EntityId}");
+				}
+			}
+		}
+
+		// Enforce the per-character location cap: prune whole locations oldest-first
+		// (by that location's most recent memory activity).
+		if (memory.LocationsTracked > policy.MaxLocations)
+		{
+			var oldestFirst = memory.SpaceTimeMemories
+				.OrderBy(kvp => kvp.Value.Count == 0 ? DateTime.MinValue : kvp.Value.Max(m => m.LastEventTime))
+				.Select(kvp => kvp.Key)
+				.ToList();
+
+			foreach (var loc in oldestFirst)
+			{
+				if (memory.LocationsTracked <= policy.MaxLocations)
+					break;
+				memory.SpaceTimeMemories.TryRemove(loc, out _);
+			}
+		}
 	}
 
 		/// <summary>
