@@ -100,6 +100,12 @@ namespace Aetherctl.Orleans
             return _client!.GetGrain<IGameMapGrain>(mapId);
         }
 
+        public Aetherium.Model.Telemetry.IAgentTelemetryGrain GetAgentTelemetry(string agentId)
+        {
+            EnsureConnected();
+            return _client!.GetGrain<Aetherium.Model.Telemetry.IAgentTelemetryGrain>(agentId);
+        }
+
         private void EnsureConnected()
         {
             if (_client == null)

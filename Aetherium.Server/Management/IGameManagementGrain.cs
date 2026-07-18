@@ -51,6 +51,20 @@ namespace Aetherium.Server.Management
         Task<string> InvitePlayerAsync(string worldId, string playerId);
         Task<OperationResult> AcceptInviteAsync(string inviteId);
 
+        // Operator / headless driving (see specs: game-management-grain)
+        // Provisions a client-less session in an existing world and returns its sessionId.
+        Task<HeadlessSessionResult> CreateHeadlessSessionAsync(string worldId, int? startX, int? startY, int? startZ, string? profile);
+        // Operator perception with optional absolute (un-relativized) world coordinates.
+        Task<string?> GetPerceptionAsync(string sessionId, bool absoluteCoordinates); // JSON-serialized PerceptionDto
+        // Omniscient, FOV-independent snapshot of a world's tiles/entities (JSON WorldSnapshotDto).
+        Task<string?> GetWorldSnapshotAsync(string worldId);
+        // Terminates headless sessions idle beyond maxIdleSeconds; returns the number reaped.
+        Task<int> ReapIdleHeadlessSessionsAsync(int maxIdleSeconds);
+        // Executes a world-building tool (world_edit) against a live world at runtime.
+        Task<ToolExecutionResultDto> ExecuteWorldToolAsync(string worldId, string toolId, Dictionary<string, object> args);
+        // A character's accumulated memories (JSON CharacterMemoryDto); operator-gated god-view read.
+        Task<string?> GetMemoryAsync(string sessionId);
+
         // Gameplay control + perception (for agents)
         Task<string?> GetPerceptionAsync(string sessionId); // JSON-serialized PerceptionDto
         Task<OperationResult> MoveAsync(string sessionId, string direction);
@@ -63,6 +77,8 @@ namespace Aetherium.Server.Management
         // Tool system
         Task<List<ToolInfoDto>> ListAvailableToolsAsync(string? profileName = null);
         Task<ToolExecutionResultDto> ExecuteToolAsync(string toolId, string sessionId, Dictionary<string, object> args);
+        // Runs an ordered action sequence against one session in a single grain turn (deterministic ordering).
+        Task<List<BatchActionResultDto>> ExecuteToolBatchAsync(string sessionId, List<ScriptedActionDto> actions, bool stopOnError);
     }
 }
 

@@ -96,7 +96,14 @@ namespace Aetherium.Server
             builder.Services.AddControllers(); // Add API controllers
             builder.Services.AddSingleton<IRandomSource, DefaultRandomSource>();
             builder.Services.AddSingleton<GameSessionManager>();
-            
+
+            // In-process bridge exposing live map worlds to operator tooling (headless
+            // sessions + world snapshots). GameMapGrain publishes, GameManagementGrain
+            // consumes; in this co-hosted setup grains resolve from this same container,
+            // no further Orleans-side registration needed (see the siloBuilder comment
+            // below on why per-grain "bridge" registrations were removed).
+            builder.Services.AddSingleton<Aetherium.Server.Services.WorldRegistry>();
+
             // Register world hosting service (only when Orleans is enabled)
             if (!disableOrleans)
             {

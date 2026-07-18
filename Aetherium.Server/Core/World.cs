@@ -29,6 +29,12 @@ namespace Aetherium.Core
         public ConcurrentDictionary<WorldLocation, ConcurrentDictionary<string, Entity>> EntitiesByLocation { get; set; }
         public ConcurrentDictionary<string, Character> Characters { get; set; }
 
+        /// <summary>
+        /// Per-world character-memory policy (defaults: enabled, capped, 1h decay half-life).
+        /// Set from world generator parameters during map initialization.
+        /// </summary>
+        public MemoryPolicy MemoryPolicy { get; set; } = new MemoryPolicy();
+
         public Guid CharacterMoveTimestamp { get; protected set; } = Guid.NewGuid();
 
         public event Action<WorldEvent>? WorldEvents;

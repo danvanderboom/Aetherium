@@ -31,8 +31,43 @@ Quick examples:
 aetherctl session list --json
 # Close a session (server-supported)
 aetherctl session close <sessionId>
-# Create a session (pending server support; returns clear error)
-aetherctl session create
+
+# Headless driving (no game client required)
+# 1) create a world, then drop a client-less character into it
+aetherctl world create "Test" "Demo" --json          # -> worldId
+aetherctl session create --world <worldId> --json     # -> sessionId  (optionally --at x,y,z)
+# 2) drive it with the usual verbs (tools test / agent attach+run) against <sessionId>
+# 3) inspect what the character perceives (--absolute reveals true world coords)
+aetherctl perception get <sessionId> --absolute --json
+# 4) interrogate the whole world (god view), independent of any character's FOV
+aetherctl world dump <worldId>
+
+# Scripted / batch actions (deterministic, reproducible)
+# actions.json: [ {"tool":"move","args":{"direction":"forward"}}, {"tool":"rotate","args":{"degrees":90}} ]
+aetherctl agent script <sessionId> --file actions.json --json
+# Drive one OR MORE characters from a scenario file
+# scenario.json: { "characters": [ {"sessionId":"...","actions":[...]},
+#                                   {"world":"<worldId>","at":"10,10,0","actions":[...]} ] }
+aetherctl scenario run scenario.json --concurrent --json
+
+# Runtime world-building (edit a RUNNING world, no regeneration)
+aetherctl world spawn <worldId> --type snake --at 12,8,0
+aetherctl world edit <worldId> setterrain --args '{"x":12,"y":9,"terrainType":"Forest"}'
+aetherctl world edit <worldId> destroyentity --args '{"entityId":"<id>"}'
+
+# Character memory — what has this character actually seen?
+# Recorded automatically at perception time (terrain + entities in view);
+# per-world config via generator params: MemoryEnabled, MemoryMaxLocations,
+# MemoryDecayHalfLifeSeconds. Operator-gated (absolute coordinates).
+aetherctl memory get <sessionId>
+aetherctl memory get <sessionId> --json
+
+# Agent telemetry (per-step snapshots, analysis, failed-run replays)
+aetherctl telemetry snapshots <agentId> --limit 20
+aetherctl telemetry analysis <agentId> --json
+aetherctl telemetry replays <agentId>
+aetherctl telemetry replay <agentId> <replayId> > replay.json
+aetherctl telemetry clear <agentId>
 
 # Tools
 aetherctl tools list
@@ -195,9 +230,21 @@ aetherctl session list --json
 # Terminate a session (server-supported)
 aetherctl session close <sessionId>
 
-# Create a session (pending server support)
-aetherctl session create
+# Create a headless session in an existing world (no interactive client required)
+aetherctl session create --world <worldId>
+aetherctl session create --world <worldId> --at 10,10,0 --json
+
+# Inspect a session's perception (operator/debug)
+aetherctl perception get <sessionId>
+aetherctl perception get <sessionId> --absolute --json   # true world coordinates
+
+# Omniscient world snapshot (all tiles/entities, not one character's FOV)
+aetherctl world dump <worldId> --json
 ```
+
+> Operator/"god-view" commands (`session create`, `perception get --absolute`, `world dump`)
+> run on the trusted local management path and are enabled by default. Set
+> `AETHERIUM_OPERATOR_DISABLED=1` on the server to lock them down.
 
 ### Tool Management Commands
 

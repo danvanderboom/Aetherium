@@ -250,6 +250,17 @@ namespace Aetherium.Server
             return session;
         }
 
+        /// <summary>
+        /// Creates a headless session (no interactive client) bound to an existing world.
+        /// Places a player character exactly as a normal join would, and tags the session as headless.
+        /// </summary>
+        public GameSession CreateHeadlessSession(string connectionId, string worldId, World world, WorldLocation? startLocation = null)
+        {
+            var session = new GameSession(connectionId, worldId, world, startLocation) { IsHeadless = true };
+            sessions[connectionId] = session;
+            return session;
+        }
+
         public GameSession? GetSession(string connectionId)
         {
             sessions.TryGetValue(connectionId, out var session);
