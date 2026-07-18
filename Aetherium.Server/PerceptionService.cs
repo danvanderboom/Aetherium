@@ -136,6 +136,13 @@ namespace Aetherium.Server
             bool absoluteCoordinates = false)
         {
             var perfStart = PerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
+            // Context tint (add-adaptive-depth-visualization 5.4): when the world opts in, derive the default
+            // lighting mode from the viewer's band (underground → torch, skyway → sunlight, surface → ambient)
+            // so vertical context reads at a glance. Opt-in; default off leaves the caller's mode unchanged.
+            if (world.AutoContextTint)
+                lightingMode = Model.BandContext.SuggestLightingMode(playerLocation.Z, world.SkyBandThreshold);
+
             // Calculate visible bounds based on viewport
             var worldWidth = viewportSize.Width / 2; // symbolWidth = 2
             var worldHeight = viewportSize.Height;

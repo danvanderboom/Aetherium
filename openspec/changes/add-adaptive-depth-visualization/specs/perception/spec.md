@@ -56,3 +56,18 @@ When the perceiving entity has a Flight component, the server SHALL surface its 
 #### Scenario: Envelope absent for a non-flyer
 - **WHEN** the perceiver has no Flight component (or no perceiving entity is supplied)
 - **THEN** the perception SHALL omit the flight envelope (null), leaving the DTO otherwise unchanged
+
+### Requirement: Context Tint by Band
+When context tint is enabled for a world, the server SHALL derive the default lighting mode from the viewer's band — underground bands enclosed/torch-lit, skyway bands sunlit, surface bands ambient — reusing the existing lighting modes with no new machinery. Opt-in; when disabled the caller's requested lighting mode is used unchanged.
+
+#### Scenario: Underground reads as enclosed
+- **WHEN** context tint is enabled and the viewer is on a band below ground (Z < 0)
+- **THEN** perception SHALL report the torch (enclosed) lighting mode regardless of the requested mode
+
+#### Scenario: Skyway reads as sunlit
+- **WHEN** context tint is enabled and the viewer is on a band at/above the sky threshold
+- **THEN** perception SHALL report the sunlight lighting mode
+
+#### Scenario: Disabled leaves the requested mode
+- **WHEN** context tint is disabled
+- **THEN** perception SHALL report exactly the caller's requested lighting mode

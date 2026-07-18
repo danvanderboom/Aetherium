@@ -88,6 +88,16 @@ namespace Aetherium.Core
         public int AutoSlabProbeRadius { get; set; } = 1;
 
         /// <summary>
+        /// When true, perception picks the default lighting mode from the viewer's band (context tint, 5.4):
+        /// underground → torch/enclosed, skyway → sunlight, surface → ambient (see <see cref="Model.BandContext"/>).
+        /// Opt-in, default off (the caller's requested lighting mode is used unchanged).
+        /// </summary>
+        public bool AutoContextTint { get; set; } = false;
+
+        /// <summary>Band at/above which context tint treats the column as an open skyway (sunlit). Default 1.</summary>
+        public int SkyBandThreshold { get; set; } = 1;
+
+        /// <summary>
         /// Effective per-direction slab depth for a viewer at (<paramref name="x"/>, <paramref name="y"/>,
         /// <paramref name="z"/>). Returns the configured (below, above) clamped to <see cref="SlabDepthCap"/>
         /// when <see cref="AutoSlab"/> is off; when on, returns the distance to the furthest occupied band
