@@ -869,13 +869,22 @@ Light sources found:
                 int relZ = satLoc.Z - playerCell.Z;
 
                 string kind = sat.Has<CreatureTypeTag>() ? sat.Get<CreatureTypeTag>().Value : "satellite";
+                var relLoc = new WorldLocationDto(relX, relY, relZ);
                 visibleCharacters.Add(new CharacterDto
                 {
                     Id = sat.EntityId,
                     Name = kind,
                     IsHostile = false,
-                    Location = new WorldLocationDto(relX, relY, relZ),
+                    Location = relLoc,
                 });
+
+                // Also emit a Visual so the band-stack/depth renderers place a marker at the satellite's band
+                // (they composite from Visuals; a VisibleCharacters entry alone has no cell to draw in). The
+                // character silhouette reads as a contact high overhead; full light so it isn't lost to the fade.
+                var satVisual = new Visual(new WorldLocation(satLoc.X, satLoc.Y, satLoc.Z), null).ToDto(1.0);
+                satVisual.Location = relLoc;
+                satVisual.ThingsSeen[Aetherium.Model.VisualType.Character] = 1;
+                perception.Visuals[$"{relX},{relY},{relZ}"] = satVisual;
 
                 if (playerId != null && sat.Has<FlyerProfile>())
                 {

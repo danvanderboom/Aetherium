@@ -271,8 +271,13 @@ already exists:
     ordinary perception**. The **orbital channel** surfaces them: a carried (or innate) active, tuned
     `RadioReceiver` reveals satellites whose ground track is within range — high overhead, with a `hack`
     affordance in uplink range. No radio → the sky reads empty. `SatelliteRegistry` keeps lookup O(few),
-    never a full-world scan. aphelion-h3 flies an 18-satellite constellation. **Next:** the client orbit
-    marker + confirming the band stack renders high +Z and the subway band.
+    never a full-world scan. aphelion-h3 flies an 18-satellite constellation.
+  - **Client rendering. ✅ VERIFIED.** The depth renderers (console composite/ribbon/gauge; Unity band
+    stack/altitude gauge) are topology-agnostic — they composite by relative Z — so the H3 DTO drives them
+    unchanged. The one gap was that satellites rode only in `VisibleCharacters`; they now also emit a Visual
+    (character silhouette) at their band, so a radio contact shows high in the ribbon and a subway shows
+    below, end-to-end (server → DTO → console) under test. A dedicated non-fading orbit glyph and the Unity
+    runtime pass are the remaining polish.
 - **P5 — Climate & biome expansion.** Latitude-banded climate (Hadley-cell deserts, polar ice caps,
   tropical belts) using the latitude the sphere makes meaningful — needs new terrain types (ice/tundra)
   and client theming. Optionally hierarchical resolutions (survey from orbit at a coarse resolution,
