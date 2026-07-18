@@ -1225,12 +1225,14 @@ namespace Aetherium.Server.MultiWorld
             await StepNpcsAsync();
 
             var msNpc = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs1).TotalMilliseconds : 0.0;
+            var tickTsRec = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
             // Individual recognition (add-identity-recognition): after positions settle, sweep the
             // canonical world for characters within recognition range and raise character_recognized
             // rules. No-op when the world's RecognitionPolicy is disabled (the default).
             await RunRecognitionSweepAsync();
 
+            var msRecognition = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTsRec).TotalMilliseconds : 0.0;
             var tickTs2 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
             // Death lifecycle bookkeeping (engine gap-analysis §4.2/§4.11): advance every Dying
@@ -1299,7 +1301,8 @@ namespace Aetherium.Server.MultiWorld
                 var entityCount = _world?.Entities.Count ?? 0;
                 Console.WriteLine(
                     $"[PERF] tick total={msTotal:F0}ms | regions({_regions.Count})={msRegions:F0} stepNpcs={msNpc:F0} " +
-                    $"deathAbility={msDeathAbility:F0} downed={msDowned:F0} heat={msHeat:F0} | entities={entityCount}");
+                    $"recognition={msRecognition:F0} deathAbility={msDeathAbility:F0} downed={msDowned:F0} heat={msHeat:F0} " +
+                    $"| entities={entityCount} chars={_world?.Characters.Count ?? 0}");
             }
         }
 
