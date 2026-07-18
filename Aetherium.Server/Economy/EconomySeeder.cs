@@ -59,18 +59,26 @@ namespace Aetherium.Server.Economy
             entity.Set(market);
         }
 
-        /// <summary>Record a bidirectional trade route between two settlements (a road edge), so goods can
-        /// arbitrage in either direction along it.</summary>
+        /// <summary>Record a bidirectional road route between two settlements, so goods can arbitrage in
+        /// either direction. A highway carries 3× a feeder.</summary>
         public static void Link(Entity a, Entity b, bool highway, int length)
+            => LinkMode(a, b, "road", highway ? 3.0 : 1.0, length, highway);
+
+        /// <summary>Record a bidirectional route of an arbitrary transport mode (rail, subway, …) with an
+        /// explicit throughput capacity — the substrate for grade-separated transit across bands.</summary>
+        public static void LinkMode(Entity a, Entity b, string mode, double capacity, int length, bool highway = false)
         {
-            LinkOneWay(a, b.EntityId, highway, length);
-            LinkOneWay(b, a.EntityId, highway, length);
+            LinkOneWay(a, b.EntityId, mode, capacity, length, highway);
+            LinkOneWay(b, a.EntityId, mode, capacity, length, highway);
         }
 
-        private static void LinkOneWay(Entity from, string toId, bool highway, int length)
+        private static void LinkOneWay(Entity from, string toId, string mode, double capacity, int length, bool highway)
         {
             if (!from.Has<TradeLinks>()) from.Set(new TradeLinks());
-            from.Get<TradeLinks>().Links.Add(new TradeLink { To = toId, Highway = highway, Length = length });
+            from.Get<TradeLinks>().Links.Add(new TradeLink
+            {
+                To = toId, Mode = mode, Capacity = capacity, Length = length, Highway = highway,
+            });
         }
     }
 }

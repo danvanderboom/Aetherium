@@ -226,6 +226,19 @@ namespace Aetherium.WorldGen.Generators.Outdoor
             foreach (var edge in roads)
                 Aetherium.Server.Economy.EconomySeeder.Link(edge.A.Entity, edge.B.Entity, edge.Highway, edge.Length);
 
+            // Grade-separated transit (opt-in — the subway adds underground cells, so plain H3 worlds keep
+            // their exact cell count): a high-capacity rail backbone between the big cities on the surface,
+            // and subway tunnels a couple of bands underground from each capital. High-capacity trade links
+            // plus real terrain the perception slab surfaces.
+            if (context.GetIntParam("transit", 0, 0, 1) == 1)
+            {
+                double railCap = context.GetDoubleParam("railCapacity", 6.0, 0.0, 1000.0);
+                double subwayCap = context.GetDoubleParam("subwayCapacity", 8.0, 0.0, 1000.0);
+                int subwayBand = context.GetIntParam("subwayBand", -2, world.MinBand, -1);
+                var transit = new H3TransitNetwork().Build(world, settlements, railCap, subwayCap, subwayBand);
+                context.Metrics.SetMetric("transitEdges", transit.Count);
+            }
+
             // Spawn at the capital if one was placed (the natural starting city); otherwise keep the
             // open-ground fallback chosen above.
             var capital = settlements.FirstOrDefault(s => s.Tier == SettlementTier.Capital)

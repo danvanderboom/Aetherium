@@ -248,10 +248,14 @@ already exists:
   forest's timber spreads to the plains and prices converge modulo distance. Per-map and player-facing;
   the cluster macro-economy is untouched. **Remaining:** goods/recipes as per-world data (not hard-coded),
   player buy/sell + currency, and feeding the cluster market for cross-world trade.
-- **P4 — Transportation networks ([transit-networks.md](transit-networks.md)).** Rail/road/sea/air
-  services spanning the continents, stations, scheduled and hailed transport — logistics as gameplay at
-  planetary scale. Subways run a negative band, satellites the high bands; grade separation is the
-  z-altitude work below.
+- **P4 — Transportation networks. ✅ BUILT (rail + subway); sea/air services next.** `H3TransitNetwork`
+  lays a high-capacity **rail** backbone (an MST over the City/Capital tier, surface band, `Rail` terrain)
+  and **subway** tunnels (each capital to its two nearest cities, a negative band, `Subway` terrain —
+  grade-separated underground, glimpsed from the surface through the slab). Both become high-capacity
+  `TradeLink`s (mode + capacity: feeder 1, highway 3, rail 6, subway 8), so the economy routes bulk freight
+  over them. Opt-in per bundle (the subway adds underground cells); aphelion-h3 flies it. **Remaining:**
+  stations, boardable vehicles, scheduled/hailed services, and sea/air modes — the fuller
+  [transit-networks.md](transit-networks.md) / [boardable-vehicles.md](boardable-vehicles.md) vision.
 - **P4.5 — Full z-altitude on the sphere. ✅ BUILT (vertical slab + envelope); satellites/radio next.**
   `ComputeH3Perception` now emits a **vertical slab**: for each visible column it marches the bands within
   `EffectiveSlabDepth` that are vertically visible (`FovCalculator.VerticalVisibleBands`, which stops at the

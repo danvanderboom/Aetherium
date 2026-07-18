@@ -32,10 +32,10 @@ namespace Aetherium.Server.Economy
         private const double MaxPriceMult = 4.0;
         private const double StockCapFactor = 8.0;
 
-        // Trade: throughput = Base × (highway ? HighwayMult : 1) / (1 + length/LengthScale). A step never
-        // drains more than MaxDrainFraction of the source's stock, so trade is always stable.
+        // Trade: throughput = Base × link.Capacity / (1 + length/LengthScale). Capacity is the route's tier
+        // (feeder 1, highway 3, rail/subway more). A step never drains more than MaxDrainFraction of the
+        // source's stock, so trade is always stable.
         private const double BaseThroughput = 200.0;
-        private const double HighwayMult = 3.0;
         private const double LengthScale = 50.0;
         private const double MaxDrainFraction = 0.25;
 
@@ -126,7 +126,7 @@ namespace Aetherium.Server.Economy
                     if (!_marketById.TryGetValue(link.To, out var b)) continue;
                     var lb = b.Get<LocalMarket>();
 
-                    double throughput = BaseThroughput * (link.Highway ? HighwayMult : 1.0)
+                    double throughput = BaseThroughput * Math.Max(0.0, link.Capacity)
                                         / (1.0 + Math.Max(0, link.Length) / LengthScale);
 
                     foreach (var good in Goods.All)

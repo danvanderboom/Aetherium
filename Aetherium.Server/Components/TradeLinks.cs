@@ -11,6 +11,13 @@ namespace Aetherium.Components
         public string To { get; set; } = string.Empty;   // neighbour settlement entity id
         public bool Highway { get; set; }
         public int Length { get; set; }
+
+        /// <summary>Transport mode: "road", "rail", "subway", … — flavour + a natural capacity tier.</summary>
+        public string Mode { get; set; } = "road";
+
+        /// <summary>Throughput multiplier: how much this route can move per step. A highway carries more
+        /// than a feeder; rail more than a highway; a subway most of all (grade-separated metro freight).</summary>
+        public double Capacity { get; set; } = 1.0;
     }
 
     /// <summary>

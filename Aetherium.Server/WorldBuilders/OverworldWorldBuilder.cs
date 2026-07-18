@@ -31,7 +31,7 @@ namespace Aetherium.WorldBuilders
         /// <summary>Terrain a character can walk onto. Everything not listed is impassable.</summary>
         private static readonly HashSet<string> Passable = new(StringComparer.Ordinal)
         {
-            "Plains", "Forest", "Desert", "Hills", "Road", "Indoors",
+            "Plains", "Forest", "Desert", "Hills", "Road", "Indoors", "Rail", "Subway",
         };
 
         public List<TileType> TileTypes => new()
@@ -77,6 +77,20 @@ namespace Aetherium.WorldBuilders
             {
                 Name = "Road",
                 Settings = Render("=", ConsoleColor.Black, ConsoleColor.White),
+            },
+
+            // --- Transit (docs/design/h3-sphere-worldgen.md P4) ---
+            new TileType
+            {
+                // Surface rail — the high-capacity inter-city freight backbone.
+                Name = "Rail",
+                Settings = Render("+", ConsoleColor.Black, ConsoleColor.Gray),
+            },
+            new TileType
+            {
+                // Underground subway (rides a negative band); perceived from the surface through the slab.
+                Name = "Subway",
+                Settings = Render("=", ConsoleColor.DarkGray, ConsoleColor.Cyan),
             },
 
             // --- Structures ---

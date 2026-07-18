@@ -88,6 +88,13 @@ world:
     roadNeighbors: 2
     highwayWidth: 2
     roadWidth: 1
+    # Grade-separated transit: a rail backbone between the cities (surface), plus subway tunnels two bands
+    # underground from each capital — high-capacity freight the economy routes bulk goods over, and real
+    # terrain a surface player glimpses through the perception slab.
+    transit: 1
+    railCapacity: 6
+    subwayCapacity: 8
+    subwayBand: -2
 
 # Full 360° sight with a wide horizon so the open planet reads (range sizes the perception viewport).
 player:
