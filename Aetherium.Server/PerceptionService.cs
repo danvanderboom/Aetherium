@@ -746,6 +746,11 @@ Light sources found:
                 }
             }
 
+            // Orbital channel: a tuned radio the player carries reveals satellites passing overhead —
+            // otherwise undetectable — and lets them be hacked while in range. No radio → the sky reads empty.
+            AddH3SatelliteChannel(world, perception, topo, playerCell, playerLocation, self, inv,
+                visibleCharacters, affordances);
+
             perception.Affordances = affordances;
             perception.NavigationData = ComputeNavigationData(world, playerLocation, playerHeading);
             perception.Audio = ComputeAudioPerception(world, playerLocation, null, currentTime);
@@ -820,6 +825,90 @@ Light sources found:
                     perception.Visuals[$"{relX},{relY},{relZ}"] = visualDto;
                 }
             }
+        }
+
+        /// <summary>
+        /// The orbital perception channel. When the perceiver carries (or is) an active, tuned
+        /// <see cref="RadioReceiver"/>, every satellite whose ground track is within the radio's range is
+        /// surfaced as a visible character high overhead (relative Z = its band − the viewer's), and a
+        /// <c>hack</c> affordance is offered while it is within uplink range. Satellites are otherwise
+        /// invisible — not in the disk, not in the slab, not in the normal entity pass — so the radio is the
+        /// only way to see them. Uses the cheap <see cref="SatelliteRegistry"/>, never a full-world scan.
+        /// </summary>
+        private void AddH3SatelliteChannel(
+            World world, PerceptionDto perception, Aetherium.Topology.IGridTopology topo,
+            Aetherium.Topology.GridCoord playerCell, WorldLocation playerLocation, Entity? self, Inventory? inv,
+            List<CharacterDto> visibleCharacters, List<AffordanceDto> affordances)
+        {
+            int range = ActiveRadioSatelliteRange(world, self, inv);
+            if (range <= 0)
+                return; // no active tuned radio → the orbital channel is silent
+
+            var sats = Aetherium.Server.Satellites.SatelliteRegistry.ForWorld(world);
+            if (sats.Count == 0)
+                return;
+
+            string? playerId = self?.EntityId;
+            foreach (var sat in sats)
+            {
+                if (!sat.Has<WorldLocation>())
+                    continue;
+                var satLoc = sat.Get<WorldLocation>();
+                var satCell = new Aetherium.Topology.GridCoord(satLoc.X, satLoc.Y, satLoc.Z);
+
+                // Horizontal cell distance from the viewer to the satellite's ground track (band ignored):
+                // this is "how far overhead" — a receiver only picks up what's near its zenith.
+                int planar = topo.Distance(playerCell, satCell);
+                if (planar > range)
+                    continue;
+
+                var rel = topo.RelativeCoords(playerCell, satCell);
+                if (rel is null)
+                    continue;
+                var (relX, relY) = rel.Value;
+                int relZ = satLoc.Z - playerCell.Z;
+
+                string kind = sat.Has<CreatureTypeTag>() ? sat.Get<CreatureTypeTag>().Value : "satellite";
+                visibleCharacters.Add(new CharacterDto
+                {
+                    Id = sat.EntityId,
+                    Name = kind,
+                    IsHostile = false,
+                    Location = new WorldLocationDto(relX, relY, relZ),
+                });
+
+                if (playerId != null && sat.Has<FlyerProfile>())
+                {
+                    var profile = sat.Get<FlyerProfile>();
+                    if (profile.Hackable && planar <= profile.UplinkRange)
+                        affordances.Add(new AffordanceDto { Action = "hack", ActorId = playerId, TargetId = sat.EntityId });
+                }
+            }
+        }
+
+        // The best (longest) satellite range among the perceiver's active tuned radios — their own built-in
+        // receiver plus any carried radio item. 0 when nothing is receiving.
+        private static int ActiveRadioSatelliteRange(World world, Entity? self, Inventory? inv)
+        {
+            int range = 0;
+
+            void Consider(Entity? e)
+            {
+                if (e != null && e.Has<RadioReceiver>())
+                {
+                    var r = e.Get<RadioReceiver>();
+                    if (r.On && r.Tuned)
+                        range = Math.Max(range, r.SatelliteRange);
+                }
+            }
+
+            Consider(self);
+            if (inv != null)
+                foreach (var id in inv.ItemEntityIds)
+                    if (world.Entities.TryGetValue(id, out var item))
+                        Consider(item);
+
+            return range;
         }
 
         private string GetRegionIdForLocation(WorldLocation location)

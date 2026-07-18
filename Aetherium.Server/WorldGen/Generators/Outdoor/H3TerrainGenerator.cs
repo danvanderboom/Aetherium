@@ -243,6 +243,23 @@ namespace Aetherium.WorldGen.Generators.Outdoor
             context.Metrics.SetMetric("villages", settlements.Count(s => s.Tier == SettlementTier.Village));
             context.Metrics.SetMetric("roads", roads.Count);
 
+            // Satellites (opt-in; default 0 so plain H3 worlds keep their exact cell count). Each rides its
+            // own high band far above the perception slab — out of normal sight, radio-only — so they never
+            // collide however much their orbits criss-cross.
+            int satelliteCount = context.GetIntParam("satelliteCount", 0, 0, 512);
+            if (satelliteCount > 0)
+            {
+                int satBaseBand = context.GetIntParam("satelliteBaseBand", Math.Max(world.SlabDepthAbove + 4, 8), 1, world.MaxBand);
+                int satBandGap = context.GetIntParam("satelliteBandGap", 2, 1, 64);
+                int satMinRadius = context.GetIntParam("satelliteMinRadius", 20, 1, 1000);
+                int satMaxRadius = context.GetIntParam("satelliteMaxRadius", 60, 1, 2000);
+                int satMinPeriod = context.GetIntParam("satelliteMinPeriod", 1, 1, 100);
+                int satMaxPeriod = context.GetIntParam("satelliteMaxPeriod", 4, 1, 100);
+                var sats = H3SatelliteSeeder.Seed(world, satelliteCount, satBaseBand, satBandGap,
+                    satMinRadius, satMaxRadius, satMinPeriod, satMaxPeriod, locs, context.GetRandom("h3-satellites"));
+                context.Metrics.SetMetric("satellites", sats.Count);
+            }
+
             // A sensible default light at spawn so an ambient-lit session isn't pitch black (outdoor
             // play uses sunlight; a carried lamp handles interiors) — mirrors the planar generators.
             var light = new LightEntity();

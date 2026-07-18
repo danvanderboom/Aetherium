@@ -259,9 +259,16 @@ already exists:
   or drone overhead — and the **flight envelope** (true band) surfaces for the altitude gauge. Reuses the
   planar Z-column machinery unchanged (it keys on `(x,y,band)`, topology-agnostic in the horizontal plane).
   The H3 generator sets `MinBand`/`MaxBand`/slab from bundle params; aphelion-h3 opens a subway band below
-  and a tall sky above. **Next:** satellites orbiting high bands (H3 rings, distinct bands so they never
-  collide), above the normal slab and detectable only through a tuned radio — an extra channel of
-  perception granted by an item — plus the client orbit marker.
+  and a tall sky above.
+  - **Satellites + radio channel. ✅ BUILT.** `H3SatelliteSeeder` fills the sky with orbiters — each an
+    H3 gridRing (`H3Orbit`) at its **own band**, so however much orbits criss-cross they never share a
+    cell (distinct Z); `SatelliteSystem` steps them around their rings each tick at per-satellite speeds.
+    A `SatelliteEntity` is deliberately not a Character (no NPC/flight-plan sweep) and is **invisible to
+    ordinary perception**. The **orbital channel** surfaces them: a carried (or innate) active, tuned
+    `RadioReceiver` reveals satellites whose ground track is within range — high overhead, with a `hack`
+    affordance in uplink range. No radio → the sky reads empty. `SatelliteRegistry` keeps lookup O(few),
+    never a full-world scan. aphelion-h3 flies an 18-satellite constellation. **Next:** the client orbit
+    marker + confirming the band stack renders high +Z and the subway band.
 - **P5 — Climate & biome expansion.** Latitude-banded climate (Hadley-cell deserts, polar ice caps,
   tropical belts) using the latitude the sphere makes meaningful — needs new terrain types (ice/tundra)
   and client theming. Optionally hierarchical resolutions (survey from orbit at a coarse resolution,

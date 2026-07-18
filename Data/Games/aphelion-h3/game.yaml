@@ -53,6 +53,19 @@ world:
     slabDepthBelow: 2
     slabDepthAbove: 3
 
+    # --- Satellites (radio-only, never colliding) ---
+    # A constellation high above the surface. Each rides its own band (24, 26, 28, …) so however much the
+    # orbits criss-cross they never share a cell. They sit far above the perception slab, so they are
+    # invisible to the naked eye and detectable only with a tuned radio (a special item that adds an
+    # orbital channel of perception). Varied ring radii, start phases, and speeds keep the sky busy.
+    satelliteCount: 18
+    satelliteBaseBand: 24
+    satelliteBandGap: 2
+    satelliteMinRadius: 25
+    satelliteMaxRadius: 70
+    satelliteMinPeriod: 1
+    satelliteMaxPeriod: 5
+
     # --- Sphere-native features (docs/design/h3-sphere-worldgen.md §7) ---
     # Rivers: steepest-descent channels, carved as Water, widening toward the mouth so wide vehicles
     # pass each other several lanes abreast near the coast. mouthWidth is a gridDisk half-width.

@@ -1210,9 +1210,12 @@ namespace Aetherium.Server.MultiWorld
 
             var tickTs0 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
-            // Advance autonomous flyers (flight plans) on this map's world.
+            // Advance autonomous flyers (flight plans) and satellites (orbits) on this map's world.
             if (_world != null)
+            {
                 Aetherium.Server.Flying.FlightPlanSystem.Step(_world);
+                _satelliteSystem.Step(_world);
+            }
 
             // Tick all regions in parallel with game time
             var tickTasks = _regions.Values
@@ -2324,6 +2327,7 @@ namespace Aetherium.Server.MultiWorld
         private readonly DeathSystem _deathSystem = new DeathSystem();
         private readonly CorpseExpirySystem _corpseExpirySystem = new CorpseExpirySystem();
         private readonly Aetherium.Server.Economy.EconomySystem _economySystem = new Aetherium.Server.Economy.EconomySystem();
+        private readonly Aetherium.Server.Satellites.SatelliteSystem _satelliteSystem = new Aetherium.Server.Satellites.SatelliteSystem();
 
         // Per-world ability content (engine gap-analysis §4.3 — see wire-abilities-live), compiled from
         // the world's AbilityConfig. The catalog is the runtime (compiled) form of the config's
