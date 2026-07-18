@@ -295,6 +295,15 @@ namespace Aetherium.Core
                         // Map toggle (existing functionality)
                         break;
 
+                    case ConsoleKey.X:
+                        // X: Toggle the side-on elevation (cross-section) view vs the top-down plan.
+                        mapView.CrossSectionMode = !mapView.CrossSectionMode;
+                        statusMessage = mapView.CrossSectionMode
+                            ? "Elevation (cross-section) view - press X for plan"
+                            : "Plan (top-down) view";
+                        RenderCurrentState();
+                        break;
+
                     // Vision/Lighting Mode Switches (Number Keys 1-4)
                     case ConsoleKey.D1:
                     case ConsoleKey.NumPad1:

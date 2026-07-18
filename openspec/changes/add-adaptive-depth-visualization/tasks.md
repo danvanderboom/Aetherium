@@ -23,9 +23,9 @@
 - [ ] 3.5 EditMode/PlayMode tests for multi-band rendering and alpha falloff
 
 ## 4. Cross-section / elevation view (both clients)
-- [ ] 4.1 Console: a toggle-key side-on schematic that draws the column around the player as stacked bands (one row per band, no per-tile FOV)
-- [ ] 4.2 Unity: an equivalent cross-section overlay
-- [ ] 4.3 Verify both against a multi-level interchange column
+- [x] 4.1 Console: a toggle-key side-on schematic that draws the column around the player as stacked bands (one row per band, no per-tile FOV) — `ClientConsoleMapView.CrossSectionMode` + `BuildCrossSection`/`DrawCrossSection`; `X` toggles plan ↔ elevation in `ClientConsoleDungeonGameNew`
+- [ ] 4.2 Unity: an equivalent cross-section overlay — deferred with the rest of the Unity client work (Section 3)
+- [x] 4.3 Verify both against a multi-level interchange column — console verified (`ConsoleDepthViewTests`: viaduct/street/subway column stacks top-first, focus marked, player anchored, off-axis slab content shown without FOV); Unity half deferred with 4.2
 
 ## 5. Adaptive framing/slab + mode escalation
 - [ ] 5.1 Auto-slab: expand `depthBelow`/`depthAbove` when the local column has many occupied bands, collapse in flat terrain

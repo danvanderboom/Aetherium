@@ -124,5 +124,54 @@ namespace Aetherium.Test
 
             Assert.Contains((0, true), ribbon, "The focus band is always part of the stack, even when empty.");
         }
+
+        // --- Cross-section / elevation view (Section 4) ---
+
+        [Test]
+        public void CrossSection_StacksInterchangeBands_TopFirst_WithFocusMarked()
+        {
+            // A three-level interchange in the player's column: a viaduct deck above, the street at focus, a
+            // subway platform below.
+            var view = ViewWith(
+                Terrain(0, 0, 4, "="),  // viaduct deck (+4)
+                Terrain(0, 0, 0, "."),  // street (focus)
+                Terrain(0, 0, -2, "_")); // subway platform (-2)
+
+            var rows = view.BuildCrossSection(halfWidth: 5);
+
+            Assert.AreEqual(3, rows.Count, "One row per occupied band.");
+            Assert.AreEqual(4, rows[0].band, "Top band first.");
+            Assert.IsFalse(rows[0].isFocus);
+            Assert.AreEqual(0, rows[1].band);
+            Assert.IsTrue(rows[1].isFocus, "The focus band is marked.");
+            Assert.AreEqual(-2, rows[2].band, "Bottom band last.");
+
+            StringAssert.Contains("==", rows[0].cells, "The viaduct deck appears on the top band.");
+            StringAssert.Contains("@@", rows[1].cells, "The player is marked on the focus band.");
+            StringAssert.Contains("__", rows[2].cells, "The subway platform appears on the bottom band.");
+        }
+
+        [Test]
+        public void CrossSection_DoesNotRequireFov_ShowsSlabContentDirectly()
+        {
+            // A structure two cells east on an off-focus band still appears in the elevation (no per-tile FOV gate).
+            var view = ViewWith(Terrain(2, 0, 3, "#"));
+            var rows = view.BuildCrossSection(halfWidth: 5);
+
+            var deck = rows.Find(r => r.band == 3);
+            StringAssert.Contains("##", deck.cells, "Off-axis slab content is drawn schematically.");
+        }
+
+        [Test]
+        public void CrossSection_AlwaysIncludesFocusBand_WithPlayer()
+        {
+            // Only off-focus bands have content; the focus band (with the player) is still part of the elevation.
+            var view = ViewWith(Terrain(0, 0, 4, "="), Terrain(0, 0, -2, "_"));
+            var rows = view.BuildCrossSection(halfWidth: 5);
+
+            var focus = rows.Find(r => r.isFocus);
+            Assert.AreEqual(0, focus.band, "The focus band is present even when it holds no terrain.");
+            StringAssert.Contains("@@", focus.cells, "The player anchors the focus band of the elevation.");
+        }
     }
 }

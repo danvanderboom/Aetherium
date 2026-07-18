@@ -21,6 +21,9 @@ namespace Aetherium.Views
         public WorldLocationDto? WorldLocation { get; set; }
         public PerceptionDto? Perception { get; set; }
 
+        /// <summary>When true, the map renders as a side-on elevation (cross-section) instead of the top-down plan.</summary>
+        public bool CrossSectionMode { get; set; } = false;
+
         public Point ContentScreenPosition =>
             HasFrame ? ScreenPosition.FromDelta(+1, +1) : ScreenPosition;
 
@@ -194,6 +197,121 @@ namespace Aetherium.Views
 
         private static string FormatBand(int dz) => (dz > 0 ? "+" : "") + dz.ToString();
 
+        // --- Cross-section / elevation view (Section 4) ---
+
+        private string PlayerGlyph()
+        {
+            if (Perception != null
+                && Perception.TileTypes.TryGetValue("Player", out var playerTile)
+                && playerTile.Settings.TryGetValue("MapCharacter", out var ch)
+                && !string.IsNullOrEmpty(ch))
+                return (ch.Length >= 2 ? ch.Substring(0, 2) : ch + ch);
+            return "@@";
+        }
+
+        // The 2-char glyph for a cell in the elevation schematic (terrain, item, or entity silhouette; else void).
+        private string CrossSectionGlyph(VisualDto? v, int dx, int z, HashSet<(int x, int y, int z)> itemLocs)
+        {
+            if (v == null || !IsDrawable(v, itemLocs))
+                return "  ";
+
+            if (itemLocs.Contains((dx, 0, z)))
+            {
+                var item = Perception?.VisibleItems?.FirstOrDefault(
+                    it => it.Location != null && it.Location.X == dx && it.Location.Y == 0 && it.Location.Z == z);
+                if (item != null && !string.IsNullOrEmpty(item.Icon))
+                    return item.Icon.Length >= 2 ? item.Icon.Substring(0, 2) : item.Icon.PadRight(2);
+            }
+
+            if (v.Terrain != null && v.Terrain.Settings.TryGetValue("MapCharacter", out var terrainChar))
+                return terrainChar + terrainChar;
+
+            if (v.ThingsSeen.Count > 0)
+            {
+                var ch = v.ThingsSeen.ContainsKey(Aetherium.Model.VisualType.Character) ? SilhouetteCharacter : SilhouetteObject;
+                return ch + ch;
+            }
+
+            return "  ";
+        }
+
+        /// <summary>
+        /// A side-on elevation of the bands around the player, sliced along the east-west axis at the player's row.
+        /// One entry per occupied band (top band first; the focus band is always present and flagged), each with the
+        /// concatenated glyphs across <paramref name="halfWidth"/> cells either side of the player. No per-tile FOV —
+        /// it is a schematic projection of whatever the perception slab already contains.
+        /// </summary>
+        public List<(int band, bool isFocus, string cells)> BuildCrossSection(int halfWidth)
+        {
+            var rows = new List<(int band, bool isFocus, string cells)>();
+            if (Perception == null) return rows;
+
+            var itemLocs = BuildItemLocationSet();
+
+            var bands = new SortedSet<int>();
+            foreach (var v in Perception.Visuals.Values)
+                if (v.Location.Y == 0 && Math.Abs(v.Location.X) <= halfWidth && IsDrawable(v, itemLocs))
+                    bands.Add(v.Location.Z);
+            bands.Add(0); // the focus band is always part of the elevation
+
+            foreach (var z in bands.Reverse()) // top band first
+            {
+                var sb = new System.Text.StringBuilder();
+                for (int dx = -halfWidth; dx <= halfWidth; dx++)
+                {
+                    if (dx == 0 && z == 0)
+                    {
+                        sb.Append(PlayerGlyph());
+                        continue;
+                    }
+                    Perception.Visuals.TryGetValue($"{dx},0,{z}", out var v);
+                    sb.Append(CrossSectionGlyph(v, dx, z, itemLocs));
+                }
+                rows.Add((z, z == 0, sb.ToString()));
+            }
+            return rows;
+        }
+
+        private void DrawCrossSection(Point screenPosition, Size size)
+        {
+            // Clear the content area.
+            Console.BackgroundColor = BackgroundColor;
+            var blank = new string(' ', size.Width);
+            for (int y = 0; y < size.Height; y++)
+            {
+                try { Console.SetCursorPosition(screenPosition.X, screenPosition.Y + y); } catch { break; }
+                Console.Write(blank);
+            }
+
+            const int labelWidth = 5; // "> +3 "
+            int halfWidth = Math.Max(1, ((size.Width - labelWidth) / symbolWidth) / 2);
+            var rows = BuildCrossSection(halfWidth);
+
+            int startY = screenPosition.Y + Math.Max(1, (size.Height - rows.Count) / 2);
+
+            for (int i = 0; i < rows.Count && startY + i < screenPosition.Y + size.Height; i++)
+            {
+                var (band, isFocus, cells) = rows[i];
+                try { Console.SetCursorPosition(screenPosition.X, startY + i); } catch { break; }
+
+                Console.BackgroundColor = BackgroundColor;
+                Console.ForegroundColor = isFocus ? ConsoleColor.Yellow : ConsoleColor.DarkGray;
+                Console.Write((isFocus ? ">" : " ") + FormatBand(band).PadLeft(3) + " ");
+
+                Console.ForegroundColor = isFocus ? ConsoleColor.White : ConsoleColor.Gray;
+                Console.Write(cells);
+            }
+
+            try
+            {
+                Console.SetCursorPosition(screenPosition.X, screenPosition.Y);
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.Write(CenterText("[Elevation view - press X for plan]", size.Width));
+            }
+            catch { /* narrow console */ }
+            Console.ForegroundColor = ConsoleColor.Gray;
+        }
+
         protected override void DrawContents(Point screenPosition, Size size)
         {
             if (Perception == null || WorldLocation == null)
@@ -208,6 +326,13 @@ namespace Aetherium.Views
                     Console.Write(hline);
                 }
 
+                return;
+            }
+
+            // Elevation (cross-section) view is a different projection of the same perception; render and return.
+            if (CrossSectionMode)
+            {
+                DrawCrossSection(screenPosition, size);
                 return;
             }
 
