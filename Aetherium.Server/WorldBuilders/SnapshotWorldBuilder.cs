@@ -51,6 +51,12 @@ namespace Aetherium.WorldBuilders
                 GeneratorVersion = recipe.GeneratorVersion,
                 Template = recipe.Template,
                 Parameters = new System.Collections.Generic.Dictionary<string, string>(recipe.Parameters, System.StringComparer.OrdinalIgnoreCase),
+                // Rebuild on the same tiling the world was saved on. Without this the request's
+                // Topology defaults to square, so an H3 sphere silently regenerates as a square grid
+                // (OutdoorLayoutPass picks the planar generator) — a rehydrated planet then has no
+                // walkable H3 ground, and joining players spawn off-map. RegenerateFromRecipe and
+                // InitializeAsync both set this; the snapshot-hydrate path (which takes precedence) must too.
+                Topology = recipe.Topology,
             };
 
             var passes = BuildPasses(recipe.Template);
