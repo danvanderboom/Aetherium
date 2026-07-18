@@ -28,7 +28,7 @@
 - [x] 4.3 Verify both against a multi-level interchange column — console verified (`ConsoleDepthViewTests`: viaduct/street/subway column stacks top-first, focus marked, player anchored, off-axis slab content shown without FOV); Unity half deferred with 4.2
 
 ## 5. Adaptive framing/slab + mode escalation
-- [ ] 5.1 Auto-slab: expand `depthBelow`/`depthAbove` when the local column has many occupied bands, collapse in flat terrain
+- [x] 5.1 Auto-slab: expand `depthBelow`/`depthAbove` when the local column has many occupied bands, collapse in flat terrain — `World.AutoSlab` (opt-in, default off) + `AutoSlabProbeRadius`; `World.EffectiveSlabDepth(x,y,z)` returns the distance to the furthest occupied band within the configured budget per direction (0 when flat), bounded by `SlabDepthBelow/Above` + `SlabDepthCap`. Both `VisionSystem` and `PerceptionService.AddCoarseSlabLighting` call it so depth and emission stay in lock-step. Behaviorally transparent (content-only emission ⇒ same visible cells as a fixed budget; it only skips empty far bands). Tests: `PerceptionAutoSlabTests` (9)
 - [ ] 5.2 Mode escalation past a vertical-complexity threshold: surface the cross-section view (console) or pull the camera back / adapt `orthographicSize` toward an isometric framing (Unity) to the local vertical extent
 - [ ] 5.3 Altitude gauge: console glyph ladder / Unity HUD meter of `N` discrete steps over the flyer's `[MinBand, MaxBand]`, current band highlighted
 - [ ] 5.4 Context tint: reuse vision modes (`Torch`/`Sunlight`/`Ambient`, `Normal`/`Infrared`) so underground bands default to torch/enclosed cueing and skyways to sunlight

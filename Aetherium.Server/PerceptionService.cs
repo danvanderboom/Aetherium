@@ -225,8 +225,7 @@ Light sources found:
 
                 // Coarse per-band lighting for the 3D slab, so off-focus cells the vision pass emits carry a
                 // sensible (dimmed-by-depth) light level rather than rendering black. No-op when the slab is off.
-                var slabBelow = Math.Min(world.SlabDepthBelow, world.SlabDepthCap);
-                var slabAbove = Math.Min(world.SlabDepthAbove, world.SlabDepthCap);
+                var (slabBelow, slabAbove) = world.EffectiveSlabDepth(playerLocation.X, playerLocation.Y, playerLocation.Z);
                 lightingSystem.AddCoarseSlabLighting(world, lightFrame, bounds, playerLocation.Z, slabBelow, slabAbove);
             }
 

@@ -125,8 +125,7 @@ namespace Aetherium.Systems
             // range and emit off-focus cells that pass the vertical line-of-sight test. Only cells that actually
             // contain something (terrain or a non-terrain entity) are emitted — empty air is a silhouette gap, not
             // a visible cell — which keeps off-focus perception cheap.
-            int depthBelow = Math.Min(world.SlabDepthBelow, world.SlabDepthCap);
-            int depthAbove = Math.Min(world.SlabDepthAbove, world.SlabDepthCap);
+            var (depthBelow, depthAbove) = world.EffectiveSlabDepth(origin.X, origin.Y, origin.Z);
             if (depthBelow > 0 || depthAbove > 0)
             {
                 for (int y = 0; y < bounds.Height; y++)
