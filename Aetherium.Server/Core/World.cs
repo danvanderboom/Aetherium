@@ -35,6 +35,12 @@ namespace Aetherium.Core
         /// </summary>
         public MemoryPolicy MemoryPolicy { get; set; } = new MemoryPolicy();
 
+        /// <summary>
+        /// Per-world individual-recognition policy (add-identity-recognition; disabled by default).
+        /// Set from world generator parameters during map initialization.
+        /// </summary>
+        public RecognitionPolicy RecognitionPolicy { get; set; } = new RecognitionPolicy();
+
         public Guid CharacterMoveTimestamp { get; protected set; } = Guid.NewGuid();
 
         public event Action<WorldEvent>? WorldEvents;

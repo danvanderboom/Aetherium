@@ -591,6 +591,62 @@ namespace Aetherium.Server.Management
             }
         }
 
+        public Task<string?> GetRecognitionAsync(string worldId, string entityId)
+        {
+            // Recognition state carries individual identities and absolute knowledge — a god-view read,
+            // gated like absolute perception, world snapshots, and memory.
+            if (!OperatorAccess.IsEnabled())
+                return Task.FromResult<string?>(null);
+
+            if (string.IsNullOrEmpty(worldId) || string.IsNullOrEmpty(entityId))
+                return Task.FromResult<string?>(null);
+
+            var world = _liveWorlds?.Resolve(worldId);
+            if (world == null || !world.Entities.TryGetValue(entityId, out var entity))
+                return Task.FromResult<string?>(null);
+
+            if (!entity.Has<Aetherium.Components.IndividualRecognition>())
+                return Task.FromResult<string?>(null);
+
+            try
+            {
+                var recognition = entity.Get<Aetherium.Components.IndividualRecognition>();
+                var halfLife = world.RecognitionPolicy.FamiliarityHalfLifeSeconds;
+                var now = DateTime.UtcNow;
+
+                var dto = new RecognitionDto
+                {
+                    WorldId = worldId,
+                    EntityId = entityId,
+                    Kind = Aetherium.Components.RecognitionKind.Resolve(entity),
+                    KnownCount = recognition.Count
+                };
+
+                foreach (var k in recognition.KnownIndividuals.Values)
+                {
+                    dto.Individuals.Add(new KnownIndividualDto
+                    {
+                        EntityId = k.EntityId,
+                        Kind = k.Kind,
+                        FirstMet = k.FirstMet,
+                        LastSeen = k.LastSeen,
+                        Encounters = k.Encounters,
+                        Strength = k.Strength,
+                        EffectiveFamiliarity = recognition.EffectiveFamiliarity(k, now, halfLife),
+                        StabilitySeconds = k.StabilitySeconds,
+                        Permanent = k.Permanent
+                    });
+                }
+
+                return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(dto));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error reading recognition for {entityId} in {worldId}: {ex.Message}");
+                return Task.FromResult<string?>(null);
+            }
+        }
+
         public async Task<ToolExecutionResultDto> ExecuteWorldToolAsync(string worldId, string toolId, Dictionary<string, object> args)
         {
             if (!OperatorAccess.IsEnabled())

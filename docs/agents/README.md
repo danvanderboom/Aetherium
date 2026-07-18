@@ -75,6 +75,27 @@ aetherctl memory get <sessionId> --json
 # StabilityGrowthMultiplier, MaxLocationsOverride) — forgetful vs eidetic as data. The
 # `memory get` table annotates each entry with " stab=<h>h" or " [permanent]".
 
+# Individual recognition (opt-in, default OFF): characters recognize other individuals.
+# Enable per world via generator params:
+#   RecognitionEnabled=true               master switch (sweep runs in the map-grain tick)
+#   RecognitionRangeTiles=6               topology range, same z-level
+#   RecognitionOwnKindAcuity=0.9          acuity toward own kind (good)
+#   RecognitionOtherKindAcuity=0.4        acuity toward other kinds (poor)
+#   RecognitionThreshold=0.25             recognized ⇔ acuity × effective familiarity ≥ this
+#   RecognitionEncounterTimeoutSeconds=300  apart longer than this ⇒ a new encounter
+#   RecognitionFamiliarityHalfLifeSeconds=86400  base familiarity half-life (reuses the memory curve)
+#   RecognitionMeetStrength=0.5           familiarity from a first meeting
+#   RecognitionMaxIndividuals=1000        per-character cap (weakest pruned first)
+# Familiarity builds on repeated spaced meetings and fades between them (same curve as memory
+# dynamics); recognition proximity raises the `character_recognized` ECA trigger (once per
+# encounter) with recognized_kind_is / familiarity_at_least / first_meeting_is conditions and
+# Recognizer/Recognized action targets. Per-character overrides live on a RecognitionProfile
+# component. Configure a character's memory/recognition profile live:
+aetherctl world edit <worldId> configurecharacter --args '{"entityId":"<id>","ownKindAcuity":0.95,"halfLifeMultiplier":0.2}'
+# Inspect who a character (PC or NPC) recognizes (operator-gated; entity id via `world dump`):
+aetherctl recognition get <worldId> <entityId>
+aetherctl recognition get <worldId> <entityId> --json
+
 # Agent telemetry (per-step snapshots, analysis, failed-run replays)
 aetherctl telemetry snapshots <agentId> --limit 20
 aetherctl telemetry analysis <agentId> --json

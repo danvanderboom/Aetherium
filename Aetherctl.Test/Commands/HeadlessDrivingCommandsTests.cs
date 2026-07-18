@@ -91,6 +91,22 @@ namespace Aetherctl.Test.Commands
             Assert.Contains(getCmd!.Arguments, a => a.Name == "sessionId");
         }
 
+        // Spec: aetherctl / Recognition Inspection Command (change: add-identity-recognition)
+        [Fact]
+        public void RecognitionGet_ExistsWithWorldIdAndEntityIdArguments()
+        {
+            var root = new RootCommand();
+            RecognitionCommands.AddToRoot(root);
+
+            var recognitionCmd = root.Subcommands.FirstOrDefault(c => c.Name == "recognition");
+            Assert.NotNull(recognitionCmd);
+
+            var getCmd = recognitionCmd!.Subcommands.FirstOrDefault(c => c.Name == "get");
+            Assert.NotNull(getCmd);
+            Assert.Contains(getCmd!.Arguments, a => a.Name == "worldId");
+            Assert.Contains(getCmd.Arguments, a => a.Name == "entityId");
+        }
+
         // Spec: character-memory / Memory Permanence + Stability display (change: add-memory-dynamics)
         [Fact]
         public void MemoryGet_FormatsDurabilitySuffix()

@@ -64,6 +64,9 @@ namespace Aetherium.Server.Management
         Task<ToolExecutionResultDto> ExecuteWorldToolAsync(string worldId, string toolId, Dictionary<string, object> args);
         // A character's accumulated memories (JSON CharacterMemoryDto); operator-gated god-view read.
         Task<string?> GetMemoryAsync(string sessionId);
+        // A character's individual-recognition memory (JSON RecognitionDto) by world+entity id;
+        // operator-gated god-view read over the canonical world (works for PCs and NPCs).
+        Task<string?> GetRecognitionAsync(string worldId, string entityId);
 
         // Gameplay control + perception (for agents)
         Task<string?> GetPerceptionAsync(string sessionId); // JSON-serialized PerceptionDto

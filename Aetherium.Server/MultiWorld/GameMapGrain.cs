@@ -597,6 +597,9 @@ namespace Aetherium.Server.MultiWorld
             // Per-world memory policy overrides (see OpenSpec change add-character-memory).
             ApplyMemoryPolicy(_world, parameters);
 
+            // Per-world recognition policy overrides (see OpenSpec change add-identity-recognition).
+            ApplyRecognitionPolicy(_world, parameters);
+
             // Publish the live world to the in-process registry so operator/debug tooling
             // (headless sessions, world snapshots) can read/drive it directly. Published after
             // the setup above so consumers never observe a half-configured world.
@@ -727,6 +730,153 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.TryGetValue("MemoryForgetThreshold", out var forgetObj)
                 && double.TryParse(forgetObj?.ToString(), out var forget))
                 world.MemoryPolicy.ForgetThreshold = forget;
+        }
+
+        /// <summary>
+        /// Applies recognition-policy overrides from world generator parameters
+        /// (add-identity-recognition): Recognition{Enabled,RangeTiles,OwnKindAcuity,OtherKindAcuity,
+        /// Threshold,EncounterTimeoutSeconds,FamiliarityHalfLifeSeconds,MeetStrength,MaxIndividuals}.
+        /// </summary>
+        private static void ApplyRecognitionPolicy(World world, Dictionary<string, object> parameters)
+        {
+            if (parameters == null)
+                return;
+
+            var p = world.RecognitionPolicy;
+
+            if (parameters.TryGetValue("RecognitionEnabled", out var enObj)
+                && bool.TryParse(enObj?.ToString(), out var en))
+                p.Enabled = en;
+            if (parameters.TryGetValue("RecognitionRangeTiles", out var rtObj)
+                && int.TryParse(rtObj?.ToString(), out var rt) && rt > 0)
+                p.RangeTiles = rt;
+            if (parameters.TryGetValue("RecognitionOwnKindAcuity", out var okObj)
+                && double.TryParse(okObj?.ToString(), out var ok))
+                p.OwnKindAcuity = ok;
+            if (parameters.TryGetValue("RecognitionOtherKindAcuity", out var otObj)
+                && double.TryParse(otObj?.ToString(), out var ot))
+                p.OtherKindAcuity = ot;
+            if (parameters.TryGetValue("RecognitionThreshold", out var thObj)
+                && double.TryParse(thObj?.ToString(), out var th))
+                p.RecognitionThreshold = th;
+            if (parameters.TryGetValue("RecognitionEncounterTimeoutSeconds", out var etObj)
+                && double.TryParse(etObj?.ToString(), out var et) && et >= 0)
+                p.EncounterTimeoutSeconds = et;
+            if (parameters.TryGetValue("RecognitionFamiliarityHalfLifeSeconds", out var fhObj)
+                && double.TryParse(fhObj?.ToString(), out var fh) && fh > 0)
+                p.FamiliarityHalfLifeSeconds = fh;
+            if (parameters.TryGetValue("RecognitionMeetStrength", out var msObj)
+                && double.TryParse(msObj?.ToString(), out var ms))
+                p.MeetStrength = ms;
+            if (parameters.TryGetValue("RecognitionMaxIndividuals", out var miObj)
+                && int.TryParse(miObj?.ToString(), out var mi) && mi > 0)
+                p.MaxIndividuals = mi;
+        }
+
+        /// <summary>
+        /// Resolves an entity's "kind" for recognition (add-identity-recognition): its
+        /// <see cref="Aetherium.Components.CreatureTypeTag"/> value when present (so "wolf"/"bandit"
+        /// don't collapse to "monster"), else its CLR type name lowercased. Same rule the
+        /// <c>creature_died</c> path uses for the victim.
+        /// </summary>
+        internal static string ResolveKind(Entity entity) =>
+            Aetherium.Components.RecognitionKind.Resolve(entity);
+
+        /// <summary>
+        /// Sweeps the canonical world for characters within recognition range (add-identity-recognition)
+        /// and raises <c>character_recognized</c> rules once per encounter. Runs on the grain turn after
+        /// <see cref="StepNpcsAsync"/>, so PC canonical bodies (gateway-first) and NPCs are both at their
+        /// settled positions. Proximity uses the world topology on the same z-level. Familiarity state is
+        /// updated for every in-range pair regardless of whether rules exist; only recognized, new-
+        /// encounter observations dispatch through the rule runtime. No-op when the policy is disabled.
+        /// </summary>
+        private async Task RunRecognitionSweepAsync()
+        {
+            if (_world is null)
+                return;
+            var policy = _world.RecognitionPolicy;
+            if (!policy.Enabled)
+                return;
+
+            var characters = _world.Entities.Values.OfType<Character>()
+                .Where(c => c.Has<Aetherium.Components.WorldLocation>()
+                            && !c.Has<Dying>() && !c.Has<Corpse>() && !c.Has<Downed>())
+                .ToList();
+            if (characters.Count < 2)
+                return;
+
+            var now = DateTime.UtcNow;
+            var events = new List<Aetherium.Server.Eca.EcaEventContext>();
+
+            foreach (var recognizer in characters)
+            {
+                var profile = recognizer.Has<Aetherium.Components.RecognitionProfile>()
+                    ? recognizer.Get<Aetherium.Components.RecognitionProfile>()
+                    : null;
+                // A character can opt out of being a recognizer without disabling the whole world.
+                if (profile?.EnabledOverride == false)
+                    continue;
+
+                var range = profile?.RangeTilesOverride ?? policy.RangeTiles;
+                var recLoc = recognizer.Get<Aetherium.Components.WorldLocation>();
+                var recCoord = Aetherium.Topology.GridCoord.From(recLoc);
+                var recKind = ResolveKind(recognizer);
+
+                Aetherium.Components.IndividualRecognition rec;
+                if (recognizer.Has<Aetherium.Components.IndividualRecognition>())
+                    rec = recognizer.Get<Aetherium.Components.IndividualRecognition>();
+                else
+                {
+                    rec = new Aetherium.Components.IndividualRecognition();
+                    recognizer.Set(rec);
+                }
+
+                foreach (var target in characters)
+                {
+                    if (target.EntityId == recognizer.EntityId)
+                        continue;
+                    var tgtLoc = target.Get<Aetherium.Components.WorldLocation>();
+                    if (tgtLoc.Z != recLoc.Z)
+                        continue; // same z-level only this slice
+
+                    var distance = _world.Topology.Distance(recCoord, Aetherium.Topology.GridCoord.From(tgtLoc));
+                    if (distance > range)
+                        continue;
+
+                    var tgtKind = ResolveKind(target);
+                    var obs = rec.Observe(target.EntityId, tgtKind, now, policy);
+
+                    var acuity = profile != null
+                        ? profile.AcuityFor(recKind, tgtKind, policy)
+                        : policy.AcuityFor(recKind, tgtKind);
+
+                    if (policy.Recognizes(acuity, obs.EffectiveFamiliarity) && obs.NewEncounter)
+                    {
+                        events.Add(new Aetherium.Server.Eca.EcaEventContext
+                        {
+                            TriggerKind = Aetherium.Server.Eca.CharacterRecognizedTrigger.Id,
+                            RecognizerEntityId = recognizer.EntityId,
+                            RecognizerKind = recKind,
+                            RecognizedEntityId = target.EntityId,
+                            RecognizedKind = tgtKind,
+                            Familiarity = obs.EffectiveFamiliarity,
+                            FirstMeeting = obs.FirstMeeting,
+                            EventX = recLoc.X,
+                            EventY = recLoc.Y,
+                            EventZ = recLoc.Z,
+                        });
+                    }
+                }
+            }
+
+            // Dispatch through the rule runtime (mirrors RunCreatureDiedRulesAsync). Familiarity state
+            // above is updated regardless; this only executes rules for recognized new encounters.
+            if (_ecaRuntime is not null)
+            {
+                foreach (var evt in events)
+                    foreach (var request in _ecaRuntime.Evaluate(evt))
+                        await ExecuteEcaRequestAsync(request);
+            }
         }
 
         private static WorldGenerationTemplate ResolveTemplate(string generatorType)
@@ -1044,6 +1194,11 @@ namespace Aetherium.Server.MultiWorld
             // Monster entity so co-located players actually see monsters move.
             _tickCounter++;
             await StepNpcsAsync();
+
+            // Individual recognition (add-identity-recognition): after positions settle, sweep the
+            // canonical world for characters within recognition range and raise character_recognized
+            // rules. No-op when the world's RecognitionPolicy is disabled (the default).
+            await RunRecognitionSweepAsync();
 
             // Death lifecycle bookkeeping (engine gap-analysis §4.2/§4.11): advance every Dying
             // entity's countdown to Corpse, then age/expire corpses per DeathPolicy. Both are
@@ -2149,9 +2304,9 @@ namespace Aetherium.Server.MultiWorld
                     : victim.GetType().Name.ToLowerInvariant(),
                 VictimEntityId = victim.EntityId,
                 KillerEntityId = killer.EntityId,
-                VictimX = x,
-                VictimY = y,
-                VictimZ = z,
+                EventX = x,
+                EventY = y,
+                EventZ = z,
             };
 
             foreach (var request in _ecaRuntime.Evaluate(ctx))
