@@ -83,18 +83,32 @@ namespace Aetherium.WorldBuilders
                 world.TryRemoveEntity(id);
 
             // Overlay snapshot entities with their captured IDs and component state.
+            // Track drops loudly: an entity in the snapshot that fails to hydrate becomes a
+            // permanent GHOST in this mirror — present and lethal in the canonical world,
+            // invisible here, and unhealable because ApplyEntityMoved skips deltas for
+            // unknown entity ids (observed live as damage from empty floor).
             var factory = new EntityFactory(world);
+            var created = 0;
+            var dropped = new List<string>();
             foreach (var placement in _snapshot.Entities)
             {
                 var entity = factory.Create(placement);
                 if (entity is null)
+                {
+                    dropped.Add($"{placement.TypeName}#{placement.EntityId}");
                     continue;
+                }
 
                 // The factory has already overridden the EntityId and set the location.
                 // AddEntity will throw if the ID is somehow already taken — which would
                 // be a real bug (duplicate IDs in snapshot) and we want it loud.
                 world.AddEntity(entity);
+                created++;
             }
+
+            System.Console.WriteLine(
+                $"[SnapshotWorldBuilder] hydrated {created}/{_snapshot.Entities.Count} snapshot entities" +
+                (dropped.Count > 0 ? $"; DROPPED {dropped.Count}: {string.Join(", ", dropped.Take(8))}" : string.Empty));
 
             World = world;
             return world;

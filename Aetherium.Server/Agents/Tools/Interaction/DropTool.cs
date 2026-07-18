@@ -44,22 +44,23 @@ namespace Aetherium.Server.Agents.Tools.Interaction
             if (string.IsNullOrWhiteSpace(entityId))
                 return ToolExecutionResult.Error("Item entity ID cannot be empty");
             
-            // Use management grain if available (for agent execution)
-            if (context.ManagementGrain != null)
-            {
-                var result = await context.ManagementGrain.DropAsync(context.SessionId, entityId);
-                return result.Success 
-                    ? ToolExecutionResult.Ok($"Dropped {entityId}")
-                    : ToolExecutionResult.Error(result.Message);
-            }
-            
-            // Route through the gateway (phase 2a: local; phase 2b+c: grain-routed).
+            // Gateway FIRST — for a grain-bound session this mutates canonical state; the
+            // management-grain path mutates the session-local mirror only (see MoveTool).
             if (context.MutationGateway != null)
             {
                 var result = await context.MutationGateway.DropAsync(entityId);
                 return result.Success
                     ? ToolExecutionResult.Ok($"Dropped {entityId}")
                     : ToolExecutionResult.Error(result.Reason);
+            }
+
+            // Fallback: agent runners operating through IGameManagementGrain without a session.
+            if (context.ManagementGrain != null)
+            {
+                var result = await context.ManagementGrain.DropAsync(context.SessionId, entityId);
+                return result.Success
+                    ? ToolExecutionResult.Ok($"Dropped {entityId}")
+                    : ToolExecutionResult.Error(result.Message);
             }
 
             return ToolExecutionResult.Error("No execution context available");

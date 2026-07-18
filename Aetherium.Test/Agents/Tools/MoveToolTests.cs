@@ -111,6 +111,39 @@ namespace Aetherium.Test.Agents.Tools
         }
 
         [Test]
+        public async Task ExecuteAsync_PrefersGateway_OverManagementGrain()
+        {
+            // THE canonical-body regression (live: "continuous damage with no monster in
+            // sight, then death"). The hub sets BOTH a grain-routed MutationGateway and a
+            // ManagementGrain on the context; checking the management grain first routed
+            // every player move through session.MoveView — session-local — so the player's
+            // canonical body never left spawn while monsters converged on and killed it.
+            // The gateway must win whenever it is present.
+            var gateway = new Moq.Mock<Aetherium.Server.MultiWorld.IMapMutationGateway>();
+            gateway.Setup(g => g.MoveAsync(Aetherium.Model.RelativeDirection.Forward, 1))
+                .Returns(Task.FromResult(Aetherium.Server.MultiWorld.MoveResult.Ok()));
+            var managementGrain = new Moq.Mock<Aetherium.Server.Management.IGameManagementGrain>(Moq.MockBehavior.Strict);
+
+            var context = new ToolExecutionContext
+            {
+                SessionId = "s1",
+                MutationGateway = gateway.Object,
+                ManagementGrain = managementGrain.Object,
+                GrantedCapabilities = new HashSet<string> { "basic_movement" },
+            };
+
+            var result = await _tool.ExecuteAsync(context, new Dictionary<string, object>
+            {
+                ["direction"] = "forward",
+                ["distance"] = 1,
+            });
+
+            Assert.That(result.Success, Is.True, result.Message);
+            gateway.Verify(g => g.MoveAsync(Aetherium.Model.RelativeDirection.Forward, 1), Moq.Times.Once);
+            managementGrain.VerifyNoOtherCalls(); // strict: any management-grain call fails the test
+        }
+
+        [Test]
         public async Task ExecuteAsync_ShouldHandleInvalidDirection()
         {
             var worldBuilder = new TorusWorldBuilder();
