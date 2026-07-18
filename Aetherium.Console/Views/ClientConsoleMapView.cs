@@ -136,6 +136,37 @@ namespace Aetherium.Views
             return result;
         }
 
+        /// <summary>
+        /// The altitude gauge for a flying player (Section 5.3): one rung per band from `MaxBand` (top)
+        /// down to `MinBand`, flagging the band the player currently occupies. Empty when the perceiver has
+        /// no flight envelope (they are not flying/piloting). Pure — safe to unit test.
+        /// </summary>
+        public List<(int band, bool isCurrent)> BuildAltitudeGauge()
+        {
+            var rungs = new List<(int band, bool isCurrent)>();
+            var env = Perception?.FlightEnvelope;
+            if (env == null)
+                return rungs;
+
+            int min = Math.Min(env.MinBand, env.MaxBand);
+            int max = Math.Max(env.MinBand, env.MaxBand);
+            for (int b = max; b >= min; b--)
+                rungs.Add((b, b == env.CurrentBand));
+            return rungs;
+        }
+
+        /// <summary>
+        /// The altitude gauge rendered as text rungs (top band first), current band marked with '&gt;', others
+        /// with a '|' rail — e.g. "|+5", "&gt;+4", "| 0". Empty when not flying. Pure — no Console writes.
+        /// </summary>
+        public List<string> RenderAltitudeGaugeLines()
+        {
+            var lines = new List<string>();
+            foreach (var (band, isCurrent) in BuildAltitudeGauge())
+                lines.Add((isCurrent ? ">" : "|") + FormatBand(band).PadLeft(3));
+            return lines;
+        }
+
         private ConsoleColor? GridColorAt(int relativeX, int relativeY)
         {
             if (GridColoring == null) return null;
@@ -196,6 +227,35 @@ namespace Aetherium.Views
         }
 
         private static string FormatBand(int dz) => (dz > 0 ? "+" : "") + dz.ToString();
+
+        /// <summary>
+        /// Draws the altitude gauge (Section 5.3) as a vertical ladder just right of the level ribbon, shown
+        /// only while the player is flying/piloting. The current band rung is highlighted. Best-effort HUD —
+        /// skipped silently if the console is too narrow.
+        /// </summary>
+        private void DrawAltitudeGauge(Point screenPosition, Size size)
+        {
+            var rungs = BuildAltitudeGauge();
+            if (rungs.Count == 0) return;
+
+            int col = screenPosition.X + size.Width + 6; // clear of the 4-wide level ribbon
+            try
+            {
+                for (int i = 0; i < rungs.Count && i < size.Height; i++)
+                {
+                    var (band, isCurrent) = rungs[i];
+                    Console.SetCursorPosition(col, screenPosition.Y + i);
+                    Console.BackgroundColor = BackgroundColor;
+                    Console.ForegroundColor = isCurrent ? ConsoleColor.Cyan : ConsoleColor.DarkGray;
+                    Console.Write((isCurrent ? ">" : "|") + FormatBand(band).PadLeft(3));
+                }
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Console too narrow for the gauge; the HUD is best-effort, so skip it.
+            }
+            Console.ForegroundColor = ConsoleColor.Gray;
+        }
 
         // --- Cross-section / elevation view (Section 4) ---
 
@@ -474,6 +534,7 @@ namespace Aetherium.Views
             }
 
             DrawLevelRibbon(screenPosition, size);
+            DrawAltitudeGauge(screenPosition, size);
 
             Console.BackgroundColor = BackgroundColor;
             Console.ForegroundColor = ConsoleColor.Cyan;
