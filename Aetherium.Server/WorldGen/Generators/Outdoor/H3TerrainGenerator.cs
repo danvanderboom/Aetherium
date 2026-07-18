@@ -66,6 +66,17 @@ namespace Aetherium.WorldGen.Generators.Outdoor
             world.AddTileTypes(tileTypes);
             world.AddTerrainTypes(_palette.CreateTerrainTypes(tileTypes));
 
+            // Vertical extent + perception slab (z-altitude). Defaults keep the surface single-Z; a bundle
+            // opts into subway bands below (minBand), orbit room above (maxBand), and how far up/down
+            // perception reaches (slab depth) so a surface player glimpses a tunnel mouth or a flyer above.
+            world.MinBand = context.GetIntParam("minBand", world.MinBand, -256, 0);
+            world.MaxBand = context.GetIntParam("maxBand", world.MaxBand, 1, 4096);
+            world.SlabDepthBelow = context.GetIntParam("slabDepthBelow", world.SlabDepthBelow, 0, 64);
+            world.SlabDepthAbove = context.GetIntParam("slabDepthAbove", world.SlabDepthAbove, 0, 64);
+            world.BandLabels[-2] = "subway";
+            world.BandLabels[0] = "surface";
+            world.BandLabels[3] = "skyway";
+
             // Resolution 4 ≈ 288k cells. Capped at 6 (~12M cells) so a mis-set parameter can't try to
             // allocate a hundred million tile entities; raise deliberately if a game needs finer.
             int resolution = context.GetIntParam("h3Resolution", 4, min: 0, max: 6);

@@ -43,6 +43,16 @@ world:
     # topology-agnostic. Raise deliberately — every roamer fans out a move delta each tick.
     enemyCount: 12
 
+    # --- Z-altitude (docs/design/h3-sphere-worldgen.md P4.5) ---
+    # The planet models bands below the surface (subway/transit) and a tall column of sky above (room
+    # for many orbital bands of satellites). The perception slab reaches a couple of bands each way, so
+    # a surface player glimpses a tunnel mouth underfoot or a low flyer overhead; orbit sits far above
+    # the slab and is only detectable with a tuned radio (a separate perception channel).
+    minBand: -3
+    maxBand: 64
+    slabDepthBelow: 2
+    slabDepthAbove: 3
+
     # --- Sphere-native features (docs/design/h3-sphere-worldgen.md §7) ---
     # Rivers: steepest-descent channels, carved as Water, widening toward the mouth so wide vehicles
     # pass each other several lanes abreast near the coast. mouthWidth is a gridDisk half-width.

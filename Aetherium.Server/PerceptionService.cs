@@ -598,6 +598,9 @@ Light sources found:
                 Topology = topo.Name,
                 SelfCellParity = null, // parity is a triangle-only bit
                 Interoception = self is null ? null : BuildInteroception(self),
+                // The altitude gauge needs the perceiver's true band (relative perception reports them at
+                // Z 0). Null for non-flyers, exactly as the planar path.
+                FlightEnvelope = BuildFlightEnvelope(self, playerLocation),
                 CurrentLightingMode = lightingMode,
                 CurrentVisionMode = visionMode,
                 GameTimeOfDay = worldClock?.GetTimeOfDay() ?? currentTime.TimeOfDay.TotalHours,
@@ -622,6 +625,10 @@ Light sources found:
                 directionalVision ? fovDegrees : null,
                 lightingMode, currentTime.TimeOfDay.TotalHours);
 
+            // Surface cells that resolved to a stable local frame, kept so the vertical slab can extend
+            // each column up/down without recomputing the relative coordinate.
+            var surfaceCells = new List<(int X, int Y, int RelX, int RelY)>();
+
             // Each visible cell's key is perceiver-anchored local i/j (player at 0,0). A cell with no
             // stable local frame (a pentagon at extreme range) returns null and is omitted.
             foreach (var (cell, lightLevel) in visible)
@@ -632,6 +639,7 @@ Light sources found:
                 var (relX, relY) = rel.Value;
                 int relZ = cell.Z - playerCell.Z;
                 var loc = new WorldLocation(cell.X, cell.Y, cell.Z);
+                surfaceCells.Add((cell.X, cell.Y, relX, relY));
 
                 var terrainType = world.GetTerrainType(loc);
                 bool hasEntities = world.EntitiesByLocation.TryGetValue(loc, out var atLoc);
@@ -665,6 +673,14 @@ Light sources found:
                 visualDto.Location = new WorldLocationDto(relX, relY, relZ);
                 perception.Visuals[$"{relX},{relY},{relZ}"] = visualDto;
             }
+
+            // Vertical slab (docs/design/adaptive-depth-visualization.md, sphere port): when the world opts
+            // into a slab, extend every visible column up and down through the bands that are vertically
+            // visible — a subway tunnel underfoot, a bridge or low drone overhead — with correct relative Z.
+            // Reuses the exact planar Z-column machinery (EffectiveSlabDepth + FovCalculator's vertical LOS),
+            // which is topology-agnostic in X/Y. Default slab depth 0 keeps H3 single-Z (unchanged).
+            AddH3VerticalSlab(world, perception, surfaceCells, playerCell.Z, playerLocation,
+                lightingMode, visibleItems, visibleCharacters);
 
             perception.VisibleItems = visibleItems;
             perception.VisibleCharacters = visibleCharacters;
@@ -737,6 +753,73 @@ Light sources found:
             if (PerfLog)
                 RecordPerf(System.Diagnostics.Stopwatch.GetElapsedTime(perfStart).TotalMilliseconds);
             return perception;
+        }
+
+        /// <summary>
+        /// Extends the H3 surface disk vertically. For each visible column, the bands within the slab that
+        /// are vertically visible (marching up/down to the first opaque band) get their content cells
+        /// emitted with relative Z, and any characters/items there ride along in the visible lists. Off-focus
+        /// bands get a coarse depth-dimmed light, mirroring the planar <c>AddCoarseSlabLighting</c>. Reuses
+        /// <see cref="FovCalculator.VerticalVisibleBands"/> and <see cref="World.EffectiveSlabDepth"/>, both of
+        /// which key on (x, y, band) and so are topology-agnostic in the horizontal plane. No-op when the
+        /// world's slab depth is 0 (the default), keeping H3 single-Z unless a world opts in.
+        /// </summary>
+        private void AddH3VerticalSlab(
+            World world, PerceptionDto perception,
+            List<(int X, int Y, int RelX, int RelY)> surfaceCells, int originZ, WorldLocation playerLocation,
+            LightingMode lightingMode, List<ItemDto> visibleItems, List<CharacterDto> visibleCharacters)
+        {
+            var (below, above) = world.EffectiveSlabDepth(playerLocation.X, playerLocation.Y, originZ);
+            if (below <= 0 && above <= 0)
+                return;
+
+            var fov = new Aetherium.Systems.FovCalculator();
+            double baseLight = lightingMode switch
+            {
+                LightingMode.Sunlight => 1.0,
+                LightingMode.Ambient => 0.6,
+                _ => 0.3,
+            };
+
+            foreach (var (x, y, relX, relY) in surfaceCells)
+            {
+                foreach (var band in fov.VerticalVisibleBands(world, x, y, originZ, below, above))
+                {
+                    var vloc = new WorldLocation(x, y, band);
+                    var terrainType = world.GetTerrainType(vloc);
+                    bool hasEntities = world.EntitiesByLocation.TryGetValue(vloc, out var atLoc);
+                    bool nonTerrain = hasEntities && atLoc!.Values.Any(e => !(e is Aetherium.Entities.Terrain));
+                    if (terrainType == null && !nonTerrain)
+                        continue; // empty air between content — a silhouette gap, not a black tile
+
+                    int relZ = band - originZ;
+                    double light = baseLight / (1.0 + 0.5 * Math.Abs(relZ)); // coarse depth dimming
+
+                    if (hasEntities)
+                    {
+                        foreach (var entity in atLoc!.Values)
+                        {
+                            if (entity is Aetherium.Character ch)
+                            {
+                                var charDto = ch.ToCharacterDto();
+                                charDto.Location = new WorldLocationDto(relX, relY, relZ);
+                                visibleCharacters.Add(charDto);
+                            }
+                            else if (!(entity is Aetherium.Entities.Terrain) && entity.AllComponents.OfType<Carriable>().Any())
+                            {
+                                var itemDto = entity.ToDto();
+                                itemDto.Location = new WorldLocationDto(relX, relY, relZ);
+                                visibleItems.Add(itemDto);
+                            }
+                        }
+                    }
+
+                    var visual = new Visual(vloc, terrainType?.TileType);
+                    var visualDto = visual.ToDto(light);
+                    visualDto.Location = new WorldLocationDto(relX, relY, relZ);
+                    perception.Visuals[$"{relX},{relY},{relZ}"] = visualDto;
+                }
+            }
         }
 
         private string GetRegionIdForLocation(WorldLocation location)

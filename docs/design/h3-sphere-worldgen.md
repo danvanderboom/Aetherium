@@ -252,10 +252,16 @@ already exists:
   services spanning the continents, stations, scheduled and hailed transport — logistics as gameplay at
   planetary scale. Subways run a negative band, satellites the high bands; grade separation is the
   z-altitude work below.
-- **P4.5 — Satellites + full z-altitude on the sphere.** The H3 perception path is single-Z today; the
-  vertical slab (below) lifts that so orbits overhead and subway tunnels underfoot are perceivable.
-  Satellites orbit high bands (H3 rings, never colliding), detectable only through a tuned radio — an
-  extra channel of perception granted by an item.
+- **P4.5 — Full z-altitude on the sphere. ✅ BUILT (vertical slab + envelope); satellites/radio next.**
+  `ComputeH3Perception` now emits a **vertical slab**: for each visible column it marches the bands within
+  `EffectiveSlabDepth` that are vertically visible (`FovCalculator.VerticalVisibleBands`, which stops at the
+  first opaque band) and emits their content with correct relative Z — a subway tunnel underfoot, a bridge
+  or drone overhead — and the **flight envelope** (true band) surfaces for the altitude gauge. Reuses the
+  planar Z-column machinery unchanged (it keys on `(x,y,band)`, topology-agnostic in the horizontal plane).
+  The H3 generator sets `MinBand`/`MaxBand`/slab from bundle params; aphelion-h3 opens a subway band below
+  and a tall sky above. **Next:** satellites orbiting high bands (H3 rings, distinct bands so they never
+  collide), above the normal slab and detectable only through a tuned radio — an extra channel of
+  perception granted by an item — plus the client orbit marker.
 - **P5 — Climate & biome expansion.** Latitude-banded climate (Hadley-cell deserts, polar ice caps,
   tropical belts) using the latitude the sphere makes meaningful — needs new terrain types (ice/tundra)
   and client theming. Optionally hierarchical resolutions (survey from orbit at a coarse resolution,
