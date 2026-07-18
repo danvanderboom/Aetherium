@@ -13,11 +13,12 @@ namespace Aetherium.Unity
     /// <para><b>Creature memory (ghosts):</b> a creature that leaves view (you turned away,
     /// it stepped past your lamp) does not blink out — the mind keeps a last-seen impression.
     /// Unlike terrain memory, a memory of a MOVING thing decays: the model lingers in place,
-    /// dimming, while a circular pool of floor tiles glowing the creature's color spreads
-    /// outward around it (~1 cell of radius per second) — the growing pool IS the positional
-    /// uncertainty, "by now it could be anywhere in here". After a few seconds both dim to
-    /// nothing and disperse. Looking back at the spot and seeing it empty collapses the ghost
-    /// immediately: observation beats memory. A default a game can replace wholesale.</para>
+    /// dimming, while a translucent circle of the creature's color — starting at the
+    /// creature's own footprint — expands smoothly outward on the floor (~1 cell of radius
+    /// per second). The growing circle IS the positional uncertainty, "by now it could be
+    /// anywhere in here". After a few seconds both dim to nothing and disperse. Looking back
+    /// at the spot and seeing it empty collapses the ghost immediately: observation beats
+    /// memory. A default a game can replace wholesale.</para>
     /// </summary>
     [RequireComponent(typeof(AetheriumClientBehaviour))]
     public sealed class EntityViewRegistry : MonoBehaviour
@@ -36,12 +37,15 @@ namespace Aetherium.Unity
         [Tooltip("Seconds a last-seen creature impression lingers before dispersing entirely. " +
                  "Tune live in Play mode to taste — 4-6s are all reasonable reads.")]
         [SerializeField] private float ghostSeconds = 5f;
-        [Tooltip("How fast the uncertainty glow pool spreads outward, in cells of radius per " +
-                 "second — roughly how far the creature could have wandered by now.")]
+        [Tooltip("How fast the uncertainty circle expands, in cells of radius per second — " +
+                 "roughly how far the creature could have wandered by now.")]
         [SerializeField] private float ghostSpreadCellsPerSecond = 1f;
+        [Tooltip("Starting diameter of the uncertainty circle, in cells — about the " +
+                 "creature's own footprint.")]
+        [SerializeField] private float ghostGlowStartCells = 0.8f;
         [Range(0f, 1f)]
-        [Tooltip("Peak opacity of the glowing uncertainty tiles (they dim in lockstep with " +
-                 "the fading model).")]
+        [Tooltip("Peak opacity of the uncertainty circle (it dims in lockstep with the " +
+                 "fading model).")]
         [SerializeField] private float ghostGlowOpacity = 0.45f;
         [Tooltip("Seconds for a DISPROVEN ghost to collapse (you looked at the spot and it's " +
                  "empty). Short: observation beats memory.")]
@@ -64,17 +68,16 @@ namespace Aetherium.Unity
         {
             public GameObject GameObject;       // the dimming last-seen model, in place
             public GridPoint Cell;              // last-seen client-space cell (for disproof)
-            public float SpawnTime;             // fixed at creation; drives the glow spread
+            public float SpawnTime;             // fixed at creation; drives the circle's growth
             public float StartTime;             // re-based on collapse; drives the fade
             public float Duration;              // remaining fade window (shrinks on collapse)
             public float StartFraction;         // fade progress when (re)based, for collapse
-            public bool Collapsing;             // disproven: fade fast, stop spreading
+            public bool Collapsing;             // disproven: fade fast, stop expanding
             public List<(Material Material, Color BaseColor)> BaseColors;
-            public Color GlowColor;             // the creature's color, for the tile pool
-            public Material GlowMaterial;       // one shared material tints all this ghost's tiles
-            public List<GameObject> GlowTiles = new List<GameObject>();
-            public HashSet<GridPoint> GlowCells = new HashSet<GridPoint>();
-            public int SpreadRadius;            // cells of glow currently materialized
+            public Color GlowColor;             // the creature's color, for the circle
+            public Material GlowMaterial;       // the circle's tint (one color set per frame)
+            public GameObject GlowDisc;         // the expanding uncertainty circle
+            public float RadiusCells;           // current circle radius (frozen on collapse)
         }
 
         private void Awake()
@@ -152,7 +155,7 @@ namespace Aetherium.Unity
         }
 
         /// <summary>Repurpose the live view as a last-seen impression: the model stays put and
-        /// dims while a pool of tiles glowing the creature's color spreads around it.</summary>
+        /// dims while a translucent circle of the creature's color expands around it.</summary>
         private void BecomeGhost(TrackedEntity entity, GameObject instance)
         {
             DestroyGhost(entity.Id); // paranoia: never two ghosts for one id
@@ -165,6 +168,7 @@ namespace Aetherium.Unity
                         baseColors.Add((material, material.color));
 
             var glowColor = PickGlowColor(baseColors);
+            var glowMaterial = CreateGlowMaterial(glowColor);
             _ghosts[entity.Id] = new GhostView
             {
                 GameObject = instance,
@@ -175,11 +179,13 @@ namespace Aetherium.Unity
                 StartFraction = 0f,
                 BaseColors = baseColors,
                 GlowColor = glowColor,
-                GlowMaterial = CreateGlowMaterial(glowColor),
+                GlowMaterial = glowMaterial,
+                GlowDisc = CreateGlowDisc(entity.Position, glowMaterial),
+                RadiusCells = ghostGlowStartCells * 0.5f,
             };
         }
 
-        /// <summary>The creature's own color for the glow pool: the most saturated captured
+        /// <summary>The creature's own color for the uncertainty circle: the most saturated captured
         /// base color (the stand-in capsules and tinted models carry identity here). Textured
         /// models often report plain white — no identity — so fall back to a hot ember.</summary>
         private static Color PickGlowColor(List<(Material Material, Color BaseColor)> baseColors)
@@ -198,7 +204,7 @@ namespace Aetherium.Unity
             return best;
         }
 
-        /// <summary>An unlit alpha-blended material for the glow tiles — unlit so the pool
+        /// <summary>An unlit alpha-blended material for the uncertainty circle — unlit so it
         /// reads as emission (memory-glow), not as a lit surface the lamp should affect.</summary>
         private static Material CreateGlowMaterial(Color color)
         {
@@ -220,26 +226,57 @@ namespace Aetherium.Unity
             {
                 material = new Material(Shader.Find("Sprites/Default")); // built-in fallback, alpha-blended
             }
+            material.mainTexture = CircleTexture();
             material.color = color;
             return material;
         }
 
         /// <summary>A flat quad hovering just above the floor slab (whose top sits at the
-        /// cell's y), sharing the ghost's tint material so per-frame dimming is one color set.</summary>
-        private GameObject CreateGlowTile(GridPoint cell, Material glowMaterial)
+        /// cell's y), textured with the crisp circle; Update scales it as uncertainty grows.</summary>
+        private GameObject CreateGlowDisc(GridPoint cell, Material glowMaterial)
         {
-            var tile = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            Destroy(tile.GetComponent<Collider>());
-            tile.name = $"ghost-glow:{cell}";
-            tile.transform.SetParent(transform, false);
-            tile.transform.position = CellToWorld(cell) + new Vector3(0f, 0.02f, 0f);
-            tile.transform.rotation = Quaternion.Euler(90f, 0f, 0f); // face up
-            tile.transform.localScale = new Vector3(cellSize * 0.98f, cellSize * 0.98f, 1f);
-            var renderer = tile.GetComponent<MeshRenderer>();
+            var disc = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Destroy(disc.GetComponent<Collider>());
+            disc.name = $"ghost-glow:{cell}";
+            disc.transform.SetParent(transform, false);
+            disc.transform.position = CellToWorld(cell) + new Vector3(0f, 0.02f, 0f);
+            disc.transform.rotation = Quaternion.Euler(90f, 0f, 0f); // face up
+            var renderer = disc.GetComponent<MeshRenderer>();
             renderer.sharedMaterial = glowMaterial;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
-            return tile;
+            return disc;
+        }
+
+        private static Texture2D _circleTexture;
+
+        /// <summary>A shared runtime-generated circle: solid fill with a thin smoothstepped
+        /// rim, so the disc reads as a crisp circle at any scale (the softness stays ~2% of
+        /// the diameter). Generated once, never destroyed — every ghost's material shares it.</summary>
+        private static Texture2D CircleTexture()
+        {
+            if (_circleTexture != null)
+                return _circleTexture;
+
+            const int size = 256;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
+            {
+                wrapMode = TextureWrapMode.Clamp, // no bleed past the quad's UV edge
+                name = "AetheriumGhostCircle",
+            };
+            var pixels = new Color32[size * size];
+            float half = (size - 1) / 2f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float distance = Mathf.Sqrt((x - half) * (x - half) + (y - half) * (y - half)) / half;
+                    float alpha = 1f - Mathf.SmoothStep(0.96f, 1f, distance);
+                    pixels[y * size + x] = new Color32(255, 255, 255, (byte)(alpha * 255f));
+                }
+            texture.SetPixels32(pixels);
+            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            _circleTexture = texture;
+            return texture;
         }
 
         /// <summary>Observation beats memory: a ghost whose cell is currently IN VIEW — and
@@ -299,8 +336,7 @@ namespace Aetherium.Unity
         private static void DestroyGhostObjects(GhostView ghost)
         {
             Destroy(ghost.GameObject);
-            foreach (var tile in ghost.GlowTiles)
-                Destroy(tile);
+            Destroy(ghost.GlowDisc);
             Destroy(ghost.GlowMaterial); // runtime-created; Unity never collects these itself
         }
 
@@ -333,7 +369,6 @@ namespace Aetherium.Unity
                 return;
 
             List<string> expired = null;
-            HashSet<GridPoint> wallCells = null; // built lazily, shared by every ghost this frame
             foreach (var (id, ghost) in _ghosts)
             {
                 float fraction = GhostFraction(ghost);
@@ -343,7 +378,7 @@ namespace Aetherium.Unity
                     continue;
                 }
 
-                // Dim model and glow pool in lockstep: brightest the instant it vanished,
+                // Dim model and circle in lockstep: brightest the instant it vanished,
                 // gone entirely at the end of the window.
                 float brightness = 1f - fraction;
                 foreach (var (material, baseColor) in ghost.BaseColors)
@@ -352,57 +387,19 @@ namespace Aetherium.Unity
                 var glow = ghost.GlowColor;
                 ghost.GlowMaterial.color = new Color(glow.r, glow.g, glow.b, brightness * ghostGlowOpacity);
 
-                // Spread: the pool gains ~a cell of radius per second (tunable) — the region
-                // the creature could plausibly have reached since you last saw it.
-                int radius = Mathf.FloorToInt((Time.time - ghost.SpawnTime) * ghostSpreadCellsPerSecond);
-                if (!ghost.Collapsing && radius > ghost.SpreadRadius)
-                {
-                    wallCells ??= CollectRememberedWallCells();
-                    GrowGlowPool(ghost, radius, wallCells);
-                }
+                // Expand smoothly: the circle gains ~a cell of radius per second (tunable) —
+                // the region the creature could plausibly have reached since you saw it.
+                // A disproven ghost stops growing (there's nothing left to be uncertain about).
+                if (!ghost.Collapsing)
+                    ghost.RadiusCells = ghostGlowStartCells * 0.5f
+                        + (Time.time - ghost.SpawnTime) * ghostSpreadCellsPerSecond;
+                float diameter = ghost.RadiusCells * 2f * cellSize;
+                ghost.GlowDisc.transform.localScale = new Vector3(diameter, diameter, 1f);
             }
 
             if (expired != null)
                 foreach (var id in expired)
                     DestroyGhost(id);
-        }
-
-        /// <summary>Materialize the glow disc out to <paramref name="radius"/>: every cell
-        /// within a circular (Euclidean) radius, minus the center (the model stands there)
-        /// and minus known walls — the creature can't be inside a wall, and glow on top of
-        /// wall blocks would read as bleed-through.</summary>
-        private void GrowGlowPool(GhostView ghost, int radius, HashSet<GridPoint> wallCells)
-        {
-            for (int dx = -radius; dx <= radius; dx++)
-                for (int dy = -radius; dy <= radius; dy++)
-                {
-                    if (dx == 0 && dy == 0)
-                        continue;
-                    // +0.45 rounds the disc: radius 1 covers all 8 neighbors, radius 2
-                    // takes knight-distance cells but not the far corners — reads circular.
-                    if (Mathf.Sqrt(dx * dx + dy * dy) > radius + 0.45f)
-                        continue;
-                    var cell = new GridPoint(ghost.Cell.X + dx, ghost.Cell.Y + dy, ghost.Cell.Z);
-                    if (!ghost.GlowCells.Add(cell) || wallCells.Contains(cell))
-                        continue;
-                    ghost.GlowTiles.Add(CreateGlowTile(cell, ghost.GlowMaterial));
-                }
-            ghost.SpreadRadius = radius;
-        }
-
-        private HashSet<GridPoint> CollectRememberedWallCells()
-        {
-            var walls = new HashSet<GridPoint>();
-            var store = _client.Store;
-            if (store == null)
-                return walls;
-            foreach (var remembered in store.Memory)
-            {
-                var name = remembered.Terrain != null ? remembered.Terrain.Name : null;
-                if (name != null && name.IndexOf("wall", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    walls.Add(remembered.Position);
-            }
-            return walls;
         }
 
         /// <summary>
