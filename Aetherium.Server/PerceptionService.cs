@@ -289,7 +289,11 @@ Light sources found:
                 // populated only when the caller supplied the perceiving entity. Self-only —
                 // it reads this entity's components and nothing else.
                 Interoception = self is null ? null : BuildInteroception(self),
-                
+
+                // Flight envelope (add-adaptive-depth-visualization 5.3): the perceiver's band range +
+                // current band, populated only when they carry a Flight component. Drives the altitude gauge.
+                FlightEnvelope = BuildFlightEnvelope(self, playerLocation),
+
                 // Add mode information
                 CurrentLightingMode = lightingMode,
                 CurrentVisionMode = visionMode,
@@ -532,6 +536,26 @@ Light sources found:
             var regionX = location.X / 64;
             var regionY = location.Y / 64;
             return $"region:{regionX},{regionY},{location.Z}";
+        }
+
+        /// <summary>
+        /// Projects the perceiver's Flight component into the altitude-gauge envelope, or null when
+        /// they have no Flight (non-flyers get no gauge). CurrentBand is the real Z, surfaced here
+        /// because relative-coordinate perception reports the player at Z 0. Reads ONLY <paramref name="self"/>.
+        /// </summary>
+        private static FlightEnvelopeDto? BuildFlightEnvelope(Entity? self, WorldLocation playerLocation)
+        {
+            if (self is null || !self.Has<Flight>())
+                return null;
+
+            var flight = self.Get<Flight>();
+            return new FlightEnvelopeDto
+            {
+                MinBand = flight.MinBand,
+                MaxBand = flight.MaxBand,
+                CurrentBand = playerLocation.Z,
+                State = flight.State.ToString(),
+            };
         }
 
         /// <summary>

@@ -45,3 +45,14 @@ When adaptive slab depth is enabled for a world, the server SHALL bound the emit
 #### Scenario: Never exceeds the configured budget
 - **WHEN** adaptive slab depth is enabled and content exists beyond the configured `depthBelow`/`depthAbove` budget (or the depth cap)
 - **THEN** the server SHALL NOT expand the evaluated range past that budget (or cap)
+
+### Requirement: Flight Envelope in Perception
+When the perceiving entity has a Flight component, the server SHALL surface its altitude envelope on the perception — the min/max bands, the current band (as an absolute Z, since relative perception reports the player at Z 0), and the flight state — as an additive, non-breaking field that is absent for non-flyers.
+
+#### Scenario: Envelope present for a flyer
+- **WHEN** perception is computed for a perceiver that has a Flight component with bands `[MinBand, MaxBand]` and is at band `z`
+- **THEN** the perception SHALL include a flight envelope reporting `MinBand`, `MaxBand`, current band `z`, and the flight state
+
+#### Scenario: Envelope absent for a non-flyer
+- **WHEN** the perceiver has no Flight component (or no perceiving entity is supplied)
+- **THEN** the perception SHALL omit the flight envelope (null), leaving the DTO otherwise unchanged
