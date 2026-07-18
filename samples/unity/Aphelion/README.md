@@ -55,6 +55,14 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
    vent-lurker, overseer-node), each falling back to a distinct-colored capsule if a model
    has not imported. Remembered-but-out-of-view cells dim; anything without a binding
    renders as a bright magenta capsule (loud beats invisible).
+
+   **Creature memory:** a creature that leaves your view (you turned away, or it slipped
+   past the lamp) lingers as a darkening, slowly swelling ghost — the swell is positional
+   uncertainty ("it could have moved by now") — then disperses. Looking back at the spot
+   and finding it empty collapses the ghost instantly: observation beats memory. Tune
+   `ghostSeconds` / `ghostExpansionCells` on the EntityViewRegistry component live in Play
+   mode to taste. Vision is directional (a 120° forward arc from `game.yaml`
+   `player.vision`), so minding your back — and remembering what was behind you — matters.
 5. **To play the `aphelion` bundle** instead of the default world, create an instance and
    paste its world id into the `AetheriumClientBehaviour` inspector field:
    ```powershell
