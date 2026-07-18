@@ -152,9 +152,12 @@ namespace Overworld.EditorTools
             }
         }
 
-        // A thin floor slab whose TOP sits at the cell's y=0 (the walkable plane).
+        // A thin floor slab whose TOP sits at the cell's y=0 (the walkable plane). Full 1.0 cell
+        // footprint so ground tiles meet edge-to-edge with no seam — the earlier 0.99 left a 0.01
+        // gap that read as a dark grid over the field. (Full-height BLOCKS stay slightly inset, see
+        // BlockPrefab: two adjacent walls at a shared 1.0 face would z-fight.)
         private static GameObject SlabPrefab(string name, Color color, float height, bool transparent) =>
-            SavePrefab(name, PrimitiveType.Cube, color, new Vector3(0.99f, height, 0.99f), -height / 2f, transparent);
+            SavePrefab(name, PrimitiveType.Cube, color, new Vector3(1f, height, 1f), -height / 2f, transparent);
 
         // A full-height occluder whose BASE sits at y=0.
         private static GameObject BlockPrefab(string name, Color color, float height, bool transparent) =>

@@ -157,7 +157,19 @@ namespace Aetherium.Unity
             var baseColors = new Color[renderers.Length];
             for (int i = 0; i < renderers.Length; i++)
             {
-                var shared = renderers[i].sharedMaterial;
+                var renderer = renderers[i];
+
+                // Terrain cells never cast shadows. A ground map is thousands of near-coplanar
+                // slabs; letting them cast into the directional shadow map makes them self-shadow
+                // (shadow acne) and the cascade "swims" as the camera moves — the flickering
+                // horizontal dark bands that sweep the field while walking. The world's actual
+                // lighting is the server's per-cell brightness (applied below via the property
+                // block), so the Unity shadow map is a redundant second lighting layer here; drop
+                // the casters and the bands go with them. Entities (player/creatures) keep their
+                // shadows — those come from EntityViewRegistry, not this view.
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+                var shared = renderer.sharedMaterial;
                 if (shared != null)
                 {
                     shared.enableInstancing = true;
