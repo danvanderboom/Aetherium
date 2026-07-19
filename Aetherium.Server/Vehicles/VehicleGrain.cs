@@ -269,6 +269,19 @@ namespace Aetherium.Server.Vehicles
             _state.State.DestAnchorZ = destAnchorZ;
             _state.State.Landed = false;
             _state.State.InTransit = true;
+
+            // Schedule the authored in-transit events at their absolute due times (Phase 4). They fire on
+            // the voyage reminder the grain already drives — no dependency on the global tick driver.
+            _state.State.ScheduledEvents = (_state.State.Config.InTransitEvents ?? new List<VoyageEventDef>())
+                .Select(e => new ScheduledVoyageEvent
+                {
+                    DueUtc = now.AddMinutes(Math.Max(0.0, e.OffsetMinutes)),
+                    EventType = e.EventType ?? string.Empty,
+                    Description = e.Description ?? string.Empty,
+                    Fired = false,
+                })
+                .ToList();
+
             await _state.WriteStateAsync();
 
             await TryArmVoyageReminderAsync();
@@ -281,6 +294,10 @@ namespace Aetherium.Server.Vehicles
             if (!_state.State.InTransit)
                 return;
 
+            // Fire any due in-transit events first, so an event scheduled right at the ETA still fires
+            // (and is broadcast to everyone aboard) before the arrival transition.
+            await FireDueEventsAsync();
+
             if (_state.State.EtaUtc is DateTime eta && DateTime.UtcNow >= eta)
             {
                 await ArriveAsync();
@@ -291,6 +308,38 @@ namespace Aetherium.Server.Vehicles
             if (!string.IsNullOrEmpty(_state.State.InteriorMapId))
                 await _grainFactory.GetGrain<IGameMapGrain>(_state.State.InteriorMapId).TickAsync(TimeSpan.FromMinutes(1));
             await PushVoyageUpdateAsync(arrived: false);
+        }
+
+        /// <summary>Fires every scheduled in-transit event now due, broadcasting each to everyone aboard
+        /// the interior (add-boardable-vehicles Phase 4). Idempotent — an event fires at most once.</summary>
+        private async Task FireDueEventsAsync()
+        {
+            if (_state.State.ScheduledEvents.Count == 0)
+                return;
+
+            var now = DateTime.UtcNow;
+            var due = _state.State.ScheduledEvents.Where(e => !e.Fired && e.DueUtc <= now).ToList();
+            if (due.Count == 0)
+                return;
+
+            var sessionManager = SessionManager;
+            foreach (var ev in due)
+            {
+                ev.Fired = true;
+                if (sessionManager is null || _state.State.Passengers.Count == 0)
+                    continue;
+
+                var payload = new Dictionary<string, object?>
+                {
+                    ["vehicleId"] = this.GetPrimaryKeyString(),
+                    ["eventType"] = ev.EventType,
+                    ["description"] = ev.Description,
+                };
+                foreach (var passenger in _state.State.Passengers.ToList())
+                    await sessionManager.NotifyPlayerEventAsync(passenger, "ReceiveVoyageEvent", payload);
+            }
+
+            await _state.WriteStateAsync();
         }
 
         private async Task ArriveAsync()
@@ -323,6 +372,7 @@ namespace Aetherium.Server.Vehicles
             _state.State.DestMapId = null;
             _state.State.EtaUtc = null;
             _state.State.DepartedUtc = null;
+            _state.State.ScheduledEvents.Clear(); // any un-fired events end with the voyage
             await _state.WriteStateAsync();
 
             await TryDisarmVoyageReminderAsync();
@@ -432,5 +482,17 @@ namespace Aetherium.Server.Vehicles
         [Id(15)] public int DestAnchorZ { get; set; }
         [Id(16)] public DateTime? DepartedUtc { get; set; }
         [Id(17)] public DateTime? EtaUtc { get; set; }
+        [Id(18)] public List<ScheduledVoyageEvent> ScheduledEvents { get; set; } = new();
+    }
+
+    /// <summary>A voyage's in-transit event stamped with an absolute due time and a fired flag
+    /// (add-boardable-vehicles Phase 4).</summary>
+    [GenerateSerializer]
+    public class ScheduledVoyageEvent
+    {
+        [Id(0)] public DateTime DueUtc { get; set; }
+        [Id(1)] public string EventType { get; set; } = string.Empty;
+        [Id(2)] public string Description { get; set; } = string.Empty;
+        [Id(3)] public bool Fired { get; set; }
     }
 }

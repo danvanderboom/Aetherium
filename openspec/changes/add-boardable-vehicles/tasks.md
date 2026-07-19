@@ -30,9 +30,10 @@
 - [x] 3.6 Tests: `VehicleVoyageTests` — depart removes the origin exterior & marks in-transit; a wake before ETA stays in transit; arrival at ETA re-docks at the destination and the passenger (who travelled in the interior) disembarks onto the destination surface; depart requires a landed vehicle
 
 ## 4. Phase 4 - In-transit events
-- [ ] 4.1 On departure, schedule mid-voyage events via `EventSchedulerGrain.ScheduleEventAsync` at game-time offsets
-- [ ] 4.2 On a due event, broadcast to passengers via `IEventInstanceGrain.BroadcastToAreaAsync` while the interior keeps ticking
-- [ ] 4.3 Tests: a scheduled in-transit event fires and is broadcast to everyone aboard
+- [x] 4.1 On departure, `DepartAsync` schedules the config's authored `InTransitEvents` (`VoyageEventDef`: offset + type + description) at absolute due times on the vehicle's own voyage schedule. NOTE deviation: they are fired on the voyage reminder the grain already drives, NOT via `EventSchedulerGrain.ScheduleEventAsync` — that path fires through the *global tick driver* the design deliberately avoids, and its handlers spawn region caravans/invasions rather than broadcasting an encounter to passengers. Routing through EventScheduler/IEventInstanceGrain is a follow-on if/when the global tick driver lands.
+- [x] 4.2 On a due event, `TickVoyageAsync`→`FireDueEventsAsync` broadcasts `ReceiveVoyageEvent` to everyone aboard (each passenger's session via `GameSessionManager.NotifyPlayerEventAsync`) while the interior keeps ticking; each event fires at most once.
+- [x] 4.3 Tests: `VehicleVoyageTests.InTransitEvent_FiresAndBroadcastsToPassengers` — a due in-transit event is broadcast to a boarded passenger's session, the vehicle stays in transit, and the event does not re-broadcast on a later wake.
 
 ## 5. Validation
-- [ ] 5.1 `openspec validate add-boardable-vehicles --strict` passes with zero errors
+- [x] 5.1 `openspec validate add-boardable-vehicles --strict` passes with zero errors
+- [x] 5.2 Full test suite green (`dotnet test`)

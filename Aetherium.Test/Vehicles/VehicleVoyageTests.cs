@@ -228,5 +228,65 @@ namespace Aetherium.Test.Vehicles
             var depart = await vehicle.DepartAsync(destWorld, destMap, 1, 1, 0, voyageMinutes: 10);
             Assert.That(depart.Success, Is.False, "an un-landed vehicle cannot depart");
         }
+
+        [Test]
+        public async Task InTransitEvent_FiresAndBroadcastsToPassengers()
+        {
+            var (originWorld, originMap) = await CreateSurfaceAsync("origin");
+            var (destWorld, destMap) = await CreateSurfaceAsync("dest");
+
+            // A vehicle whose voyage schedules an encounter right at departure (offset 0).
+            var cfg = Config();
+            cfg.InTransitEvents = new List<VoyageEventDef>
+            {
+                new() { OffsetMinutes = 0, EventType = "asteroid_field", Description = "Asteroids ahead!" }
+            };
+            var vehicle = _cluster.GrainFactory.GetGrain<IVehicleGrain>($"veh-{Guid.NewGuid()}");
+            await vehicle.InitializeAsync(cfg);
+            var (ox, oy, oz) = await FindLandingTileAsync(originMap);
+            await vehicle.LandAsync(originWorld, originMap, ox, oy, oz);
+
+            // A passenger with a live session boards at the origin.
+            var originMapGrain = _cluster.GrainFactory.GetGrain<IGameMapGrain>(originMap);
+            var player = $"player-{Guid.NewGuid()}";
+            await originMapGrain.JoinPlayerAsync(player);
+            var session = new GameSession("conn-E", new Aetherium.WorldBuilders.FovDiagnosticWorldBuilder("open_space"))
+            {
+                SessionId = player,
+                ConnectionId = "conn-E",
+                WorldId = originWorld,
+                MapId = originMap,
+            };
+            InjectSession(session);
+            Assert.That((await vehicle.BoardAsync(new List<string> { player })).Moved, Is.EqualTo(1));
+
+            // Depart on a long voyage so the vehicle stays in transit; the offset-0 event is already due.
+            var (dx, dy, dz) = await FindLandingTileAsync(destMap);
+            await vehicle.DepartAsync(destWorld, destMap, dx, dy, dz, voyageMinutes: 60);
+
+            _hubContext.Reset();
+            await vehicle.TickVoyageAsync(); // fires the due in-transit event
+
+            var events = _hubContext.GetDispatches()
+                .Where(d => d.Method == "ReceiveVoyageEvent" && d.ConnectionId == "conn-E")
+                .ToList();
+            Assert.That(events.Count, Is.EqualTo(1), "the due in-transit event must be broadcast to everyone aboard");
+            Assert.That((await vehicle.GetInfoAsync()).InTransit, Is.True, "the interior keeps travelling after the event");
+
+            // The event fires at most once.
+            _hubContext.Reset();
+            await vehicle.TickVoyageAsync();
+            var again = _hubContext.GetDispatches().Count(d => d.Method == "ReceiveVoyageEvent" && d.ConnectionId == "conn-E");
+            Assert.That(again, Is.EqualTo(0), "an already-fired in-transit event must not re-broadcast");
+        }
+
+        private void InjectSession(GameSession session)
+        {
+            var sessionsField = typeof(GameSessionManager).GetField("sessions",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var sessionsDict = (System.Collections.Concurrent.ConcurrentDictionary<string, GameSession>)
+                sessionsField.GetValue(_sessionManager)!;
+            sessionsDict[session.ConnectionId] = session;
+        }
     }
 }

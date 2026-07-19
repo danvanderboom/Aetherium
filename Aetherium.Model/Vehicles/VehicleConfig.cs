@@ -43,5 +43,21 @@ namespace Aetherium.Model.Vehicles
         /// <summary>Maximum players allowed inside the interior at once. A boarding manifest larger than
         /// this is rejected down to capacity.</summary>
         [Id(11)] public int Capacity { get; set; } = 8;
+
+        // --- In-transit events (Phase 4). ---
+        /// <summary>Scheduled encounters that fire at offsets into a voyage and are broadcast to everyone
+        /// aboard the interior (e.g. "asteroid field", "boarding party"). Empty = an uneventful trip.</summary>
+        [Id(12)] public List<VoyageEventDef> InTransitEvents { get; set; } = new();
+    }
+
+    /// <summary>An authored mid-voyage encounter (add-boardable-vehicles Phase 4): what fires, when
+    /// (as an offset into the voyage), and the message broadcast to passengers.</summary>
+    [GenerateSerializer]
+    public class VoyageEventDef
+    {
+        /// <summary>Minutes into the voyage at which this event becomes due.</summary>
+        [Id(0)] public double OffsetMinutes { get; set; }
+        [Id(1)] public string EventType { get; set; } = string.Empty;
+        [Id(2)] public string Description { get; set; } = string.Empty;
     }
 }
