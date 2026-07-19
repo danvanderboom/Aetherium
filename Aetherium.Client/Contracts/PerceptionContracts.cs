@@ -51,7 +51,11 @@ namespace Aetherium.Client.Contracts
     public class VisualDto
     {
         public WorldLocationDto Location { get; set; } = new WorldLocationDto();
-        public TileTypeDto? Terrain { get; set; }
+        /// <summary>Terrain by reference into the frame's <c>TileTypes</c> palette (full name+settings),
+        /// null when the cell has no terrain. Replaced an embedded per-cell TileTypeDto that measured
+        /// ~43% of a frame's bytes; <see cref="PerceptionStore"/> resolves it back to a full terrain type
+        /// against the palette when folding a frame. (perception efficiency)</summary>
+        public string? TileTypeId { get; set; }
         public List<TileTypeDto> Entities { get; set; } = new List<TileTypeDto>();
         public double LightLevel { get; set; } = 1.0;
         public Dictionary<VisualType, int> ThingsSeen { get; set; } = new Dictionary<VisualType, int>();

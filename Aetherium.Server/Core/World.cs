@@ -206,11 +206,22 @@ namespace Aetherium.Core
             return TerrainTypes[terrain.Type.Name];
         }
 
-        public Terrain? GetTerrain(WorldLocation location) =>
-            !EntitiesByLocation.ContainsKey(location) ? null
-            : EntitiesByLocation[location].Values
-            .OfType<Terrain>()
-            .FirstOrDefault();
+        public Terrain? GetTerrain(WorldLocation location)
+        {
+            // Hot path: called per cell by vision (every FOV ray step), lighting, and the slab.
+            // The old body did ContainsKey + indexer (a double hash lookup) then
+            // `.Values.OfType<Terrain>().FirstOrDefault()` — and ConcurrentDictionary.Values
+            // allocates a full snapshot copy of the bucket every call, plus the LINQ iterators.
+            // A single TryGetValue and a direct foreach (the concurrent dict's own lock-free
+            // enumerator, no snapshot) is allocation-free and semantically identical: return the
+            // first Terrain in the cell, or null. (perception efficiency)
+            if (!EntitiesByLocation.TryGetValue(location, out var atLocation))
+                return null;
+            foreach (var kvp in atLocation)
+                if (kvp.Value is Terrain terrain)
+                    return terrain;
+            return null;
+        }
 
         public List<Terrain> GetTerrain(WorldChunk chunk) =>
             GetTerrain(chunk.Location, chunk.Size);

@@ -20,13 +20,15 @@ namespace Aetherium.Test
         private static ClientConsoleMapView MakeView() =>
             new ClientConsoleMapView(new Point(0, 0), new Size(20, 10), hasFrame: false);
 
+        // Terrain is referenced by id ("t"+mapChar); ViewWith registers the matching palette entry
+        // (carrying the MapCharacter glyph) that the console resolves against.
         private static VisualDto Terrain(int x, int y, int z, string mapChar)
         {
             return new VisualDto
             {
                 Location = new WorldLocationDto(x, y, z),
                 LightLevel = 1.0,
-                Terrain = new TileTypeDto { Name = "t" + mapChar, Settings = new Dictionary<string, string> { ["MapCharacter"] = mapChar } }
+                TileTypeId = "t" + mapChar,
             };
         }
 
@@ -45,7 +47,16 @@ namespace Aetherium.Test
             var p = new PerceptionDto { PlayerLocation = new WorldLocationDto(0, 0, 0) };
             p.TileTypes["Player"] = new TileTypeDto { Name = "Player", Settings = new Dictionary<string, string> { ["MapCharacter"] = "@" } };
             foreach (var v in visuals)
+            {
                 p.Visuals[$"{v.Location.X},{v.Location.Y},{v.Location.Z}"] = v;
+                // Register the referenced terrain in the palette with its glyph (id == "t"+mapChar).
+                if (v.TileTypeId is { } id && !p.TileTypes.ContainsKey(id))
+                    p.TileTypes[id] = new TileTypeDto
+                    {
+                        Name = id,
+                        Settings = new Dictionary<string, string> { ["MapCharacter"] = id.Substring(1) },
+                    };
+            }
 
             var view = MakeView();
             view.Perception = p;

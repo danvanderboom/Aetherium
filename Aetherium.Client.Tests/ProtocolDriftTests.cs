@@ -49,7 +49,7 @@ namespace Aetherium.Client.Tests
                 ["1,-2,0"] = new ServerModel.VisualDto
                 {
                     Location = new ServerModel.WorldLocationDto(1, -2, 0),
-                    Terrain = new ServerModel.TileTypeDto("Cave", new Dictionary<string, string> { ["MapCharacter"] = "t" }),
+                    TileTypeId = "Cave", // terrain by reference into the palette below
                     Entities = { new ServerModel.TileTypeDto("Creature:waxgrub", new Dictionary<string, string>()) },
                     LightLevel = 0.6,
                     ThingsSeen = new Dictionary<ServerModel.VisualType, int> { [ServerModel.VisualType.Character] = 1 },
@@ -60,6 +60,7 @@ namespace Aetherium.Client.Tests
             TileTypes = new Dictionary<string, ServerModel.TileTypeDto>
             {
                 ["Player"] = new ServerModel.TileTypeDto("Player", new Dictionary<string, string> { ["MapCharacter"] = "@" }),
+                ["Cave"] = new ServerModel.TileTypeDto("Cave", new Dictionary<string, string> { ["MapCharacter"] = "t" }),
             },
             Inventory = new ServerModel.InventoryDto
             {
@@ -141,8 +142,9 @@ namespace Aetherium.Client.Tests
             Assert.That(mirror.Season, Is.EqualTo("winter"));
 
             var visual = mirror.Visuals["1,-2,0"];
-            Assert.That(visual.Terrain!.Name, Is.EqualTo("Cave"));
-            Assert.That(visual.Terrain.Settings["MapCharacter"], Is.EqualTo("t"));
+            Assert.That(visual.TileTypeId, Is.EqualTo("Cave"));
+            // Terrain settings now resolve from the frame's palette, not a per-cell copy.
+            Assert.That(mirror.TileTypes["Cave"].Settings["MapCharacter"], Is.EqualTo("t"));
             Assert.That(visual.Entities.Single().Name, Is.EqualTo("Creature:waxgrub"));
             Assert.That(visual.LightLevel, Is.EqualTo(0.6));
             Assert.That(visual.ThingsSeen[ClientContracts.VisualType.Character], Is.EqualTo(1));

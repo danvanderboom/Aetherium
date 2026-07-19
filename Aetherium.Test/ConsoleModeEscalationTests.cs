@@ -18,12 +18,13 @@ namespace Aetherium.Test
         {
             Location = new WorldLocationDto(0, 0, z),
             LightLevel = 1.0,
-            Terrain = new TileTypeDto { Name = "t", Settings = new Dictionary<string, string> { ["MapCharacter"] = "#" } }
+            TileTypeId = "t", // resolved against the palette registered in ViewWithBands
         };
 
         private static ClientConsoleMapView ViewWithBands(params int[] bands)
         {
             var p = new PerceptionDto { PlayerLocation = new WorldLocationDto(0, 0, 0) };
+            p.TileTypes["t"] = new TileTypeDto { Name = "t", Settings = new Dictionary<string, string> { ["MapCharacter"] = "#" } };
             foreach (var z in bands)
                 p.Visuals[$"0,0,{z}"] = Terrain(z);
 

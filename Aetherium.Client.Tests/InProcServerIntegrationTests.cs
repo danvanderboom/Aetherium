@@ -367,12 +367,14 @@ namespace Aetherium.Client.Tests
             {
                 foreach (var (key, visual) in frame.Visuals)
                 {
-                    if (visual.Terrain is null)
+                    if (visual.TileTypeId is null)
                         continue; // bare-light cell: renderers skip it by design
-                    Assert.That(visual.Terrain.Name, Is.Not.Null.And.Not.Empty,
+                    Assert.That(visual.TileTypeId, Is.Not.Null.And.Not.Empty,
                         $"unnameable terrain at {key} cannot be theme-bound");
-                    Assert.That(frame.TileTypes.ContainsKey(visual.Terrain.Name), Is.True,
-                        $"terrain '{visual.Terrain.Name}' at {key} is missing from the frame's TileTypes catalog");
+                    // The core contract for terrain-by-reference: every referenced id must resolve
+                    // against the frame's palette (renderers and the store depend on it).
+                    Assert.That(frame.TileTypes.ContainsKey(visual.TileTypeId), Is.True,
+                        $"terrain '{visual.TileTypeId}' at {key} is missing from the frame's TileTypes catalog");
                 }
 
                 foreach (var character in frame.VisibleCharacters)

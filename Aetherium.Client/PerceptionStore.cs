@@ -270,7 +270,13 @@ namespace Aetherium.Client
                         _memory[cell] = remembered;
                         revealed.Add(remembered);
                     }
-                    remembered.Terrain = pair.Value.Terrain ?? remembered.Terrain;
+                    // Terrain arrives by reference (VisualDto.TileTypeId) to keep the wire small; resolve it
+                    // to the full definition from this frame's TileTypes palette and keep RememberedCell.Terrain
+                    // a full TileTypeDto so downstream consumers (renderers, memory) are unchanged. An id we
+                    // can't resolve (or a null id on a terrain-less cell) leaves the last-known terrain intact.
+                    if (pair.Value.TileTypeId is { } tileTypeId
+                        && frame.TileTypes.TryGetValue(tileTypeId, out var terrainType))
+                        remembered.Terrain = terrainType;
                     remembered.LastLightLevel = pair.Value.LightLevel;
                     remembered.LastSeenUtc = now;
                     remembered.InView = true;
