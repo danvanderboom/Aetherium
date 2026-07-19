@@ -1,8 +1,8 @@
 # Aetherium Architecture Overview
 
-*Last updated: 2026-07-03*
+*Last updated: 2026-07-19*
 
-Aetherium is a server-authoritative multiplayer dungeon crawler. A single ASP.NET Core process hosts the game engine, an Orleans silo, and three SignalR hubs; clients render only the perception data the server chooses to send them. The same server also serves as a platform for LLM-driven agents (a unified "tool" API is shared by human players and AI agents) and for procedural-content-generation (PCG) experimentation and agent training.
+Aetherium is a server-authoritative multiplayer simulation engine — a substrate for many games rather than one. A single ASP.NET Core process hosts the game engine, an Orleans silo, and three SignalR hubs; clients render only the perception data the server chooses to send them. Games are defined as data (YAML bundles under `Data/Games/`, each instantiable as any number of concurrent worlds), so the same engine runs a dungeon crawler, a sci-fi station crawler, or a walkable H3 planet. The server also serves as a platform for LLM-driven agents (a unified "tool" API is shared by human players and AI agents) and for procedural-content-generation (PCG) experimentation and agent training.
 
 ## Runtime topology
 
@@ -10,7 +10,7 @@ Aetherium is a server-authoritative multiplayer dungeon crawler. A single ASP.NE
 flowchart LR
     subgraph Clients
         CC[Aetherium.Console<br/>Spectre.Console TUI]
-        UC[Aetherium.Unity<br/>2D tilemap client]
+        UC[Unity client<br/>com.aetherium.unity + Aphelion]
         DB[Aetherium.Dashboard<br/>Blazor Server]
         CLI[aetherctl CLI]
         MON[monitor-game.ps1<br/>external monitors]
@@ -54,16 +54,20 @@ Key properties:
 | Project | Role | Depends on |
 |---|---|---|
 | `Aetherium.Model` | Shared DTO contracts (perception, inventory, tools, management, events, groups, instances, worlds) | Orleans.Sdk (for serialization attributes) |
-| `Aetherium.Server` | Game engine + ASP.NET Core host + Orleans silo. All game logic: ECS core, simulation, perception, worldgen, agents, narrative, multiworld | Model |
+| `Aetherium.Server` | Game engine + ASP.NET Core host + Orleans silo. All game logic: ECS core, simulation, perception, worldgen, combat, flight, economy, agents, narrative, multiworld | Model |
+| `Aetherium.Client` | Reusable .NET client library: SignalR connection lifecycle, perception subscription, session resume. Consumed by the Unity package and future clients | Model |
 | `Aetherium.Console` | Terminal client + monitoring WebSocket server | Model |
-| `Aetherium.Unity` | Unity 2D client (own "Lite" DTO shims; not part of the .sln build) | — (protocol-compatible via JSON) |
+| `com.aetherium.unity` | Reusable Unity client package (grid/depth rendering, follow camera, tile themes); vendors `Aetherium.Client.dll`. Under `clients/unity/`, not in the .sln | Client (as DLL) |
+| `samples/unity/Aphelion` | Co-op sci-fi station/planet-crawler sample game wiring the Unity package to a live server | com.aetherium.unity |
+| `Aetherium.Unity` | Legacy Unity 2D scaffold (own "Lite" DTO shims; not part of the .sln build) — superseded by the package + sample above | — (protocol-compatible via JSON) |
 | `Aetherium.Dashboard` | Blazor Server ops/training dashboard | Model, Server (Orleans client), WorldGenCLI |
 | `Aetherctl` | Operator CLI (System.CommandLine), talks Orleans + SignalR + HTTP + WebSocket | Model, WorldGenCLI |
 | `WorldGenCLI` | PCG API client library (used by Aetherctl and Dashboard; not a standalone tool) | — |
 | `Aetherium.Test` | Engine/server tests (xUnit + NUnit, Orleans TestingHost) | Server, Model |
+| `Aetherium.Client.Tests` | Client-library tests (in-proc integration suite) | Client, Server |
 | `Aetherctl.Test` | CLI tests | Aetherctl |
 
-Sizes (2026-07-03): Server ~348 C# files / ~41.5k lines; Console ~100 / ~11.3k; Test ~93 / ~19.6k; Unity ~21 / ~2k; Model 20 / ~1.2k; Aetherctl 16 / ~3.7k; WorldGenCLI 14 / ~1.1k; Dashboard 5 / ~0.5k.
+The server has grown well past its 2026-07-03 size (then ~348 C# files / ~41.5k lines) with the combat, flight/depth, H3-planet, economy, cognition, and persistence work; treat any hard file/line counts below as approximate.
 
 ## The perception loop (core data flow)
 
@@ -81,17 +85,24 @@ Detailed in [server.md](server.md), [clients.md](clients.md), and [tooling-and-d
 
 | Subsystem | Where | One-liner |
 |---|---|---|
-| ECS core | `Aetherium.Server/Core`, `Components`, `Entities` | Entities composed from ~48 component types; 33 entity kinds |
-| Simulation | `Aetherium.Server/Simulation` | WorldClock, seasons, weather, spawn manager, temporal modifiers |
-| Perception & FOV | `Aetherium.Server/Perception`, `Lighting`, `PerceptionService.cs` | Shadow-casting FOV, lighting modes, infrared/heat trails, directional cone |
-| World generation | `Aetherium.Server/WorldGen` (~81 files), `WorldBuilders` | Generator pipeline (phases → features → passes → validation), prefabs, map standards |
+| ECS core | `Aetherium.Server/Core`, `Components`, `Entities` | Entities composed from ~52 component types; ~39 entity kinds |
+| Grid topology | `Aetherium.Server/Topology` | Pluggable per-world tilings (square/hex/triangle/H3) behind `IGridTopology`, threaded via `world.topology` |
+| Simulation | `Aetherium.Server/Simulation` | WorldClock, seasons, weather, spawn manager, temporal modifiers; `WorldTickService` drives the world tick when Orleans is enabled |
+| Perception & FOV | `Aetherium.Server/Perception`, `Lighting`, `PerceptionService.cs` | Shadow-casting FOV, lighting modes, infrared/heat trails, directional cone, **interoception** self-sense, optional **3D multi-Z slab** with flight envelope, sphere-native H3 FOV/lighting |
+| World generation | `Aetherium.Server/WorldGen` (~86 files), `WorldBuilders` | Generator pipeline (phases → features → passes → validation); **H3 sphere generators** (terrain, rivers, settlements, roads, transit, satellites); prefabs, map standards |
+| Combat & death | `Aetherium.Server/Combat` | Damage pipeline, downed/death states, corpse expiry, combat stats; `AttackTool` |
+| Flight & depth | `Aetherium.Server/Flight`, `Components/Flight*.cs` | Altitude bands, flight plans (patterned/adhoc/scheduled/manual), land/takeoff, 3D occluded perception, flyer interaction (hack/summon/attack) |
+| Economy, satellites & transit | `Aetherium.Server/Economy`, `Satellites`, WorldGen transit | Biome producers/consumers → markets trading on the road/rail graph; orbiting satellites (radio-gated detection + hacking); rail + subway transit across bands |
+| Cognition | `Aetherium.Server/Components/Memory*.cs`, `Recognition*`, `Core/*Policy.cs` | Character memory (perception-time recording + read API), memory dynamics (reinforce/forget), individual recognition |
 | Interaction & inventory | `Aetherium.Server/InteractionSystem.cs`, components | Pickup/drop/use/open/close, keys & locks, affordances |
-| Agents & tools | `Aetherium.Server/Agents` (~50 files) | 31 reflection-discovered tools, capability profiles, agent grains (integration incomplete), prompt registry |
-| Narrative | `Aetherium.Server/Narrative` | Narrative grains, consequence engine, procedural lore/graph generators |
+| Game definitions | `Aetherium.Server/Games`, `Data/Games` | YAML game bundles (rules/content/abilities/factions/progression), each instantiable as many concurrent worlds |
+| Agents & tools | `Aetherium.Server/Agents` (~45 tools) | Reflection-discovered tools (movement, interaction, vision, worldbuilding, multiworld, combat, flight, memory, quest), capability profiles, agent grains (LLM integration incomplete), prompt registry |
+| Narrative | `Aetherium.Server/Narrative` | Narrative grains, consequence engine, procedural lore/graph generators; ECA visual scripting (`rules.yaml`) |
 | MultiWorld & instances | `Aetherium.Server/MultiWorld`, `Instances`, `Groups`, `MetaProgression` | World directory/ACL/invites, clusters, dungeon instances, lockouts, parties/raids, cross-world progression |
 | Events | `Aetherium.Server/Events` | Event scheduler + event instance grains, spawn control |
+| Persistence | `Aetherium.Server/Persistence` | In-memory default; **durable SQLite** world snapshots + grain storage via `ORLEANS_STORAGE=sqlite` / `AETHERIUM_DATA_DIR` |
 | Monitoring | `Aetherium.Console/Monitoring`, server telemetry | Frame streaming over WebSocket (5001), agent telemetry grain + hub + REST |
-| Client rendering | `Aetherium.Console/Rendering`, Unity `Assets/Scripts` | `IGameRenderer` abstraction, themes, widgets; Unity tilemap renderer |
+| Client rendering | `Aetherium.Console/Rendering`, `com.aetherium.unity` | `IGameRenderer` abstraction, themes, widgets, depth/cross-section views; Unity grid + depth-band renderer |
 | Audio | `Aetherium.Console/Audio`, `Aetherium.Server/Audio` | NAudio-based client audio, biome audio profiles server-side |
 
 ## Endpoints & configuration
@@ -114,16 +125,18 @@ Detailed in [server.md](server.md), [clients.md](clients.md), and [tooling-and-d
 | Variable | Effect |
 |---|---|
 | `DISABLE_ORLEANS=1` | Run server without the Orleans silo (test mode) |
-| `ORLEANS_STORAGE=memory` | Grain storage; **note:** the `azure` path is currently commented out in `Program.cs` — only memory storage works |
-| `PREFAB_STORAGE=file`, `PREFAB_PATH` | Prefab library file storage (loading currently a TODO) |
+| `ORLEANS_STORAGE=memory\|sqlite` | Grain + snapshot storage. `sqlite` (or an unset value with `AETHERIUM_DATA_DIR` set) uses durable SQLite; otherwise in-memory. The Azure Table path remains scaffolded-but-commented in `Program.cs` |
+| `AETHERIUM_DATA_DIR` | Data directory for SQLite persistence; setting it defaults storage to `sqlite` |
+| `PREFAB_STORAGE=file`, `PREFAB_PATH` | Prefab library file storage; prefabs load from `PREFAB_PATH` (default `./Data/Prefabs`) in Development or when `PREFAB_STORAGE=file` |
+| `GAMES_PATH` | Game-definition bundle directory (default `./Data/Games`) |
 | `HUB_PATH` | Hub-world JSON directory (default `./Data/Hubs`) |
 | `ORLEANS_GATEWAY`, `ORLEANS_CLUSTER_ID`, `ORLEANS_SERVICE_ID` | aetherctl → Orleans connection |
 | `ASPNETCORE_URLS` | Server URL override |
 
-`appsettings.json` carries the `Simulation` section (TickHz, DayLengthMinutes, RegionSize, feature toggles for weather/seasons/agent changes/procedural events) and optional `AzureAdB2C` auth settings — auth is enabled only when Domain/ClientId/TenantId are present.
+`appsettings.json` carries the `Simulation` section (TickHz, DayLengthMinutes, RegionSize, feature toggles for weather/seasons/agent changes/procedural events), a `Persistence` section (snapshot compaction cadence + threshold), and optional `AzureAdB2C` auth settings — auth is enabled only when Domain/ClientId/TenantId are present.
 
 ## Development workflow
 
-- Spec-driven development via **OpenSpec**: `openspec/specs/` holds 20 capability specs (current truth), `openspec/changes/` holds active proposals. See [openspec/AGENTS.md](../../openspec/AGENTS.md).
+- Spec-driven development via **OpenSpec**: `openspec/specs/` holds ~26 capability specs (current truth), `openspec/changes/` holds active proposals (many recently-implemented changes still await archival back into the specs). See [openspec/AGENTS.md](../../openspec/AGENTS.md).
 - Dev scripts: `start-game-test.ps1` / `stop-game.ps1` (run server + console client with PID tracking), `scripts/monitor-game.ps1` / `monitor-lite.ps1` (attach to the monitoring WebSocket), `scripts/start-llm-agents.ps1`.
 - Tests: `dotnet test` (see [docs/audits/README.md](../audits/2026-07-03-initial-subsystem-audit/README.md) for current ground-truth results and runtime caveats).

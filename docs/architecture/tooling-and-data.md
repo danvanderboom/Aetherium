@@ -1,21 +1,31 @@
 # Tooling, Data & Developer Workflow
 
-*Last updated: 2026-07-03. Covers `Aetherctl`, `WorldGenCLI`, dev scripts, monitoring endpoints, the `Data/` directory, and the OpenSpec workflow.*
+*Last updated: 2026-07-19. Covers `Aetherctl`, `WorldGenCLI`, dev scripts, monitoring endpoints, the `Data/` directory, and the OpenSpec workflow.*
 
 ## aetherctl (`Aetherctl/`)
 
 The unified operator CLI, built on System.CommandLine. It is stateless — all state lives on the server — and speaks four protocols depending on the command: Orleans grain calls (telemetry, worlds, agents), SignalR `ManagementHub` (authenticated writes), HTTP (PCG, status), and WebSocket (console-client frame monitoring).
 
-| Command group | Purpose |
+The command surface grew substantially with the operator-tooling wave — headless driving, scripted actions, runtime worldbuilding, telemetry, and cognition inspection. Command areas (by `Aetherctl/Commands/*`):
+
+| Command area | Purpose |
 |---|---|
 | `server` | Status, diagnostics |
 | `session` | List/create/close game sessions |
+| `game` | **Headless session driving** — spawn/join a world, operator perception, capture a world snapshot |
+| `action-script` | **Scripted / batch action execution** for one or more characters |
+| `world` | Create/list/delete/configure worlds, plus **runtime worldbuilding** (spawn/edit live worlds) |
+| `worldgen` | Run procedural generation, render PNG previews (SkiaSharp) |
+| `scenario` | Set up scripted scenarios |
 | `agent` | List agents, telemetry, pause/resume |
 | `tools` | List/register tool definitions |
-| `vision` | Perception/FOV debugging, visibility queries |
-| `world` | Create/list/delete/configure worlds |
-| `worldgen` | Run procedural generation, render PNG previews (SkiaSharp) |
+| `vision` / `perception` | Perception/FOV debugging, visibility queries, operator perception |
+| `combat` | Combat inspection |
+| `quest` | Quest activation/inspection |
+| `instance` | Dungeon-instance operations |
+| `memory` / `recognition` | Inspect character memory and individual recognition |
 | `narrative` | Narrative event scheduling and triggers |
+| `telemetry` | Telemetry inspection commands |
 | `prompts` | Prompt registry operations |
 | `monitor` | Attach to `ws://localhost:5001/monitor` |
 | Global | `--json`, `--verbose`, `--quiet`; Orleans connection via `ORLEANS_GATEWAY` / `ORLEANS_CLUSTER_ID` / `ORLEANS_SERVICE_ID` |
@@ -52,7 +62,8 @@ Despite the name, this is a **library**, not a standalone CLI: a typed client fo
 | `Benchmarks/` | navigation-basic, puzzle-keys, combat-survival JSON | `BenchmarkController` (REST, read-only) | Working |
 | `Curricula/` | beginner-dungeon, advanced-combat | `CurriculumController` | Partially loaded (TODOs) |
 | `Narratives/` | dungeon-exploration, emergent-storytelling-example, tutorial-village | Narrative grains | Working |
-| `Prefabs/` | Buildings (shop, small-house), Terrain (forest-cluster, small-pond) | `PrefabLibrary` | **Not loaded** — file loading is a TODO (`Aetherium.Server/Program.cs:207`) |
+| `Prefabs/` | Buildings (shop, small-house), Terrain (forest-cluster, small-pond) | `PrefabLibrary` | Working — loads from `PREFAB_PATH` in Development or when `PREFAB_STORAGE=file` |
+| `Games/` | YAML game bundles: `aphelion`, `aphelion-h3`, `emberfall` (`game.yaml` + optional `rules`/`content`/`abilities`/`factions`/`progression`) | `GameDefinitionRegistry` (`GAMES_PATH`, default `./Data/Games`) | Working |
 | `Hubs/` | central-hub.json | `HubWorldLoader` (async at startup, `HUB_PATH` overridable) | Working |
 | `Audio/` | BiomeAudioProfiles.json | `JsonAudioProfileRepository` | Working |
 
@@ -60,7 +71,7 @@ Each folder has its own README describing the JSON format. Training docs: [docs/
 
 ## OpenSpec workflow
 
-Aetherium uses spec-driven development. `openspec/specs/<capability>/spec.md` is current truth (20 capabilities: engine-core, perception, perception-vision, client-server-communication, console-view, world-building, world-entities, pcg-* (7), narrative, interaction, audio, geometry-maze, game-management-grain, demo-game); `openspec/changes/<id>/` holds proposals (7 active as of 2026-07-03). Conventions and the full workflow: [openspec/AGENTS.md](../../openspec/AGENTS.md) and [openspec/project.md](../../openspec/project.md). Note: the `openspec` CLI is not required to read/edit specs — it validates and archives changes when available.
+Aetherium uses spec-driven development. `openspec/specs/<capability>/spec.md` is current truth (~26 capabilities: engine-core, perception, perception-vision, client-server-communication, console-view, world-building, world-entities, pcg-* (7), narrative, interaction, audio, geometry-maze, game-management-grain, demo-game, multiworld, meta-progression, agent-telemetry, training-* (3)); `openspec/changes/<id>/` holds proposals — now several dozen, spanning **built-but-not-yet-archived** changes (flying-entities, adaptive-depth, memory-dynamics, identity-recognition, interoception, the aetherctl extensions, arcade-client, …) and **forward proposals** (abilities, factions, NPC behavior trees, continuous action pipeline, boardable vehicles, …). Archiving the implemented changes back into `specs/` is outstanding doc hygiene. Conventions and the full workflow: [openspec/AGENTS.md](../../openspec/AGENTS.md) and [openspec/project.md](../../openspec/project.md). Note: the `openspec` CLI is not required to read/edit specs — it validates and archives changes when available.
 
 ## Test projects
 

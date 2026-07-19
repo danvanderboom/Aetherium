@@ -59,6 +59,9 @@ single-shot Unity input). Notable **unbuilt seams** the designs must close are c
 chiefly the session→world perception re-point (`GameHub.cs` `JoinWorld` / `UsePortal` TODO), the absence of
 multi-Z perception, and the lack of a per-entity action-cadence model.
 
-> These are **proposals**. The matching OpenSpec changes under `openspec/changes/` carry the normative
-> requirements, task checklists, and (where warranted) technical decisions. Validate with
-> `openspec validate <change-id> --strict`.
+> **Build status (2026-07-19):** `add-flying-entities` and `add-adaptive-depth-visualization` are **built
+> and merged**; `add-transit-networks` is **partially built** (rail + subway on H3 planets). The rest —
+> `add-boardable-vehicles`, `add-held-key-repeat-movement`, `add-gamepad-dual-stick`,
+> `add-asset-action-scripting` — remain **proposals**. The matching OpenSpec changes under
+> `openspec/changes/` carry the normative requirements, task checklists, and (where warranted) technical
+> decisions. Validate with `openspec validate <change-id> --strict`.

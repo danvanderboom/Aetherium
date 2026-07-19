@@ -7,8 +7,11 @@ Aphelion, **player-relative perception works on the sphere** (a `gridDisk` viewp
 keys), **and field-of-view + lighting are sphere-native** — mountains/forests/walls occlude line of
 sight, the directional cone restricts the forward arc, and light sources form pools with darkness
 shrinking the view, all via the same tested `ObstructsView`/topology-ray model as the square grid. A
-player can join and walk the planet and only sees what they should. Sphere-native settlements/rivers/
-roads, transit, and economy wiring are the phased roadmap in [§7](#7-roadmap).
+player can join and walk the planet and only sees what they should. Sphere-native **settlements
+(~320 tiered towns), rivers, and roads are now built**, along with the **living systems** — a biome
+economy trading over the road/rail graph, orbiting satellites (radio-gated detection + hacking), rail +
+subway transit across bands, and a z-altitude vertical slab; remaining phases are tracked in
+[§7](#7-roadmap).
 **Depends on / builds on:** [`h3-topology.md`](../h3-topology.md), [`grid-topologies.md`](../grid-topologies.md),
 [`economy-simulation.md`](../economy-simulation.md), [`transit-networks.md`](transit-networks.md).
 **Audience:** engine maintainers, OpenSpec proposal authors, game/campaign designers.

@@ -28,14 +28,16 @@ The console/terminal client is the reference renderer — ASCII, with dynamic li
 - **[Narrative systems](narrative-systems.md)** — procedural quests, consequence engine, emergent storytelling
 - **[Factions & reputation](factions-reputation.md)** — design vision: doctrine tags, standing bands, maturity ladder, ECA graduation path
 - **[Party & shared play](party-shared-play.md)** — design vision: credit sharing, pings as perception, shared senses, LLM companions
-- **[Economy simulation](economy-simulation.md)** — design vision: goods/flows/markets/transport layers, functional currency, LLM merchants
+- **[Economy simulation](economy-simulation.md)** — design vision: goods/flows/markets/transport layers, functional currency, LLM merchants (a first cut — biome producers/consumers → markets trading over the H3 road/rail graph — is now built for planetary worlds)
 - **[Live event orchestrator](live-events.md)** — design vision: pressure signals, intensity-budget direction, persistent outcomes, the LLM game-master
 - **[Gameplay telemetry](gameplay-telemetry.md)** — design vision: event records at chokepoints, rollups/heatmaps/funnels, synthetic playtesting, the LLM analyst
 - **[Localization](localization.md)** — design vision: TextRef ids, per-locale catalogs and grammars, native procedural prose, LLM locale packs
 - **[ECA scripting](eca-scripting.md)** — shipped T0 runtime: when/if/do rules as data, `creature_died` trigger, reflectable vocabulary registry, `rules.yaml` bundle section
-- **[Grid topologies](grid-topologies.md)** — **built (P0–P3):** pluggable per-world tilings (square/hex/triangle) behind an `IGridTopology` seam with per-cell direction sets, threaded via `world.topology`; shaped for Uber's H3 hierarchical planetary grids
-- **[H3 topology](h3-topology.md)** — **built:** Uber's H3 (planetary/lunar hexagons + 12 pentagons, nested resolutions) as a registered `IGridTopology`/`IHierarchicalGridTopology` on `pocketken.H3` — `WorldLocation` index packing, `Delta`-as-azimuthal-projection, invariant-green incl. pentagons; the sphere-aware perception keys + h3 generator remain the last mile for a playable planetary world
+- **[Grid topologies](grid-topologies.md)** — **built:** pluggable per-world tilings (square/hex/triangle/**H3**) behind an `IGridTopology` seam with per-cell direction sets, threaded via `world.topology`; square games stay byte-identical when the seam is unused
+- **[H3 topology](h3-topology.md)** — **built:** Uber's H3 (planetary/lunar hexagons + 12 pentagons, nested resolutions) as a registered `IGridTopology`/`IHierarchicalGridTopology` on `pocketken.H3` — `WorldLocation` index packing, `Delta`-as-azimuthal-projection, invariant-green incl. pentagons. The last mile is now closed: **sphere-native worldgen** (terrain, rivers, ~320 tiered settlements, roads), **walkable H3 perception** (gridDisk viewport + `cellToLocalIj` keys), and **sphere FOV/lighting** — a player joins and walks the planet seeing only what they should — over **living systems** (biome economy, orbiting satellites, rail + subway transit, z-altitude vertical slab). Design: [H3 sphere-worldgen](design/h3-sphere-worldgen.md)
 - **[Hexagonal tiles](hexagonal-tiles.md)** — the hexagon deep-dive behind the grid-topologies design: hex-specific FOV/worldgen analysis and the hex asset landscape
+- **[Flight, depth & transit — design suite](design/README.md)** — a connected set of vertical-world features. **Flying entities (altitude bands, flight plans), adaptive 3D depth visualization, and rail/subway transit are built and merged;** boardable vehicles and the movement-cadence/gamepad/asset-scripting layer are proposals under `openspec/changes/`
+- **Game-definition loader** — games ship as YAML bundles under `Data/Games/` (`game.yaml` + optional `rules.yaml`/`content.yaml`/`abilities.yaml`/`factions.yaml`/`progression.yaml`), each instantiable as any number of concurrent worlds. Shipped bundles: `aphelion`, `aphelion-h3`, `emberfall`. See the [`demo-game`](../openspec/specs/demo-game/) spec and [ECA scripting](eca-scripting.md)
 - **[Multi-world ecosystems](multiworld-ecosystems.md)** — clusters, portals, cross-world economy, meta-progression, hub worlds
 - **[Instances](instances.md)** — dungeon instances, lockouts, party/raid grains
 - **[Procedural audio](PROCEDURAL_AUDIO_IMPLEMENTATION.md)** — biome audio profiles and the audio generation pass
@@ -44,8 +46,8 @@ The console/terminal client is the reference renderer — ASCII, with dynamic li
 - **[Agent training](training/README.md)** — telemetry, curricula, benchmarks, and the training dashboard
 
 ### Clients
-- **[Unity client library & Aphelion sample — design suite](design/unity-sample/README.md)** — proposed design: reusable `com.aetherium.unity` package, `samples/` layout, and a co-op sci-fi station-crawler sample game
-- **[Unity 2D client](unity/README.md)** — legacy tilemap scaffold (superseded by the design suite above) · **[Unity testing](unity/testing.md)**
+- **[Client library, Unity package & Aphelion sample](design/unity-sample/README.md)** — **built:** the reusable `Aetherium.Client` .NET library, the `com.aetherium.unity` package (grid/depth rendering, follow camera, tile themes, session resume), and the co-op sci-fi **Aphelion** sample under `samples/unity/Aphelion/`. Broader client vision: [arcade-client design](design/arcade-client/README.md)
+- **[Unity 2D client](unity/README.md)** — legacy tilemap scaffold (superseded by the package + sample above) · **[Unity testing](unity/testing.md)**
 - **[Unreal client guide](clients/unreal-client-guide.md)** — forward-looking migration guide (client not yet built)
 
 ## Audits & status

@@ -1,6 +1,6 @@
 # Design: Adaptive-Depth Visualization
 
-**Status:** Draft design · **OpenSpec change:** `add-adaptive-depth-visualization` · **Related:** [`transit-networks`](transit-networks.md), [`flying-entities`](flying-entities.md)
+**Status:** ✅ Built & merged (Sections 1–5.4: server 3D slab + auto-slab + flight-envelope DTO + context tint; console depth composite, cross-section, altitude gauge, mode escalation; Unity band stack + follow camera + tile theme + cross-section overlay + adaptive framing + HUD altitude gauge). *Live-FPS profiling (5.5) is the only outstanding item.* · **OpenSpec change:** `add-adaptive-depth-visualization` · **Related:** [`transit-networks`](transit-networks.md), [`flying-entities`](flying-entities.md)
 
 ## Summary
 

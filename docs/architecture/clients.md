@@ -1,8 +1,12 @@
 # Client Architecture
 
-*Last updated: 2026-07-03. Covers `Aetherium.Console`, `Aetherium.Unity`, `Aetherium.Dashboard`, and the planned Unreal client. See [overview.md](overview.md) for the protocol they share.*
+*Last updated: 2026-07-19. Covers the shared `Aetherium.Client` library, `Aetherium.Console`, the `com.aetherium.unity` Unity package + Aphelion sample (and the legacy `Aetherium.Unity`), `Aetherium.Dashboard`, and the planned Unreal client. See [overview.md](overview.md) for the protocol they share.*
 
 All clients are thin renderers of server-computed perception. They connect to `/gamehub` over SignalR, send actions (preferably via `ExecuteTool`), and re-render whenever a `PerceptionDto` arrives. No game rules live client-side.
+
+## Shared client library (`Aetherium.Client`)
+
+A reusable .NET library that factors the non-visual client concerns out of any one renderer: SignalR connection lifecycle, perception/interoception subscription, action dispatch, and **session resume** across reconnects (the session re-attaches to its world rather than starting fresh). It references only `Aetherium.Model`, so it carries no rendering assumptions. The Unity package consumes it as a bundled `Aetherium.Client.dll`; future clients (including Unreal) are expected to build on it too. Covered by an in-proc integration suite in `Aetherium.Client.Tests`.
 
 ## Console client (`Aetherium.Console`)
 
@@ -28,11 +32,20 @@ The primary, most complete client: a Windows terminal UI built on a hybrid of Sp
 - Theme switching applies live to widgets but requires restart for map colors (direct console writes bypass Spectre).
 - Further reading: `Rendering/README.md`, `Monitoring/README.md`, `Assets/Audio/README.md` in the project; user docs under [docs/console/user/](../console/user/).
 
-## Unity client (`Aetherium.Unity`)
+## Unity client
 
-A Unity 2023.3 LTS 2D project (not part of `Aetherium.sln`) targeting PC and iOS. Docs: [docs/unity/README.md](../unity/README.md), [docs/unity/testing.md](../unity/testing.md).
+The current Unity client is a **reusable package + sample** pair, both under version control:
 
-### Mock-first architecture
+- **`com.aetherium.unity`** (`clients/unity/com.aetherium.unity/`) — a reusable Unity package that renders server perception: `GridMapView` (grid/tilemap), the depth **band stack** and cross-section overlay for vertical worlds, a `FollowCamera`, tile themes, an `EntityViewRegistry` binding entity kinds to models, and a `MainThreadDispatcher`. It talks to the server through the bundled `Aetherium.Client.dll` (real SignalR) rather than DTO shims, and supports **session resume**.
+- **`samples/unity/Aphelion`** (`samples/unity/Aphelion/`) — the **Aphelion** sample game: a co-op sci-fi station/planet crawler wiring the package to a live server, with a bootstrap scene, URP setup, relative arrow-key controls, suit-lamp lighting, per-creature Quaternius models, and last-seen "ghost" rendering. Design: [Unity sample suite](../design/unity-sample/README.md); broader vision in the [arcade-client design](../design/arcade-client/README.md).
+
+Depth-aware rendering (band stack, cross-section, adaptive framing, HUD altitude gauge) mirrors the server's 3D perception slab — see [adaptive-depth-visualization](../design/adaptive-depth-visualization.md).
+
+### Legacy `Aetherium.Unity` scaffold
+
+The original Unity client — a Unity 2D project (not part of `Aetherium.sln`) targeting PC and iOS — is superseded by the package + sample above but remains in-tree. Docs: [docs/unity/README.md](../unity/README.md), [docs/unity/testing.md](../unity/testing.md).
+
+#### Mock-first architecture
 
 Two interchangeable perception providers sit behind a `GameClientFacade` MonoBehaviour:
 
@@ -41,11 +54,11 @@ Two interchangeable perception providers sit behind a `GameClientFacade` MonoBeh
 
 `GameManager` consumes provider events and drives `TilemapRenderer2D` (perception → Unity tilemap) and `PlayerController` (sprite, HUD, input).
 
-### DTO shims
+#### DTO shims
 
 Unity deliberately does **not** reference `Aetherium.Model`; it defines serialization-friendly "Lite" mirrors (`PerceptionLite`, `VisualLite`, `WorldLocationLite`, …) under `Assets/Scripts/Model/`. This avoids pulling server assemblies into Unity and works around `JsonUtility`'s lack of dictionary support via custom parsing. The cost is a schema-drift risk against the real DTOs — a known trade-off (same pattern the Unreal guide prescribes).
 
-### Input
+#### Input
 
 New Input System (`InputActions.inputactions`) with full Xbox controller support: left stick → cardinal movement, LB/RB rotate, LT/RT z-level, A confirm, B cancel, D-pad option navigation; multi-option selection mode suspends movement until confirm/cancel. Covered by PlayMode tests (`GamepadInputTests`, `OptionSelectionTests`, `InputAutomationTests`, `TilemapAndInputTests`) plus EditMode JSON-parsing tests.
 
@@ -59,4 +72,4 @@ Status note (2026-07-03): the Dashboard **does not currently compile** (and hasn
 
 ## Planned Unreal client
 
-No Unreal code exists yet. [docs/clients/unreal-client-guide.md](../clients/unreal-client-guide.md) is the migration guide: reuse `Aetherium.Model` DTOs and `GameClient` connection logic, implement `IGameRenderer` (`UnrealGameRenderer`), `IAudioSystem`, and input mapping. The server needs no changes to support it.
+No Unreal code exists yet. [docs/clients/unreal-client-guide.md](../clients/unreal-client-guide.md) is the migration guide: reuse the `Aetherium.Client` library (connection, perception subscription, session resume) and `Aetherium.Model` DTOs, implement `IGameRenderer` (`UnrealGameRenderer`), `IAudioSystem`, and input mapping. The server needs no changes to support it.

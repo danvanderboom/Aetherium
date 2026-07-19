@@ -1,6 +1,6 @@
 # Design: Flying Entities & Altitude Bands
 
-**Status:** Draft design · **OpenSpec change:** `add-flying-entities` · **Foundation for:** [`boardable-vehicles`](boardable-vehicles.md), [`transit-networks`](transit-networks.md)
+**Status:** ✅ Built & merged (Phases 1–5: altitude bands, airborne movement, flight-plan follower, land/takeoff, flyer interaction — hack/summon/attack). *Note: `FlightPlanSystem` follows the square/grid path today; H3 flight is a follow-on.* · **OpenSpec change:** `add-flying-entities` · **Foundation for:** [`boardable-vehicles`](boardable-vehicles.md), [`transit-networks`](transit-networks.md)
 
 ## Summary
 

@@ -1,6 +1,6 @@
 # Design: Transit Networks (Rails, Roads, Subways, Bus Routes)
 
-**Status:** Draft design · **OpenSpec change:** `add-transit-networks` · **Depends on:** [`flying-entities`](flying-entities.md), [`boardable-vehicles`](boardable-vehicles.md)
+**Status:** 🟡 Partially built — a rail backbone and underground subways across bands are generated and traversable on H3 planets (`H3TransitNetwork` + the flight-plan follower); stations, scheduled/AdHoc/bus services, and boardable vehicles remain proposal. · **OpenSpec change:** `add-transit-networks` · **Depends on:** [`flying-entities`](flying-entities.md), [`boardable-vehicles`](boardable-vehicles.md)
 
 ## Summary
 
