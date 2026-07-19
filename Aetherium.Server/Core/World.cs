@@ -300,6 +300,10 @@ namespace Aetherium.Core
 
                 if (dict.TryAdd(entity.EntityId, entity))
                 {
+                    // Multi-tile entities are also indexed at every other tile under their footprint
+                    // (add-boardable-vehicles Phase 1). No-op for the single-tile fast path.
+                    IndexFootprintTiles(entity);
+
                     var character = entity as Character;
                     if (character != null && !Characters.TryAdd(entity.EntityId, character))
                         throw new Exception("Couldn't add to Character index");
@@ -355,6 +359,10 @@ namespace Aetherium.Core
             if (entitiesAtLocation.IsEmpty)
                 EntitiesByLocation.TryRemove(location, out var _);
 
+            // Release any additional footprint tiles (add-boardable-vehicles Phase 1). The anchor was
+            // already released above; this is idempotent for it and clears the rest. No-op single-tile.
+            UnindexFootprintTiles(entity);
+
             WorldEvents?.Invoke(new WorldEvent
             {
                 EventType = WorldEventType.EntityRemoved,
@@ -372,6 +380,24 @@ namespace Aetherium.Core
                 var source = entity.Get<WorldLocation>();
                 if (source == destination)
                     return;
+
+                // Multi-tile move (add-boardable-vehicles Phase 1): release every old footprint tile,
+                // move the anchor, then re-index every new footprint tile. Vehicle moves run on the
+                // owning grain's single-threaded loop, so the plain remove/re-add is race-free here.
+                if (entity.Has<Footprint>())
+                {
+                    UnindexFootprintTiles(entity);   // uses the current (old) anchor
+                    entity.Set(destination);         // anchor becomes destination
+                    IndexFootprintTiles(entity);     // uses the new anchor
+
+                    WorldEvents?.Invoke(new WorldEvent
+                    {
+                        EventType = WorldEventType.EntityMoved,
+                        Location = destination,
+                        Entity = entity
+                    });
+                    return;
+                }
 
                 // remove from location index
                 if (EntitiesByLocation.TryGetValue(source, out var entitiesAtSource)
@@ -407,6 +433,124 @@ namespace Aetherium.Core
                     });
                 }
             }
+        }
+
+        // --- Multi-tile footprint occupancy (add-boardable-vehicles Phase 1) ---
+
+        /// <summary>The tiles <paramref name="entity"/> would occupy if anchored at
+        /// <paramref name="anchor"/>: its <see cref="Footprint"/> when it has one, otherwise just the
+        /// single anchor tile. Lets placement/move validity be checked for a hypothetical anchor before
+        /// committing.</summary>
+        private static IEnumerable<WorldLocation> FootprintTilesAt(Entity entity, WorldLocation anchor)
+            => entity.Has<Footprint>()
+                ? entity.Get<Footprint>().OccupiedTiles(anchor)
+                : new[] { anchor };
+
+        /// <summary>Indexes a footprint entity at every tile it occupies (idempotent, including the
+        /// anchor). No-op for single-tile entities — they are already indexed at their anchor by the
+        /// caller.</summary>
+        private void IndexFootprintTiles(Entity entity)
+        {
+            if (!entity.Has<Footprint>())
+                return;
+
+            var anchor = entity.Get<WorldLocation>();
+            foreach (var tile in entity.Get<Footprint>().OccupiedTiles(anchor))
+            {
+                var bucket = EntitiesByLocation.GetOrAdd(tile, _ => new ConcurrentDictionary<string, Entity>());
+                bucket[entity.EntityId] = entity;
+            }
+        }
+
+        /// <summary>Removes a footprint entity from every tile it occupies (relative to its current
+        /// anchor), cleaning up now-empty location buckets. Idempotent; no-op for single-tile entities.</summary>
+        private void UnindexFootprintTiles(Entity entity)
+        {
+            if (!entity.Has<Footprint>())
+                return;
+
+            var anchor = entity.Get<WorldLocation>();
+            foreach (var tile in entity.Get<Footprint>().OccupiedTiles(anchor))
+            {
+                if (EntitiesByLocation.TryGetValue(tile, out var bucket))
+                {
+                    bucket.TryRemove(entity.EntityId, out _);
+                    if (bucket.IsEmpty)
+                        EntitiesByLocation.TryRemove(tile, out _);
+                }
+            }
+        }
+
+        /// <summary>
+        /// True when <paramref name="entity"/> may occupy the footprint anchored at
+        /// <paramref name="anchor"/>: every tile exists (no void / off-map), has passable terrain, and
+        /// holds no other footprint, character, or movement-obstructing entity. When
+        /// <paramref name="ignoreSelf"/> is true the entity's own footprint tiles don't count as
+        /// occupied (so a footprint can slide into a region overlapping where it already stands).
+        /// </summary>
+        public bool CanPlaceFootprint(Entity entity, WorldLocation anchor, bool ignoreSelf = true)
+        {
+            if (anchor is null)
+                return false;
+
+            foreach (var tile in FootprintTilesAt(entity, anchor))
+            {
+                if (!EntitiesByLocation.TryGetValue(tile, out var atTile))
+                    return false; // the world doesn't know this cell — off-map / void
+
+                if (!PassableTerrain(tile))
+                    return false;
+
+                foreach (var other in atTile.Values)
+                {
+                    if (ignoreSelf && other.EntityId == entity.EntityId)
+                        continue;
+
+                    if (other.AllComponents.OfType<ObstructsMovement>().Any(o => o.Obstruction > 0))
+                        return false;
+
+                    if (other is Character)
+                        return false;
+
+                    if (other.Has<Footprint>())
+                        return false; // no two footprints overlap
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Places a (possibly multi-tile) entity into the world at its current anchor, validating every
+        /// footprint tile first. Returns true and indexes the entity at every occupied tile on success;
+        /// returns false and indexes nothing when any tile is invalid. The single-tile case is an
+        /// ordinary <see cref="AddEntity"/> guarded by a one-cell validity check.
+        /// </summary>
+        public bool TryPlace(Entity entity)
+        {
+            var anchor = entity.Get<WorldLocation>();
+            if (!CanPlaceFootprint(entity, anchor, ignoreSelf: false))
+                return false;
+
+            AddEntity(entity);
+            return true;
+        }
+
+        /// <summary>
+        /// Moves a footprint entity so its anchor becomes <paramref name="destinationAnchor"/>, if every
+        /// destination tile is valid and unoccupied (the entity's own current tiles don't count against
+        /// it). Returns false and leaves the entity where it was when any destination tile is blocked.
+        /// </summary>
+        public bool TryMoveFootprint(Entity entity, WorldLocation destinationAnchor)
+        {
+            if (entity is null || !Entities.ContainsKey(entity.EntityId))
+                return false;
+
+            if (!CanPlaceFootprint(entity, destinationAnchor, ignoreSelf: true))
+                return false;
+
+            MoveEntity(entity.EntityId, destinationAnchor);
+            return true;
         }
 
         public bool TryMove(Character character, WorldDirection direction)

@@ -6,12 +6,12 @@
 - [x] 0.5 Tests: `SessionRepointTests` — the location invariant (register/re-point/unregister, no count inflation) + `RepointSessionAsync` switches the map, pushes a fresh frame, and perception follows the new map; existing `Travel_Rebinds_Session…` isolation test still green
 
 ## 1. Phase 1 - Footprint / multi-tile occupancy
-- [ ] 1.1 Add `Footprint` component (box `Size3d` or explicit relative `Cells`; `OccupiedTiles(anchor)` enumerator, mirroring `WorldChunk.AllLocations`)
-- [ ] 1.2 Index every occupied tile on `World.AddEntity`/`RemoveEntity` (extend `EntitiesByLocation` or add a parallel `FootprintIndex`), guarded by `Has<Footprint>()`
-- [ ] 1.3 Make `World.TryMove`/`TryPlace` footprint-aware: validate all destination tiles for passability and collision; no two footprints overlap
-- [ ] 1.4 Footprint-aware landing validity: every tile under the footprint valid landing terrain, in-bounds, and unoccupied
-- [ ] 1.5 Preserve the single-tile fast path for entities without a `Footprint`
-- [ ] 1.6 Tests: placement validates all tiles; move blocked if any tile impassable/occupied; single-tile entities unaffected
+- [x] 1.1 `Footprint` component (box `Size3d` or explicit relative `Cells`; `OccupiedTiles(anchor)` enumerator, mirroring `WorldChunk.AllLocations`)
+- [x] 1.2 Index every occupied tile on `World.AddEntity`/`TryRemoveEntity`/`MoveEntity` (idempotent multi-tile indexing over `EntitiesByLocation`), guarded by `Has<Footprint>()`
+- [x] 1.3 `World.TryPlace`/`TryMoveFootprint` + `CanPlaceFootprint`: validate every destination tile for passability and collision; no two footprints overlap
+- [x] 1.4 Footprint-aware landing validity: `CanPlaceFootprint` requires every tile under the footprint passable, in-bounds, and unoccupied — the landing check `VehicleGrain.LandAsync` will call
+- [x] 1.5 Single-tile fast path preserved for entities without a `Footprint` (every footprint branch guarded by `Has<Footprint>()`)
+- [x] 1.6 Tests: `FootprintOccupancyTests` — placement indexes all tiles / blocked by impassable, off-map, or overlap; move re-indexes & releases previous / blocked by a character; removal un-indexes all; single-tile fast path unchanged. Full suite (2508) green.
 
 ## 2. Phase 2 - Interior + boarding (parked vehicle)
 - [ ] 2.1 Define vehicle definition data (`VehicleConfig`): exterior footprint, interior source + spawn dock, landing rules, capacity, board hotspot
