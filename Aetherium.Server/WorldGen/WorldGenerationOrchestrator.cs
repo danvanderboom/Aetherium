@@ -68,7 +68,8 @@ namespace Aetherium.WorldGen
                 NarrativeConstraints = request.Narrative,
                 GeneratorVersion = request.GeneratorVersion,
                 FeatureRegistry = _registry,
-                Topology = topology
+                Topology = topology,
+                Economy = request.Economy
             };
 
             var pipelineContext = new WorldGenerationContext(request, generatorContext);

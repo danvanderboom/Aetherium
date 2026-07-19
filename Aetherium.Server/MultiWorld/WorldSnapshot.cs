@@ -57,6 +57,11 @@ namespace Aetherium.Server.MultiWorld
         /// without it, an H3 sphere would silently regenerate as a square grid (docs/h3-topology.md).
         /// </summary>
         [Id(8)] public string? Topology { get; set; }
+
+        /// <summary>Per-world economy recipe (goods/prices/basket/biome production), persisted so a
+        /// regenerate-from-recipe reactivation re-seeds settlements with the same bundle goods. Null →
+        /// the engine default. Added append-only after Topology.</summary>
+        [Id(9)] public Aetherium.Model.Economy.EconomyConfig? Economy { get; set; }
     }
 
     /// <summary>

@@ -36,6 +36,9 @@ MonoBehaviour:
   - id: WindowWall
     prefab: {fileID: 2650207994774198491, guid: e6bc816e5cb8571489d9e9295560a51b, type: 3}
   defaultTerrainPrefab: {fileID: 8482290691665492177, guid: 912ad02d47af08b4c9bb5bbaf0918926, type: 3}
+  regionTerrains:
+  - id: Water
+    material: {fileID: 2100000, guid: 84e898cb74ceb3d429e84f9a7adbf947, type: 2}
   items: []
   defaultItemPrefab: {fileID: 9018901109629423330, guid: f72b6f53e94555e4f8372ee5061d8957, type: 3}
   playerPrefab: {fileID: 7026807989520385318, guid: 0f6e2d32e8b8b0f42a86f542c79fb135, type: 3}

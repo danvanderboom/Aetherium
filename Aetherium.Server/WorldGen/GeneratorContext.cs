@@ -87,6 +87,11 @@ namespace Aetherium.WorldGen
         /// </summary>
         public System.Collections.Generic.Dictionary<string, string>? GeneratorParams { get; set; }
 
+        /// <summary>Optional per-world economy recipe threaded from the bundle (via
+        /// <see cref="WorldGenerationRequest.Economy"/>). The settlement seeder uses it when present;
+        /// null → the engine default. Keeps goods/recipes data, not hard-coded.</summary>
+        public Aetherium.Model.Economy.EconomyConfig? Economy { get; set; }
+
         /// <summary>
         /// Number of vertical levels to build (Z depth).
         /// </summary>

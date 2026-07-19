@@ -45,6 +45,7 @@ namespace Aetherium.Server.Games
             ("factions.yaml", "factions"),
             ("content.yaml", "content"),
             ("rules.yaml", "rules"),
+            ("economy.yaml", "economy"),
         };
 
         private readonly IDeserializer _deserializer = new DeserializerBuilder()
@@ -113,6 +114,7 @@ namespace Aetherium.Server.Games
             "factions" => definition.Factions != null,
             "content" => definition.Content != null,
             "rules" => definition.Rules != null,
+            "economy" => definition.Economy != null,
             _ => false,
         };
 
@@ -137,6 +139,9 @@ namespace Aetherium.Server.Games
                     break;
                 case "rules":
                     definition.Rules = _deserializer.Deserialize<Aetherium.Model.Eca.EcaConfig>(yaml);
+                    break;
+                case "economy":
+                    definition.Economy = _deserializer.Deserialize<Aetherium.Model.Economy.EconomyConfig>(yaml);
                     break;
             }
         }

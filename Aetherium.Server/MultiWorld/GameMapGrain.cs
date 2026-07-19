@@ -527,6 +527,7 @@ namespace Aetherium.Server.MultiWorld
                 Template = recipe.Template,
                 Parameters = new Dictionary<string, string>(recipe.Parameters, System.StringComparer.OrdinalIgnoreCase),
                 Topology = recipe.Topology,
+                Economy = recipe.Economy,
             };
             var orchestrator = new WorldGenerationOrchestrator(_generatorRegistry, BuildPasses(request.Template));
             var result = orchestrator.Generate(request);
@@ -535,7 +536,7 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null, Aetherium.Model.Economy.EconomyConfig? economyConfig = null)
         {
             var mapId = this.GetPrimaryKeyString();
 
@@ -570,7 +571,8 @@ namespace Aetherium.Server.MultiWorld
                 GeneratorVersion = parameters.TryGetValue("version", out var versionObj) ? versionObj?.ToString() ?? "1.0.0" : "1.0.0",
                 Template = ResolveTemplate(generatorType),
                 Parameters = parameterStrings,
-                Topology = topology
+                Topology = topology,
+                Economy = economyConfig
             };
 
             var passes = BuildPasses(request.Template);
@@ -657,6 +659,7 @@ namespace Aetherium.Server.MultiWorld
                 Height = size.Height,
                 Levels = size.Depth,
                 Topology = topology,
+                Economy = economyConfig,
             };
 
             _mapState.State = new MapState

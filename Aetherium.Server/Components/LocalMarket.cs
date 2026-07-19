@@ -11,6 +11,21 @@ namespace Aetherium.Components
         public double BasePrice { get; set; }
         public double Target { get; set; }
         public double Price { get; set; }
+
+        /// <summary>Price rises as stock falls below target and falls on a glut, clamped so a shortage or
+        /// glut can never run the price away.</summary>
+        public const double MinPriceMult = 0.25;
+        public const double MaxPriceMult = 4.0;
+
+        /// <summary>Recompute <see cref="Price"/> from current <see cref="Stock"/> vs <see cref="Target"/>.
+        /// Shared by the economy tick and by a player buy/sell, so a large trade immediately moves the
+        /// price it transacts against.</summary>
+        public void Reprice()
+        {
+            double target = Target > 0 ? Target : 1.0;
+            double mult = System.Math.Clamp(target / System.Math.Max(Stock, 1.0), MinPriceMult, MaxPriceMult);
+            Price = BasePrice * mult;
+        }
     }
 
     /// <summary>

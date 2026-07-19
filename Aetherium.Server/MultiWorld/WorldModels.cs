@@ -62,6 +62,8 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
         /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
         [Id(21)] public string? Topology { get; set; }
+
+        [Id(22)] public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
     }
 
     /// <summary>
@@ -164,6 +166,8 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
         /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
         [Id(16)] public string? Topology { get; set; }
+
+        [Id(17)] public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
     }
 
     /// <summary>

@@ -91,6 +91,7 @@ namespace Aetherium.Server.MultiWorld
             _worldState.State.ContentConfig = config.ContentConfig;
             _worldState.State.EcaConfig = config.EcaConfig;
             _worldState.State.Topology = config.Topology;
+            _worldState.State.EconomyConfig = config.EconomyConfig;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -172,7 +173,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig, _worldState.State.ContentConfig, _worldState.State.EcaConfig, _worldState.State.Topology);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig, _worldState.State.ContentConfig, _worldState.State.EcaConfig, _worldState.State.Topology, _worldState.State.EconomyConfig);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -377,6 +378,10 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>The world's tiling (docs/grid-topologies.md), set once at InitializeAsync and
         /// applied to every map this world creates. Null/empty means square.</summary>
         public string? Topology { get; set; }
+
+        /// <summary>Per-world economy recipe (goods/prices/basket/biome production), set once at
+        /// InitializeAsync and applied to every map this world creates. Null means the engine default.</summary>
+        public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
     }
 }
 

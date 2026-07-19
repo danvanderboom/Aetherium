@@ -128,6 +128,54 @@ namespace Aetherium.Test.Games
             AssertAllSectionsBound(result.Definition!);
         }
 
+        // The economy recipe, inline under an `economy:` key (for game.yaml) and as a bare body (for a
+        // sibling economy.yaml). Both must bind to GameDefinition.Economy — different loader code paths.
+        private const string EconomyInline = """
+            economy:
+              goods:
+                - { name: Spice, basePrice: 12.0, consumePerPop: 0.002 }
+                - { name: Crystal, basePrice: 40.0, consumePerPop: 0.001 }
+              coastalGood: Pearl
+              coastalPerPop: 0.004
+              production:
+                - { biome: Desert, good: Spice, perPop: 0.02 }
+                - { biome: Hills, good: Crystal, perPop: 0.01 }
+            """;
+
+        private const string EconomyBody = """
+            goods:
+              - { name: Spice, basePrice: 12.0, consumePerPop: 0.002 }
+              - { name: Crystal, basePrice: 40.0, consumePerPop: 0.001 }
+            coastalGood: Pearl
+            coastalPerPop: 0.004
+            production:
+              - { biome: Desert, good: Spice, perPop: 0.02 }
+              - { biome: Hills, good: Crystal, perPop: 0.01 }
+            """;
+
+        [Test]
+        public void LoadBundle_EconomySection_BindsGoodsAndRecipe()
+        {
+            // Inline in game.yaml and as a sibling economy.yaml must both bind the recipe.
+            foreach (var (label, files) in new[]
+            {
+                ("inline", new[] { ("game.yaml", Manifest + "\n" + EconomyInline) }),
+                ("split",  new[] { ("game.yaml", Manifest), ("economy.yaml", EconomyBody) }),
+            })
+            {
+                var dir = WriteBundle($"economy-{label}", files);
+                var result = new GameDefinitionLoader().LoadBundle(dir);
+                Assert.That(result.Success, Is.True, $"[{label}] " + string.Join("; ", result.Diagnostics));
+
+                var eco = result.Definition!.Economy;
+                Assert.That(eco, Is.Not.Null, $"[{label}] the economy section must bind");
+                Assert.That(eco!.Goods.Select(g => g.Name), Is.EquivalentTo(new[] { "Spice", "Crystal" }), $"[{label}] goods");
+                Assert.That(eco.Goods.Single(g => g.Name == "Crystal").BasePrice, Is.EqualTo(40.0).Within(1e-9), $"[{label}] price");
+                Assert.That(eco.CoastalGood, Is.EqualTo("Pearl"), $"[{label}] coastal good");
+                Assert.That(eco.Production.Single(p => p.Biome == "Desert").Good, Is.EqualTo("Spice"), $"[{label}] production");
+            }
+        }
+
         [Test]
         public void LoadBundle_SplitFiles_BindsAllSections()
         {

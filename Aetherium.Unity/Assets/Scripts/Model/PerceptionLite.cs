@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Aetherium.Unity.Model
 {
@@ -22,6 +23,16 @@ namespace Aetherium.Unity.Model
         /// Drives the HUD altitude gauge. Null for non-flyers — additive, mirrors <c>PerceptionDto.FlightEnvelope</c>.
         /// </summary>
         public FlightEnvelopeLite? FlightEnvelope { get; set; }
+
+        /// <summary>Grid topology ("square" today; hex/tri/h3 later). Mirrors <c>PerceptionDto.Topology</c>.</summary>
+        public string Topology { get; set; } = "square";
+
+        /// <summary>Per-frame ambient light tint; null = neutral white. Mirrors <c>PerceptionDto.AmbientTint</c>.</summary>
+        public AmbientTintLite? AmbientTint { get; set; }
+
+        /// <summary>The ambient tint as a color, defaulting to white when absent.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public Color AmbientTintColor => AmbientTint?.ToColor() ?? Color.white;
 
         public PerceptionLite()
         {

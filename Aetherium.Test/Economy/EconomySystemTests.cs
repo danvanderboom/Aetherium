@@ -208,6 +208,46 @@ namespace Aetherium.Test.Economy
             Assert.That(anyPriceMoved, Is.True, "a live economy should push some price off its base");
         }
 
+        [Test]
+        public void AGeneratedPlanetUsesTheBundleEconomyRecipe()
+        {
+            // The recipe a bundle would supply reaches the generator via GeneratorContext.Economy
+            // (populated from WorldGenerationRequest.Economy). Every seeded market must carry the
+            // custom goods, not the built-in default — proving the wiring end-to-end at the generator.
+            var ctx = new GeneratorContext(256, 256, 20260718)
+            {
+                GeneratorParams = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["h3Resolution"] = "2",
+                    ["capitalCount"] = "2", ["cityCount"] = "3", ["townCount"] = "6", ["villageCount"] = "16",
+                    ["capitalSpacingCells"] = "12", ["citySpacingCells"] = "8",
+                    ["townSpacingCells"] = "5", ["villageSpacingCells"] = "3",
+                },
+                Economy = new Aetherium.Model.Economy.EconomyConfig
+                {
+                    Goods = new()
+                    {
+                        new() { Name = "Spice",   BasePrice = 12.0, ConsumePerPop = 0.002 },
+                        new() { Name = "Crystal", BasePrice = 40.0, ConsumePerPop = 0.001 },
+                    },
+                    CoastalGood = "Pearl",
+                    CoastalPerPop = 0.004,
+                    Production = new() { new() { Biome = "Desert", Good = "Spice", PerPop = 0.02 } },
+                },
+            };
+
+            var world = new H3TerrainGenerator().Generate(ctx);
+            var markets = world.Entities.Values.Where(e => e.Has<LocalMarket>()).ToList();
+            Assert.That(markets.Count, Is.GreaterThan(10), "settlements should still be seeded with markets");
+            foreach (var m in markets)
+            {
+                Assert.That(m.Get<LocalMarket>().Goods.Keys, Is.EquivalentTo(new[] { "Spice", "Crystal" }),
+                    "each market carries the bundle recipe's goods");
+                Assert.That(m.Get<LocalMarket>().Goods.ContainsKey(Goods.Grain), Is.False,
+                    "the built-in default goods must not leak into a bundle-configured world");
+            }
+        }
+
         // ---- helpers ----
 
         private static (World World, EconomySystem Econ) NewEconWorld() => (new World(), new EconomySystem());

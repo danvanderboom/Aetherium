@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using Aetherium.Client;
+using Aetherium.Unity.Rounded;
 using UnityEngine;
 
 namespace Aetherium.Unity
@@ -26,6 +28,11 @@ namespace Aetherium.Unity
     public sealed class GridMapView : MonoBehaviour
     {
         [SerializeField] private ThemeAsset theme;
+
+        /// <summary>The content theme (terrain/region/creature bindings). Settable so mock/offline
+        /// drivers and tests can configure the view without a scene-serialized reference.</summary>
+        public ThemeAsset Theme { get => theme; set => theme = value; }
+
         [Tooltip("World units per grid cell — keep equal to EntityViewRegistry's cellSize.")]
         [SerializeField] private float cellSize = 1f;
         [Range(0f, 1f)]
@@ -44,12 +51,31 @@ namespace Aetherium.Unity
                  "margin, or explored-but-dark cells will pop at the edge of view.")]
         [SerializeField] private int renderRadius = 26;
 
+        [Header("Rounded region terrain")]
+        [Tooltip("Chaikin smoothing passes for region coastlines (0 = blocky, 2-3 = organic).")]
+        [SerializeField] private int regionSmoothIterations = 2;
+        [Tooltip("Sub-grid tessellation density for the region SDF mesh (higher = smoother curve, more verts).")]
+        [SerializeField] private int regionSubdivisions = 3;
+        [Tooltip("Small vertical lift of region surfaces above the ground slabs so water never z-fights terrain.")]
+        [SerializeField] private float regionYBias = 0.02f;
+        [Tooltip("How far each region terrain feathers outward over its lower-priority neighbours " +
+                 "(world units) — the soft blend at terrain boundaries. 0 = crisp edges, ~0.6 = fuzzy.")]
+        [SerializeField] private float regionBlendWidth = 0.6f;
+
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor"); // URP/HDRP main color
         private static readonly int ColorId = Shader.PropertyToID("_Color");         // Built-in main color
 
         private readonly Dictionary<GridPoint, CellView> _cells = new Dictionary<GridPoint, CellView>();
         private MaterialPropertyBlock _mpb;
         private AetheriumClientBehaviour _client;
+
+        // Contiguous "region" terrains (water now; forest/mountain later) render as one smooth
+        // curved mesh per terrain+level instead of a prefab per cell — see RoundedRegionRenderer.
+        private readonly RoundedRegionRenderer _regionRenderer = new RoundedRegionRenderer();
+        private readonly List<(string terrain, int x, int y, int z)> _regionCells =
+            new List<(string, int, int, int)>();
+        private Func<string, Material> _resolveRegionMaterial;
+        private Func<string, int> _resolveRegionPriority;
 
         private sealed class CellView
         {
@@ -67,6 +93,8 @@ namespace Aetherium.Unity
         {
             _client = GetComponent<AetheriumClientBehaviour>();
             _mpb = new MaterialPropertyBlock();
+            _resolveRegionMaterial = name => theme != null ? theme.ResolveRegionMaterial(name) : null;
+            _resolveRegionPriority = name => theme != null ? theme.ResolveRegionPriority(name) : 0;
             _client.FrameReceived += _ => SyncFromMemory();
             _client.Reanchored += _ => Clear();
         }
@@ -83,46 +111,107 @@ namespace Aetherium.Unity
                 -(float)((anchor.Y + y) * cellSize));
         }
 
+        /// <summary>A single cell to render, decoupled from the perception store so non-SignalR
+        /// sources (offline/mock data, tests) can drive the view through the same path.</summary>
+        public readonly struct CellInput
+        {
+            public readonly GridPoint Position;
+            public readonly string TerrainName;
+            public readonly bool InView;
+            public readonly double LightLevel;
+
+            public CellInput(GridPoint position, string terrainName, bool inView, double lightLevel)
+            {
+                Position = position;
+                TerrainName = terrainName;
+                InView = inView;
+                LightLevel = lightLevel;
+            }
+        }
+
         private void SyncFromMemory()
         {
             var store = _client.Store;
             if (store == null)
                 return;
+            RenderCells(EnumerateMemory(store), store.Anchor, store.LatestFrame?.Topology);
+        }
 
-            var anchor = store.Anchor;
-            long radiusSq = (long)renderRadius * renderRadius;
-
+        private static IEnumerable<CellInput> EnumerateMemory(PerceptionStore store)
+        {
             foreach (var remembered in store.Memory)
             {
-                var terrainName = remembered.Terrain != null ? remembered.Terrain.Name : null;
+                var name = remembered.Terrain != null ? remembered.Terrain.Name : null;
+                if (name == null)
+                    continue;
+                yield return new CellInput(remembered.Position, name, remembered.InView, remembered.LastLightLevel);
+            }
+        }
+
+        /// <summary>
+        /// Renders an explicit cell set around <paramref name="anchor"/>. The live perception path
+        /// funnels into this; it is public so offline/mock data and tests can drive the same
+        /// rendering with no server. Region terrains (per the theme) draw as one smooth mesh on a
+        /// square topology; everything else is a prefab per cell.
+        /// </summary>
+        public void RenderCells(IEnumerable<CellInput> cells, GridPoint anchor, string topology)
+        {
+            _mpb ??= new MaterialPropertyBlock();
+            _resolveRegionMaterial ??= name => theme != null ? theme.ResolveRegionMaterial(name) : null;
+            _resolveRegionPriority ??= name => theme != null ? theme.ResolveRegionPriority(name) : 0;
+
+            long radiusSq = (long)renderRadius * renderRadius;
+
+            // Region terrains (water/…) render as a smooth mesh, not prefabs — but the mesh math
+            // assumes the square identity layout, so only route them there on a square topology;
+            // any other topology keeps the classic prefab-per-cell path.
+            bool regionsEnabled = theme != null && IsSquareTopology(topology);
+            _regionCells.Clear();
+
+            foreach (var cell in cells)
+            {
+                var terrainName = cell.TerrainName;
                 if (terrainName == null)
                     continue;
 
                 // Window cull: keep only the neighborhood live. Cells beyond the radius (or on
                 // another level) are despawned; they re-materialize from memory if you walk back.
-                long dx = remembered.Position.X - anchor.X;
-                long dy = remembered.Position.Y - anchor.Y;
-                bool near = remembered.Position.Z == anchor.Z && (dx * dx + dy * dy) <= radiusSq;
+                long dx = cell.Position.X - anchor.X;
+                long dy = cell.Position.Y - anchor.Y;
+                bool near = cell.Position.Z == anchor.Z && (dx * dx + dy * dy) <= radiusSq;
                 if (!near)
                 {
-                    if (_cells.TryGetValue(remembered.Position, out var stale))
+                    if (_cells.TryGetValue(cell.Position, out var stale))
                     {
                         Destroy(stale.GameObject);
-                        _cells.Remove(remembered.Position);
+                        _cells.Remove(cell.Position);
                     }
                     continue;
                 }
 
-                if (!_cells.TryGetValue(remembered.Position, out var cell))
+                if (regionsEnabled && theme.IsRegionTerrain(terrainName))
                 {
-                    cell = Materialize(remembered.Position, terrainName);
-                    _cells[remembered.Position] = cell;
+                    // Drawn as part of the region mesh below; never spawn a prefab for it (and
+                    // drop any prefab it had before it was classified as a region terrain).
+                    if (_cells.TryGetValue(cell.Position, out var priorPrefab))
+                    {
+                        Destroy(priorPrefab.GameObject);
+                        _cells.Remove(cell.Position);
+                    }
+                    _regionCells.Add((terrainName, cell.Position.X, cell.Position.Y, cell.Position.Z));
+                    continue;
                 }
-                else if (cell.TerrainName != terrainName)
+
+                if (!_cells.TryGetValue(cell.Position, out var view))
+                {
+                    view = Materialize(cell.Position, terrainName);
+                    _cells[cell.Position] = view;
+                }
+                else if (view.TerrainName != terrainName)
                 {
                     // Terrain identity changed (door opened, wall breached): re-materialize.
-                    Destroy(cell.GameObject);
-                    _cells[remembered.Position] = cell = Materialize(remembered.Position, terrainName);
+                    Destroy(view.GameObject);
+                    _cells[cell.Position] = view = Materialize(cell.Position, terrainName);
                 }
 
                 // In view: brightness follows the server's light level linearly — light
@@ -130,16 +219,34 @@ namespace Aetherium.Unity
                 // the gradient too subtle to read (the pool looked binary again, so
                 // occlusion notches read as a broken disc instead of shadows). Out of
                 // view: the flat memory dim.
-                float target = remembered.InView
-                    ? Mathf.Lerp(inViewFloor, 1f, Mathf.Clamp01((float)remembered.LastLightLevel))
+                float target = cell.InView
+                    ? Mathf.Lerp(inViewFloor, 1f, Mathf.Clamp01((float)cell.LightLevel))
                     : memoryDim;
-                if (Mathf.Abs(cell.Brightness - target) > 0.02f)
+                if (Mathf.Abs(view.Brightness - target) > 0.02f)
                 {
-                    cell.Brightness = target;
-                    ApplyDim(cell, target);
+                    view.Brightness = target;
+                    ApplyDim(view, target);
                 }
             }
+
+            // One smooth mesh per (region terrain, level) covering the near cells collected above.
+            if (regionsEnabled)
+            {
+                _regionRenderer.Sync(
+                    transform, _regionCells, _resolveRegionMaterial,
+                    cellSize, regionSmoothIterations, regionSubdivisions,
+                    Color.white, regionYBias, _resolveRegionPriority, regionBlendWidth);
+            }
+            else
+            {
+                _regionRenderer.Clear();
+            }
         }
+
+        // The server defaults topology to "square"; treat null/empty as square too.
+        private static bool IsSquareTopology(string topology) =>
+            string.IsNullOrEmpty(topology) ||
+            string.Equals(topology, "square", StringComparison.OrdinalIgnoreCase);
 
         private CellView Materialize(GridPoint position, string terrainName)
         {
@@ -216,6 +323,7 @@ namespace Aetherium.Unity
             foreach (var cell in _cells.Values)
                 Destroy(cell.GameObject);
             _cells.Clear();
+            _regionRenderer.Clear();
         }
     }
 }

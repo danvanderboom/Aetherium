@@ -23,6 +23,8 @@ namespace Aetherium.Unity.Rendering
         [SerializeField] private TileBase? defaultTile;
         [SerializeField] private float depthFalloff = DepthShading.DefaultFalloff;
         [SerializeField] private float minAlpha = DepthShading.DefaultMinAlpha;
+        [SerializeField] private bool skipRegionTerrain = false;
+        [SerializeField] private bool applyLighting = false;
 
         private readonly Dictionary<int, TilemapRenderer2D> bands = new Dictionary<int, TilemapRenderer2D>();
         private readonly HashSet<int> bandsThisFrame = new HashSet<int>();
@@ -30,6 +32,37 @@ namespace Aetherium.Unity.Rendering
 
         /// <summary>The band currently drawn at full opacity (the player's Z).</summary>
         public int FocusZ => focusZ;
+
+        /// <summary>
+        /// Propagated to every band's tilemap: when true, region terrain (water/lava)
+        /// is not drawn as tiles, leaving it to a companion
+        /// <see cref="Water.WaterRegionRenderer"/> that draws it as a smooth mesh.
+        /// </summary>
+        public bool SkipRegionTerrain
+        {
+            get => skipRegionTerrain;
+            set
+            {
+                skipRegionTerrain = value;
+                foreach (var band in bands.Values)
+                    band.SkipRegionTerrain = value;
+            }
+        }
+
+        /// <summary>
+        /// Propagated to every band's tilemap: when true, each cell is shaded by its
+        /// light level and the frame's ambient tint (<see cref="TerrainLighting"/>).
+        /// </summary>
+        public bool ApplyLighting
+        {
+            get => applyLighting;
+            set
+            {
+                applyLighting = value;
+                foreach (var band in bands.Values)
+                    band.ApplyLighting = value;
+            }
+        }
 
         /// <summary>
         /// Renders the slab using the player's own band as the focus band. This is
@@ -83,6 +116,8 @@ namespace Aetherium.Unity.Rendering
             go.AddComponent<TilemapRenderer>();
             var renderer = go.AddComponent<TilemapRenderer2D>();
             renderer.Configure(bandTilemap, defaultTile);
+            renderer.SkipRegionTerrain = skipRegionTerrain;
+            renderer.ApplyLighting = applyLighting;
 
             bands[z] = renderer;
             return renderer;

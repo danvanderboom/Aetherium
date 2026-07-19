@@ -222,7 +222,7 @@ namespace Aetherium.WorldGen.Generators.Outdoor
             // Seed the economy onto the settlements: producers/consumers/markets from biome + population,
             // and trade links from the road graph. From here the map's EconomySystem drives the numbers.
             foreach (var ps in settlements)
-                Aetherium.Server.Economy.EconomySeeder.Seed(ps.Entity, ps.Entity.Get<Settlement>());
+                Aetherium.Server.Economy.EconomySeeder.Seed(ps.Entity, ps.Entity.Get<Settlement>(), context.Economy);
             foreach (var edge in roads)
                 Aetherium.Server.Economy.EconomySeeder.Link(edge.A.Entity, edge.B.Entity, edge.Highway, edge.Length);
 

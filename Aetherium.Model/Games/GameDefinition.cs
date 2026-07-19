@@ -53,6 +53,10 @@ namespace Aetherium.Model.Games
         [Id(10)] public Aetherium.Model.Content.ContentConfig? Content { get; set; }
         [Id(11)] public Aetherium.Model.Eca.EcaConfig? Rules { get; set; }
 
+        /// <summary>Optional per-world economy recipe (goods/prices/basket/biome production), loaded from
+        /// an <c>economy.yaml</c> (or <c>economy:</c> section). Null → the engine's built-in default.</summary>
+        [Id(13)] public Aetherium.Model.Economy.EconomyConfig? Economy { get; set; }
+
         /// <summary>The human player's own character-type config (currently just vision). The
         /// YAML `player:` section binds here. Null keeps the engine default: omnidirectional
         /// sight with a 120° FOV that only matters if a game turns directional vision on.</summary>
