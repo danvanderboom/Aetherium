@@ -141,6 +141,10 @@ namespace Aetherium.Model.Worlds
 
         /// <summary>Per-world economy recipe (goods/prices/basket/biome production). Null → engine default.</summary>
         [Id(17)] public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
+
+        /// <summary>Per-world opening purse (add-starting-currency-data): the credits a joining player's
+        /// <c>Wallet</c> starts with. Null → the engine default <c>Aetherium.Components.Wallet.StartingCurrency</c>.</summary>
+        [Id(18)] public double? StartingCurrency { get; set; }
     }
 
     /// <summary>

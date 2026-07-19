@@ -145,9 +145,10 @@ namespace Overworld.EditorTools
             var rig = new GameObject("Aetherium");
             var behaviour = rig.AddComponent<AetheriumClientBehaviour>();
             var behaviourSo = new SerializedObject(behaviour);
-            behaviourSo.FindProperty("serverUrl").stringValue = "http://localhost:50310";
-            // worldId stays empty: paste an overworld instance id here (or in the Inspector) —
-            //   Invoke-RestMethod -Method Post http://localhost:50310/api/management/games/overworld/instances
+            behaviourSo.FindProperty("serverUrl").stringValue = "http://localhost:5000";
+            // Resolve a live overworld instance from the lobby on connect (no GUID to paste).
+            // Create one first:  dotnet run --project Aetherctl -- game create overworld
+            behaviourSo.FindProperty("joinGameDefinitionId").stringValue = "overworld";
             behaviourSo.ApplyModifiedPropertiesWithoutUndo();
 
             var mapView = rig.AddComponent<GridMapView>();

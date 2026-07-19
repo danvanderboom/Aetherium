@@ -303,7 +303,14 @@ namespace Aetherium.Server
                 builder.Host.UseOrleans(siloBuilder =>
                 {
                     siloBuilder.UseLocalhostClustering();
-                    
+
+                    // Orleans reminders drive the self-scheduling grains (add-boardable-vehicles:
+                    // VehicleGrain self-drives its timed voyage via a reminder). In-memory is correct
+                    // for this single-silo localhost host — reminders survive grain deactivation but not
+                    // a full process restart, which the vehicle grain recovers from by re-arming from its
+                    // persisted ETA on activation.
+                    siloBuilder.UseInMemoryReminderService();
+
                     // Configure grain storage. Resolution centralized in ResolveStorageConfiguration
                     // so the snapshot-store DI binding (above) and the grain-storage providers stay in sync.
                     // Every [PersistentState(..., "<storeName>")] declared by a grain must have a

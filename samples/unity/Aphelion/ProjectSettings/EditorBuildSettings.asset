@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/Overworld.unity
-    guid: 2ad9ce095787c2a498426e1ea92d680c
+    path: Assets/Scenes/AphelionPlanet.unity
+    guid: e60900dc8599be441afd40f9e63dbe10
   m_configObjects: {}
