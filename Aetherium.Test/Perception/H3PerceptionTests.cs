@@ -131,7 +131,7 @@ namespace Aetherium.Test.Perception
         {
             var p = Compute();
             foreach (var kv in p.Visuals)
-                Assert.That(kv.Value.Terrain, Is.Not.Null, $"visible cell {kv.Key} has no terrain");
+                Assert.That(kv.Value.TileTypeId, Is.Not.Null, $"visible cell {kv.Key} has no terrain");
         }
 
         [Test]

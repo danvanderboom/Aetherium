@@ -80,8 +80,15 @@ namespace Aetherium.Server
             return new VisualDto
             {
                 Location = visual.Location.ToDto(),
-                Terrain = visual.Terrain?.ToDto(),
-                LightLevel = lightLevel,
+                // Terrain by reference into the frame's TileTypes palette (which ToDto-serializes the
+                // full definition once). The perception builders guarantee every emitted terrain name is
+                // present in that palette. (perception efficiency)
+                TileTypeId = visual.Terrain?.Name,
+                // Quantize to 3 decimals: sub-0.001 light differences are imperceptible, but full-precision
+                // doubles (e.g. 0.8333333333333334) cost ~13 extra chars each × every visible cell on the
+                // wire, and — once perception diffs land — would spuriously mark otherwise-unchanged cells
+                // as "changed" every frame. Measured ~5% of a typical frame's bytes. (perception efficiency)
+                LightLevel = Math.Round(lightLevel, 3),
                 ThingsSeen = visual.ThingsSeen.ToDictionary(
                     kvp => (Aetherium.Model.VisualType)(int)kvp.Key,
                     kvp => kvp.Value.Count)

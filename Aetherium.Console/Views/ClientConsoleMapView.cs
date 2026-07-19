@@ -112,10 +112,20 @@ namespace Aetherium.Views
             return set;
         }
 
+        // Terrain now arrives by reference: VisualDto.TileTypeId keys into the frame's TileTypes palette
+        // (which carries the full name+settings). Presence is just "id is set"; the full definition (e.g.
+        // the "MapCharacter" glyph) is resolved from the palette. (perception efficiency)
+        private static bool HasTerrain(VisualDto v) => !string.IsNullOrEmpty(v.TileTypeId);
+
+        private TileTypeDto? ResolveTerrain(VisualDto v) =>
+            v.TileTypeId != null && Perception != null
+                && Perception.TileTypes.TryGetValue(v.TileTypeId, out var tt)
+                ? tt : null;
+
         // A cell anchors a glyph if it has terrain, an item, or something seen there. Empty focus cells (open air /
         // grates) are not drawable, so a lower band shows through.
         private static bool IsDrawable(VisualDto v, HashSet<(int x, int y, int z)> itemLocs) =>
-            v.Terrain != null
+            HasTerrain(v)
             || v.ThingsSeen.Count > 0
             || itemLocs.Contains((v.Location.X, v.Location.Y, v.Location.Z));
 
@@ -310,7 +320,7 @@ namespace Aetherium.Views
                     return item.Icon.Length >= 2 ? item.Icon.Substring(0, 2) : item.Icon.PadRight(2);
             }
 
-            if (v.Terrain != null && v.Terrain.Settings.TryGetValue("MapCharacter", out var terrainChar))
+            if (ResolveTerrain(v) is { } terrainType && terrainType.Settings.TryGetValue("MapCharacter", out var terrainChar))
                 return terrainChar + terrainChar;
 
             if (v.ThingsSeen.Count > 0)
@@ -518,7 +528,7 @@ namespace Aetherium.Views
                         var itemAtLocation = Perception.VisibleItems?.FirstOrDefault(
                             i => i.Location != null && i.Location.X == relativeX && i.Location.Y == relativeY && i.Location.Z == 0);
 
-                        switch (ResolveContentLayer(characterAtLocation != null, itemAtLocation != null, visual.Terrain != null))
+                        switch (ResolveContentLayer(characterAtLocation != null, itemAtLocation != null, HasTerrain(visual)))
                         {
                             case MapCellLayer.Character:
                                 DrawCharacter(characterAtLocation!, color, visual.LightLevel);
@@ -527,7 +537,7 @@ namespace Aetherium.Views
                                 DrawItem(itemAtLocation!, color, visual.LightLevel);
                                 break;
                             case MapCellLayer.Terrain:
-                                DrawTileType(visual.Terrain!, color, visual.LightLevel);
+                                DrawTileType(ResolveTerrain(visual)!, color, visual.LightLevel);
                                 break;
                             default:
                                 Console.BackgroundColor = BackgroundColor;
@@ -548,8 +558,8 @@ namespace Aetherium.Views
                             DrawCharacter(characterAtLocation, color, light);
                         else if (itemAtLocation != null)
                             DrawItem(itemAtLocation, color, light);
-                        else if (visual.Terrain != null)
-                            DrawTileType(visual.Terrain, color, light);
+                        else if (ResolveTerrain(visual) is { } terrainType)
+                            DrawTileType(terrainType, color, light);
                         else if (visual.ThingsSeen.Count > 0)
                             DrawSilhouette(visual, color, light); // an overhead/below entity with no terrain
                         else
@@ -932,7 +942,7 @@ namespace Aetherium.Views
                     {
                         asciiMap.Tiles[y][x] = Cell(itemAtLocation.Icon);
                     }
-                    else if (visual.Terrain != null && visual.Terrain.Settings.TryGetValue("MapCharacter", out var terrainChar))
+                    else if (ResolveTerrain(visual) is { } terrainType && terrainType.Settings.TryGetValue("MapCharacter", out var terrainChar))
                     {
                         asciiMap.Tiles[y][x] = Cell(terrainChar);
                     }

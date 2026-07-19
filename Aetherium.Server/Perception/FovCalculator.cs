@@ -27,6 +27,16 @@ namespace Aetherium.Systems
             var height = bounds.Height;
             var visible = new bool[height, width];
 
+            // Per-frame cell-opacity memo. Rays overlap heavily near the origin — a cell close to
+            // the observer lies on almost every ray — so the naive cast recomputes each cell's
+            // opacity ~5–6x per frame, and each recompute is two dict lookups + a LINQ scan of the
+            // cell's entities (GetTerrain). Every line between two in-bounds points stays inside the
+            // bounding box, so a plain (bounds-sized) array indexed by local (y,x) covers every step;
+            // `opacityKnown` distinguishes "0.0, computed" from "not yet computed". Cuts terrain
+            // lookups to one per unique cell. (perception efficiency)
+            var opacityCache = new double[height, width];
+            var opacityKnown = new bool[height, width];
+
             // Origin is always visible to itself when inside the bounds.
             if (bounds.Contains(new Point(origin.X, origin.Y)))
                 visible[origin.Y - bounds.Y, origin.X - bounds.X] = true;
@@ -48,11 +58,28 @@ namespace Aetherium.Systems
                     if (distance > maxRange)
                         continue;
 
-                    CastRay(world, origin, target, bounds, visible);
+                    CastRay(world, origin, target, bounds, visible, opacityCache, opacityKnown);
                 }
             }
 
             return visible;
+        }
+
+        /// <summary>Cell opacity via the per-frame memo when the cell is inside <paramref name="bounds"/>
+        /// (the common case — every ray step is), else a direct uncached compute.</summary>
+        private static double CachedOpacity(
+            World world, WorldLocation cell, Rectangle bounds, double[,] cache, bool[,] known)
+        {
+            int lx = cell.X - bounds.X;
+            int ly = cell.Y - bounds.Y;
+            if (lx < 0 || ly < 0 || lx >= bounds.Width || ly >= bounds.Height)
+                return GetCellOpacity(world, cell);
+            if (!known[ly, lx])
+            {
+                cache[ly, lx] = GetCellOpacity(world, cell);
+                known[ly, lx] = true;
+            }
+            return cache[ly, lx];
         }
 
         /// <summary>
@@ -60,7 +87,8 @@ namespace Aetherium.Systems
         /// each cell visible until cumulative opacity reaches 1.0 (the blocking cell is
         /// the last marked). The origin cell is skipped — you see out of your own cell.
         /// </summary>
-        private static void CastRay(World world, WorldLocation origin, WorldLocation target, Rectangle bounds, bool[,] visible)
+        private static void CastRay(World world, WorldLocation origin, WorldLocation target, Rectangle bounds,
+            bool[,] visible, double[,] opacityCache, bool[,] opacityKnown)
         {
             double cumulativeOpacity = 0.0;
             var originCell = Aetherium.Topology.GridCoord.From(origin);
@@ -72,7 +100,7 @@ namespace Aetherium.Systems
 
                 var step = cell.ToWorldLocation();
                 var stepPoint = new Point(step.X, step.Y);
-                var cellOpacity = GetCellOpacity(world, step);
+                var cellOpacity = CachedOpacity(world, step, bounds, opacityCache, opacityKnown);
                 cumulativeOpacity += cellOpacity;
 
                 // Mark the cell visible whether or not it's the blocker — you can always

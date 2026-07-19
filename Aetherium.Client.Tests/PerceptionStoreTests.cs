@@ -21,6 +21,13 @@ namespace Aetherium.Client.Tests
         {
             var frame = new PerceptionDto { UpdateTimestamp = Guid.NewGuid() };
             configure?.Invoke(frame);
+            // Terrain is now referenced by id; auto-populate the TileTypes palette from the ids the
+            // visuals reference so the store can resolve them — mirroring the server invariant that every
+            // visual's TileTypeId is present in the frame's palette. Name == id keeps the existing
+            // remembered.Terrain.Name assertions valid.
+            foreach (var visual in frame.Visuals.Values)
+                if (visual.TileTypeId is { } id && !frame.TileTypes.ContainsKey(id))
+                    frame.TileTypes[id] = new TileTypeDto { Name = id };
             return frame;
         }
 
@@ -81,7 +88,7 @@ namespace Aetherium.Client.Tests
             store.AdvanceAnchor(3, 3, 0);
             store.ApplyFrame(Frame(f =>
             {
-                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Cave" } };
+                f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Cave" };
                 f.VisibleCharacters.Add(Npc("npc-1", 1, 0));
             }));
 
@@ -172,15 +179,15 @@ namespace Aetherium.Client.Tests
 
             store.ApplyFrame(Frame(f =>
             {
-                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Cave" }, LightLevel = 0.9 };
-                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" }, LightLevel = 0.8 };
+                f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Cave", LightLevel = 0.9 };
+                f.Visuals["1,0,0"] = new VisualDto { TileTypeId = "Wall", LightLevel = 0.8 };
             }));
             Assert.That(revealed, Is.EquivalentTo(new[] { new GridPoint(0, 0, 0), new GridPoint(1, 0, 0) }));
 
             // Next frame only shows the origin cell — the wall slipped out of view but
             // stays remembered (explored-but-dark rendering).
             store.ApplyFrame(Frame(f =>
-                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Cave" }, LightLevel = 0.9 }));
+                f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Cave", LightLevel = 0.9 }));
 
             var wall = store.Memory.Single(c => c.Position == new GridPoint(1, 0, 0));
             Assert.That(wall.Terrain!.Name, Is.EqualTo("Wall"));
@@ -198,8 +205,8 @@ namespace Aetherium.Client.Tests
             var received = new List<PerceptionDto>();
             store.FrameReceived += received.Add;
 
-            var first = Frame(f => f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Cave" } });
-            var second = Frame(f => f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } });
+            var first = Frame(f => f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Cave" });
+            var second = Frame(f => f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Wall" });
 
             using (store.HoldFrames())
             {
@@ -226,21 +233,21 @@ namespace Aetherium.Client.Tests
             // Standing at origin: wall visible one cell north (rel 0,-1).
             store.ApplyFrame(Frame(f =>
             {
-                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
-                f.Visuals["0,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
-                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Floor" };
+                f.Visuals["0,-1,0"] = new VisualDto { TileTypeId = "Wall" };
+                f.Visuals["1,0,0"] = new VisualDto { TileTypeId = "Floor" };
             }));
 
             // Player steps east. Post-move frame (computed at the new location: the wall is
             // now rel -1,-1; old cell rel -1,0) arrives while the move is still in flight.
             var postMove = Frame(f =>
             {
-                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
-                f.Visuals["-1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
-                f.Visuals["-1,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
+                f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Floor" };
+                f.Visuals["-1,0,0"] = new VisualDto { TileTypeId = "Floor" };
+                f.Visuals["-1,-1,0"] = new VisualDto { TileTypeId = "Wall" };
                 // Floor one cell north of the NEW position. Folded at the OLD anchor this
                 // rel lands exactly on the remembered wall's cell — the corrupting write.
-                f.Visuals["0,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["0,-1,0"] = new VisualDto { TileTypeId = "Floor" };
             });
 
             using (store.HoldFrames())
@@ -268,7 +275,7 @@ namespace Aetherium.Client.Tests
             using (store.HoldFrames())
             {
                 store.ApplyFrame(Frame(f =>
-                    f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "PreDeathFloor" } }));
+                    f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "PreDeathFloor" }));
                 store.NoteDiscontinuity(ReanchorReason.Respawned);
             }
 
@@ -286,9 +293,9 @@ namespace Aetherium.Client.Tests
             var store = new PerceptionStore();
 
             store.ApplyFrame(Frame(f =>
-                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Door" } }));
+                f.Visuals["1,0,0"] = new VisualDto { TileTypeId = "Door" }));
             store.ApplyFrame(Frame(f =>
-                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "OpenDoor" } }));
+                f.Visuals["1,0,0"] = new VisualDto { TileTypeId = "OpenDoor" }));
 
             var cell = store.Memory.Single(c => c.Position == new GridPoint(1, 0, 0));
             Assert.That(cell.Terrain!.Name, Is.EqualTo("OpenDoor"));
@@ -305,8 +312,8 @@ namespace Aetherium.Client.Tests
             PerceptionDto WithHeading(int heading) => Frame(f =>
             {
                 f.HeadingDegrees = heading;
-                f.Visuals["0,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
-                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["0,-1,0"] = new VisualDto { TileTypeId = "Wall" };
+                f.Visuals["1,0,0"] = new VisualDto { TileTypeId = "Floor" };
                 f.VisibleCharacters.Add(Npc("npc-1", 1, -1));
             });
 
@@ -334,11 +341,11 @@ namespace Aetherium.Client.Tests
             var store = new PerceptionStore();
 
             store.ApplyFrame(Frame(f =>
-                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } }));
+                f.Visuals["1,0,0"] = new VisualDto { TileTypeId = "Wall" }));
 
             store.AdvanceAnchor(0, 0, 1); // took the stairs up
             store.ApplyFrame(Frame(f =>
-                f.Visuals["1,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Vent" } }));
+                f.Visuals["1,0,0"] = new VisualDto { TileTypeId = "Vent" }));
 
             Assert.That(store.Memory.Single(c => c.Position == new GridPoint(1, 0, 0)).Terrain!.Name,
                 Is.EqualTo("Wall"), "deck 0 geometry survives");
@@ -379,7 +386,7 @@ namespace Aetherium.Client.Tests
             store.ApplyFrame(Frame(f =>
             {
                 f.MoveSequence = 1;
-                f.Visuals["0,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
+                f.Visuals["0,-1,0"] = new VisualDto { TileTypeId = "Wall" };
             }));
             Assert.That(received, Is.EqualTo(1));
 
@@ -390,7 +397,7 @@ namespace Aetherium.Client.Tests
             store.ApplyFrame(Frame(f =>
             {
                 f.MoveSequence = 1;
-                f.Visuals["-1,-1,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["-1,-1,0"] = new VisualDto { TileTypeId = "Floor" };
             }));
             Assert.That(received, Is.EqualTo(1), "stale frame must not raise FrameReceived");
             Assert.That(store.Memory.Single().Terrain!.Name, Is.EqualTo("Wall"), "memory untouched by the stale frame");
@@ -399,7 +406,7 @@ namespace Aetherium.Client.Tests
             store.ApplyFrame(Frame(f =>
             {
                 f.MoveSequence = 2;
-                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Floor" };
             }));
             Assert.That(received, Is.EqualTo(2));
             Assert.That(store.Memory.Single(c => c.Position == new GridPoint(1, 0, 0)).Terrain!.Name, Is.EqualTo("Floor"));
@@ -415,12 +422,12 @@ namespace Aetherium.Client.Tests
             var postMove = Frame(f =>
             {
                 f.MoveSequence = 2;
-                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Floor" } };
+                f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Floor" };
             });
             var staleTick = Frame(f =>
             {
                 f.MoveSequence = 1;
-                f.Visuals["0,0,0"] = new VisualDto { Terrain = new TileTypeDto { Name = "Wall" } };
+                f.Visuals["0,0,0"] = new VisualDto { TileTypeId = "Wall" };
             });
 
             using (store.HoldFrames())
