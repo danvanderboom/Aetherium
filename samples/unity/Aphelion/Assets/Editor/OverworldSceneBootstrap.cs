@@ -84,6 +84,42 @@ namespace Overworld.EditorTools
             so.FindProperty("defaultCreaturePrefab").objectReferenceValue = creatureDefault;
             so.FindProperty("defaultItemPrefab").objectReferenceValue = item;
             so.FindProperty("playerPrefab").objectReferenceValue = player;
+
+            // Every soft ground terrain renders as one smooth, blended region mesh instead of blocky
+            // slabs — GridMapView skips prefab-spawning for these and RoundedRegionRenderer draws
+            // them with edges that feather over their lower-priority neighbours (no hard square
+            // steps, no gaps). Priority = draw order (higher on top): base grounds low, water on top
+            // so rivers/shore read over everything. Mountains/walls stay as 3D prefab blocks. The
+            // prefab bindings above remain as harmless fallbacks if the region path is ever off.
+            var regions = new (string name, int priority, Material material)[]
+            {
+                ("Desert",  0, RoundedTerrainMaterial("Desert",  ColorOf("Desert"))),
+                ("Indoors", 1, RoundedTerrainMaterial("Indoors", ColorOf("Indoors"))),
+                ("Plains",  2, RoundedTerrainMaterial("Plains",  ColorOf("Plains"))),
+                ("Road",    3, RoundedTerrainMaterial("Road",    ColorOf("Road"))),
+                ("Hills",   4, RoundedTerrainMaterial("Hills",   ColorOf("Hills"))),
+                ("Forest",  5, RoundedTerrainMaterial("Forest",  ColorOf("Forest"))),
+                ("Water",   6, RoundedWaterMaterial()),
+            };
+            var regionProp = so.FindProperty("regionTerrains");
+            regionProp.arraySize = regions.Length;
+            for (var i = 0; i < regions.Length; i++)
+            {
+                // Deterministic draw order: transparent meshes covering the same ground can't be
+                // ordered reliably by camera distance, so stamp the render queue by priority — higher
+                // terrains draw later (on top) and their soft edges blend over lower neighbours.
+                if (regions[i].material != null)
+                {
+                    regions[i].material.renderQueue = (int)RenderQueue.Transparent + regions[i].priority;
+                    EditorUtility.SetDirty(regions[i].material);
+                }
+
+                var element = regionProp.GetArrayElementAtIndex(i);
+                element.FindPropertyRelative("id").stringValue = regions[i].name;
+                element.FindPropertyRelative("material").objectReferenceValue = regions[i].material;
+                element.FindPropertyRelative("priority").intValue = regions[i].priority;
+            }
+
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(theme);
 
@@ -204,6 +240,66 @@ namespace Overworld.EditorTools
                 material.renderQueue = (int)RenderQueue.Transparent;
             }
             material.color = color;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        private static Color ColorOf(string name)
+        {
+            foreach (var t in Terrain)
+                if (t.name == name)
+                    return t.color;
+            return Color.gray;
+        }
+
+        // The material for a smooth region ground terrain: the shared package's Aetherium/RoundedTerrain
+        // shader (unlit transparent — opaque interior, soft outward-feathered edge that blends over
+        // lower-priority neighbours). One material per terrain, tinted to that terrain's color.
+        private static Material RoundedTerrainMaterial(string name, Color color)
+        {
+            var path = $"{MaterialsFolder}/OW_Rounded{name}.mat";
+            var shader = Shader.Find("Aetherium/RoundedTerrain");
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                var initial = shader != null ? shader : Shader.Find("Universal Render Pipeline/Unlit");
+                material = new Material(initial);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            else if (shader != null && material.shader != shader)
+            {
+                material.shader = shader;
+            }
+            if (shader != null)
+                material.SetColor("_Color", color);
+            else
+                Debug.LogWarning("[Overworld] Aetherium/RoundedTerrain shader not found yet — terrain uses a " +
+                                 "plain fallback. Re-run 'Build Overworld Scene' once the package finishes importing.");
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        // The material for smooth region water: the shared package's Aetherium/RoundedWater shader
+        // (unlit transparent — animated foam, shallows→deep, curved coastline). Created once and
+        // reused; falls back to URP Unlit if the shader hasn't imported yet (re-run to fix).
+        private static Material RoundedWaterMaterial()
+        {
+            var path = $"{MaterialsFolder}/OW_RoundedWater.mat";
+            var shader = Shader.Find("Aetherium/RoundedWater");
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                var initial = shader != null ? shader : Shader.Find("Universal Render Pipeline/Unlit");
+                material = new Material(initial);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            else if (shader != null && material.shader != shader)
+            {
+                material.shader = shader;
+            }
+            if (shader == null)
+                Debug.LogWarning("[Overworld] Aetherium/RoundedWater shader not found yet — water uses a " +
+                                 "plain fallback. Re-run 'Build Overworld Scene' once the package finishes importing.");
             EditorUtility.SetDirty(material);
             return material;
         }

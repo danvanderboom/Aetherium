@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Aetherium.Unity.Model;
 using Aetherium.Unity.Networking;
 using Aetherium.Unity.Spatial;
+using Aetherium.Unity.Rendering.Water;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -15,6 +16,9 @@ namespace Aetherium.Unity.Rendering
     {
         [SerializeField] private Tilemap? tilemap;
         [SerializeField] private TileBase? defaultTile;
+        [SerializeField] private bool skipRegionTerrain = false;
+        [SerializeField] private bool applyLighting = false;
+        private Color ambientTint = Color.white;
         private TilemapRenderer? tilemapRenderer;
         private Dictionary<string, TileBase> tileCache = new Dictionary<string, TileBase>();
         private TileBase? fallbackTile;
@@ -35,6 +39,7 @@ namespace Aetherium.Unity.Rendering
         private readonly HashSet<Vector3Int> currentCells = new HashSet<Vector3Int>();
         private readonly List<Vector3Int> positionsScratch = new List<Vector3Int>();
         private readonly List<TileBase> tilesScratch = new List<TileBase>();
+        private readonly List<Color> lightColorsScratch = new List<Color>();
 
         private void Awake()
         {
@@ -60,6 +65,30 @@ namespace Aetherium.Unity.Rendering
             tilemap = targetTilemap;
             defaultTile = fallback;
             tilemapRenderer = GetComponent<TilemapRenderer>();
+        }
+
+        /// <summary>
+        /// When true, cells whose terrain is a smooth "region" type (water/lava) are
+        /// not drawn as tiles — a companion <see cref="Water.WaterRegionRenderer"/>
+        /// draws them as a mesh instead, so the two never double-draw. Default false
+        /// (unchanged behaviour).
+        /// </summary>
+        public bool SkipRegionTerrain
+        {
+            get => skipRegionTerrain;
+            set => skipRegionTerrain = value;
+        }
+
+        /// <summary>
+        /// When true, each cell's rendered color is multiplied by its per-cell light
+        /// level and the frame's ambient tint (<see cref="TerrainLighting"/>). The tile's
+        /// own base color is unchanged (so palette readback/tests still hold). Default
+        /// false — and with light level 1.0 + a white tint it is a no-op anyway.
+        /// </summary>
+        public bool ApplyLighting
+        {
+            get => applyLighting;
+            set => applyLighting = value;
         }
 
         /// <summary>
@@ -127,10 +156,17 @@ namespace Aetherium.Unity.Rendering
             currentCells.Clear();
             positionsScratch.Clear();
             tilesScratch.Clear();
+            lightColorsScratch.Clear();
+            ambientTint = perception.AmbientTintColor;
 
             foreach (var visual in perception.Visuals.Values)
             {
                 if (visual.Location.Z != zLevel)
+                    continue;
+
+                // A companion WaterRegionRenderer draws region terrain (water/lava) as a
+                // smooth mesh; skip those cells here so the two never double-draw.
+                if (skipRegionTerrain && RegionTerrains.IsRegionVisual(perception, visual))
                     continue;
 
                 var worldPos = GridHelpers.GridToWorld(visual.Location);
@@ -140,6 +176,11 @@ namespace Aetherium.Unity.Rendering
 
                 positionsScratch.Add(cellPos);
                 tilesScratch.Add(GetOrCreateTile(visual.TileTypeId, perception.TileTypes));
+                // Per-cell lighting factor (multiplies the tile's base color). White when
+                // lighting is off, so it is a no-op unless opted in.
+                lightColorsScratch.Add(applyLighting
+                    ? TerrainLighting.Modulate(Color.white, visual.LightLevel, ambientTint)
+                    : Color.white);
             }
 
             // Clear cells that were set last frame but are no longer present.
@@ -152,6 +193,14 @@ namespace Aetherium.Unity.Rendering
             if (positionsScratch.Count > 0)
             {
                 tilemap.SetTiles(positionsScratch.ToArray(), tilesScratch.ToArray());
+
+                // Multiply per-cell lighting over each tile's base color. Band alpha
+                // (the tilemap tint) still multiplies over all of it.
+                if (applyLighting)
+                {
+                    for (int i = 0; i < positionsScratch.Count; i++)
+                        tilemap.SetColor(positionsScratch[i], lightColorsScratch[i]);
+                }
             }
 
             // Swap: previousCells becomes the set we just wrote.
@@ -244,6 +293,9 @@ namespace Aetherium.Unity.Rendering
             var tile = ScriptableObject.CreateInstance<Tile>();
             tile.sprite = GetSharedSprite();
             tile.color = color;
+            // Drop the default LockColor so per-cell lighting (tilemap.SetColor) applies;
+            // keep LockTransform so tiles are never accidentally offset or rotated.
+            tile.flags = TileFlags.LockTransform;
             return tile;
         }
 
