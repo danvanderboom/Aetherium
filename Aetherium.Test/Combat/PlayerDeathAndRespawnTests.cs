@@ -70,7 +70,8 @@ namespace Aetherium.Test.Combat
         [OneTimeTearDown]
         public void OneTimeTearDown() => _cluster.StopAllSilos();
 
-        private async Task<(IGameMapGrain map, string player)> InitMapWithAdjacentMonsterAsync(DeathPolicy? deathPolicy)
+        private async Task<(IGameMapGrain map, string player)> InitMapWithAdjacentMonsterAsync(
+            DeathPolicy? deathPolicy, int? mapSeed = null)
         {
             var worldId = $"world-{Guid.NewGuid()}";
             var mapId = $"{worldId}-map-1";
@@ -79,10 +80,18 @@ namespace Aetherium.Test.Combat
             // than via WorldGrain.AddMapAsync, so the policy must be passed to InitializeAsync
             // itself — a WorldConfig.DeathPolicy would only reach a *different*, unused "Main" map
             // WorldGrain.InitializeAsync creates internally.
+            //
+            // A mapSeed pins the generated maze so a test that depends on a specific cell being
+            // passable (see RespawnLocation_FixedCoordinates_*) is deterministic; without it the
+            // maze is seeded randomly per run.
+            var parameters = new Dictionary<string, object>();
+            if (mapSeed is int seedValue)
+                parameters["seed"] = seedValue;
+
             var map = _cluster.GrainFactory.GetGrain<IGameMapGrain>(mapId);
             await map.InitializeAsync(worldId, "floor-1",
                 new WorldSize { Width = 40, Height = 40, Depth = 1 },
-                "maze", new Dictionary<string, object>(), deathPolicy);
+                "maze", parameters, deathPolicy);
 
             var player = $"player-{Guid.NewGuid()}";
             var join = await map.JoinPlayerAsync(player);
@@ -250,17 +259,22 @@ namespace Aetherium.Test.Combat
                 DownStateEnabled = false,
                 RespawnLocation = new RespawnLocationPolicy { Mode = RespawnLocationMode.FixedCoordinates, X = 2, Y = 2, Z = 0 },
             };
-            var (map, player) = await InitMapWithAdjacentMonsterAsync(policy);
+            // Pin the maze seed so (2,2,0) is reliably an open, unoccupied cell. Without a fixed
+            // seed the maze was regenerated randomly each run, so (2,2,0) was sometimes a wall (or
+            // occupied by a population monster); the respawn then fell back to a random WorldSpawn
+            // cell that could be adjacent to another monster, which — with RespawnInvulnerabilityTicks
+            // left at 0 — retaliated on the very same tick and knocked the fresh respawn below full
+            // health. That made this test flaky (~1 in 3). Seeding the maze exercises the
+            // FixedCoordinates teleport deterministically, which is what this test actually asserts.
+            var (map, player) = await InitMapWithAdjacentMonsterAsync(policy, mapSeed: 47);
 
             var snap = await TickUntilPlayerDeathResolvesAsync(map, player);
             var placement = snap.Entities.First(e => e.EntityId == player);
 
-            // The fixed cell might not be open (walls vary by generated maze); either the player
-            // lands exactly there, or the implementation's documented fallback (WorldSpawn) applies.
-            // What must never happen is landing somewhere arbitrary in between.
-            var landedOnTarget = placement.X == 2 && placement.Y == 2 && placement.Z == 0;
-            Assert.That(landedOnTarget || HealthOf(snap, player) == 100, Is.True,
-                "Player must either land on the fixed coordinates or (if blocked) still successfully respawn via fallback.");
+            // The seeded maze guarantees the fixed cell is open, so the player must teleport exactly
+            // onto the configured respawn coordinates.
+            Assert.That((placement.X, placement.Y, placement.Z), Is.EqualTo((2, 2, 0)),
+                "FixedCoordinates respawn must teleport the player onto the configured cell.");
         }
     }
 }
