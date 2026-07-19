@@ -4,8 +4,10 @@ using System.Threading.Tasks;
 using Aetherium.Client;
 using Aetherium.Client.Contracts;
 using Aetherium.Unity;
+using Aetherium.Unity.Input;
 using Aphelion;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Overworld
 {
@@ -25,8 +27,20 @@ namespace Overworld
     [RequireComponent(typeof(AetheriumClientBehaviour))]
     public sealed class OverworldPlayerController : MonoBehaviour
     {
+        [SerializeField]
+        [Tooltip("Steps per second while a movement key or the stick is held. The server has no " +
+                 "move cooldown or per-tick gate, so this is the effective speed cap: ~3 feels like " +
+                 "tapping, 12 is roughly 4x, raise toward 20 for ~5x+. A fresh press always steps " +
+                 "once immediately, so a single tap still moves exactly one cell.")]
+        private float _movesPerSecond = 12f;
+
+        [SerializeField]
+        [Tooltip("Gamepad left-stick deflection (0-1) required before it registers as a move.")]
+        private float _stickDeadzone = 0.5f;
+
         private AetheriumClientBehaviour _behaviour;
         private AphelionCameraRig _cameraRig;
+        private HeldMoveRepeater _repeater;
         private bool _busy;
         private bool _sunlight;
         private bool _daylightApplied;
@@ -39,6 +53,7 @@ namespace Overworld
         {
             _behaviour = GetComponent<AetheriumClientBehaviour>();
             _cameraRig = FindAnyObjectByType<AphelionCameraRig>();
+            _repeater = new HeldMoveRepeater(1f / Mathf.Max(0.01f, _movesPerSecond));
         }
 
         private static float HeadingFor(WorldDirection direction) => direction switch
@@ -64,16 +79,42 @@ namespace Overworld
             if (_busy || _behaviour.Client == null)
                 return;
 
-            if (Input.GetKeyDown(KeyCode.W)) MoveCompass(WorldDirection.North);
-            else if (Input.GetKeyDown(KeyCode.S)) MoveCompass(WorldDirection.South);
-            else if (Input.GetKeyDown(KeyCode.A)) MoveCompass(WorldDirection.West);
-            else if (Input.GetKeyDown(KeyCode.D)) MoveCompass(WorldDirection.East);
-            else if (Input.GetKeyDown(KeyCode.LeftArrow)) TurnInPlace(clockwise: false);
-            else if (Input.GetKeyDown(KeyCode.RightArrow)) TurnInPlace(clockwise: true);
-            else if (Input.GetKeyDown(KeyCode.UpArrow)) Fire(_behaviour.Client.Tools.MoveForwardAsync());
-            else if (Input.GetKeyDown(KeyCode.DownArrow)) Fire(_behaviour.Client.Tools.MoveBackwardAsync());
-            else if (Input.GetKeyDown(KeyCode.E)) Interact();
-            else if (Input.GetKeyDown(KeyCode.L)) ToggleLighting();
+            // Discrete, one-shot verbs — a fresh key press each. Arrows turn/step along heading;
+            // E interacts with whatever the current perception frame makes available.
+            if (Input.GetKeyDown(KeyCode.LeftArrow)) { TurnInPlace(clockwise: false); return; }
+            if (Input.GetKeyDown(KeyCode.RightArrow)) { TurnInPlace(clockwise: true); return; }
+            if (Input.GetKeyDown(KeyCode.UpArrow)) { Fire(_behaviour.Client.Tools.MoveForwardAsync()); return; }
+            if (Input.GetKeyDown(KeyCode.DownArrow)) { Fire(_behaviour.Client.Tools.MoveBackwardAsync()); return; }
+            if (Input.GetKeyDown(KeyCode.E)) { Interact(); return; }
+            if (Input.GetKeyDown(KeyCode.L)) { ToggleLighting(); return; }
+
+            // Continuous hold-to-move: WASD or the gamepad left stick, paced to the speed cap.
+            _repeater.StepInterval = 1f / Mathf.Max(0.01f, _movesPerSecond);
+            if (_repeater.Tick(ReadHeldDirection(), Time.deltaTime, out var direction))
+                MoveCompass(direction);
+        }
+
+        /// <summary>
+        /// The movement direction currently held on the gamepad left stick (preferred when deflected
+        /// past the deadzone) or on WASD. Forward/up-screen is North; diagonals resolve to the
+        /// dominant cardinal since the grid is 4-connected.
+        /// </summary>
+        private WorldDirection? ReadHeldDirection()
+        {
+            var pad = Gamepad.current;
+            if (pad != null)
+            {
+                var stick = pad.leftStick.ReadValue();
+                var fromStick = DirectionalInput.FromStick(stick.x, stick.y, _stickDeadzone);
+                if (fromStick != null)
+                    return fromStick;
+            }
+
+            return DirectionalInput.FromKeys(
+                north: Input.GetKey(KeyCode.W),
+                south: Input.GetKey(KeyCode.S),
+                east: Input.GetKey(KeyCode.D),
+                west: Input.GetKey(KeyCode.A));
         }
 
         /// <summary>E: pick up a nearby item, else open/close a door, else unlock one with a

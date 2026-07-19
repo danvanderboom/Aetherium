@@ -3,21 +3,36 @@ using System.Threading.Tasks;
 using Aetherium.Client;
 using Aetherium.Client.Contracts;
 using Aetherium.Unity;
+using Aetherium.Unity.Input;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Aphelion
 {
     /// <summary>
-    /// M0 "First Light" input driver: WASD moves in world directions (the client composes
-    /// rotate + step — the server only accepts relative movement, by design), Space attacks
-    /// the nearest adjacent creature. One request in flight at a time; the server is
+    /// M0 "First Light" input driver: WASD (or a gamepad left stick) moves in world directions —
+    /// hold to keep moving, at the speed cap set by <see cref="_movesPerSecond"/> — the client
+    /// composes rotate + step because the server only accepts relative movement, by design. Space
+    /// attacks the nearest adjacent creature. One request in flight at a time; the server is
     /// authoritative and perception frames drive everything visible.
     /// </summary>
     [RequireComponent(typeof(AetheriumClientBehaviour))]
     public sealed class AphelionPlayerController : MonoBehaviour
     {
+        [SerializeField]
+        [Tooltip("Steps per second while a movement key or the stick is held. The server has no " +
+                 "move cooldown or per-tick gate, so this is the effective speed cap: ~3 feels like " +
+                 "tapping, 12 is roughly 4x, raise toward 20 for ~5x+. A fresh press always steps " +
+                 "once immediately, so a single tap still moves exactly one cell.")]
+        private float _movesPerSecond = 12f;
+
+        [SerializeField]
+        [Tooltip("Gamepad left-stick deflection (0-1) required before it registers as a move.")]
+        private float _stickDeadzone = 0.5f;
+
         private AetheriumClientBehaviour _behaviour;
         private AphelionCameraRig _cameraRig;
+        private HeldMoveRepeater _repeater;
         private bool _busy;
         private bool _sunlight;
 
@@ -25,6 +40,7 @@ namespace Aphelion
         {
             _behaviour = GetComponent<AetheriumClientBehaviour>();
             _cameraRig = FindAnyObjectByType<AphelionCameraRig>();
+            _repeater = new HeldMoveRepeater(1f / Mathf.Max(0.01f, _movesPerSecond));
 
             // Self-heal scenes built before the vitals HUD existed — combat must never
             // be invisible (a lurker outside the FOV can down you with zero feedback).
@@ -46,21 +62,46 @@ namespace Aphelion
             if (_busy || _behaviour.Client == null)
                 return;
 
-            // WASD: absolute compass moves (the client composes the rotate+step for you).
-            // Predict the facing locally so the camera orbits instantly instead of waiting for
-            // the authoritative frame (the WASD rotate always lands, so no rollback).
-            if (Input.GetKeyDown(KeyCode.W)) MoveCompass(WorldDirection.North);
-            else if (Input.GetKeyDown(KeyCode.S)) MoveCompass(WorldDirection.South);
-            else if (Input.GetKeyDown(KeyCode.A)) MoveCompass(WorldDirection.West);
-            else if (Input.GetKeyDown(KeyCode.D)) MoveCompass(WorldDirection.East);
-            // Arrows: the engine's native relative verbs — turn 90° and step along your heading.
-            else if (Input.GetKeyDown(KeyCode.LeftArrow)) TurnInPlace(clockwise: false);
-            else if (Input.GetKeyDown(KeyCode.RightArrow)) TurnInPlace(clockwise: true);
-            else if (Input.GetKeyDown(KeyCode.UpArrow)) Fire(_behaviour.Client.Tools.MoveForwardAsync());
-            else if (Input.GetKeyDown(KeyCode.DownArrow)) Fire(_behaviour.Client.Tools.MoveBackwardAsync());
-            else if (Input.GetKeyDown(KeyCode.Space)) AttackNearestAdjacent();
-            else if (Input.GetKeyDown(KeyCode.L)) ToggleLighting();
-            else if (Input.GetKeyDown(KeyCode.M)) DumpPerceptionDiagnostic();
+            // Discrete, one-shot verbs — a fresh key press each, unchanged from tap-to-act.
+            // Arrows are the engine's native relative verbs: turn 90° / step along your heading.
+            if (Input.GetKeyDown(KeyCode.LeftArrow)) { TurnInPlace(clockwise: false); return; }
+            if (Input.GetKeyDown(KeyCode.RightArrow)) { TurnInPlace(clockwise: true); return; }
+            if (Input.GetKeyDown(KeyCode.UpArrow)) { Fire(_behaviour.Client.Tools.MoveForwardAsync()); return; }
+            if (Input.GetKeyDown(KeyCode.DownArrow)) { Fire(_behaviour.Client.Tools.MoveBackwardAsync()); return; }
+            if (Input.GetKeyDown(KeyCode.Space)) { AttackNearestAdjacent(); return; }
+            if (Input.GetKeyDown(KeyCode.L)) { ToggleLighting(); return; }
+            if (Input.GetKeyDown(KeyCode.M)) { DumpPerceptionDiagnostic(); return; }
+
+            // Continuous hold-to-move: WASD or the gamepad left stick, paced to the speed cap.
+            // Absolute compass moves — the client composes the rotate+step for you, and MoveCompass
+            // predicts the facing locally so the camera orbits instantly (the rotate always lands).
+            _repeater.StepInterval = 1f / Mathf.Max(0.01f, _movesPerSecond);
+            if (_repeater.Tick(ReadHeldDirection(), Time.deltaTime, out var direction))
+                MoveCompass(direction);
+        }
+
+        /// <summary>
+        /// The movement direction currently held on the gamepad left stick (preferred when deflected
+        /// past the deadzone) or on WASD. Forward/up-screen is North, so pushing the stick fully
+        /// forward walks the character north at its speed cap; diagonals resolve to the dominant
+        /// cardinal since the grid is 4-connected.
+        /// </summary>
+        private WorldDirection? ReadHeldDirection()
+        {
+            var pad = Gamepad.current;
+            if (pad != null)
+            {
+                var stick = pad.leftStick.ReadValue();
+                var fromStick = DirectionalInput.FromStick(stick.x, stick.y, _stickDeadzone);
+                if (fromStick != null)
+                    return fromStick;
+            }
+
+            return DirectionalInput.FromKeys(
+                north: Input.GetKey(KeyCode.W),
+                south: Input.GetKey(KeyCode.S),
+                east: Input.GetKey(KeyCode.D),
+                west: Input.GetKey(KeyCode.A));
         }
 
         /// <summary>
