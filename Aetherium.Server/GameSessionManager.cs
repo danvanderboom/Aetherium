@@ -395,6 +395,35 @@ namespace Aetherium.Server
             return true;
         }
 
+        /// <summary>
+        /// Grain-callable convenience over <see cref="RepointSessionAsync"/> (add-boardable-vehicles):
+        /// fetches the target map's joiner snapshot via <paramref name="grainFactory"/>, hydrates a
+        /// <see cref="Aetherium.WorldBuilders.SnapshotWorldBuilder"/> with <paramref name="registry"/>,
+        /// wires a grain-routed gateway to the target map, then re-points the session and pushes a fresh
+        /// frame. The caller must already have joined the player onto <paramref name="mapId"/> (so the
+        /// canonical Character exists and a spawn is reserved) and left their previous map. Lets a grain
+        /// (e.g. a vehicle boarding a party) move a live session's perception without a hub round-trip.
+        /// Returns false when no live session matches <paramref name="sessionId"/>.
+        /// </summary>
+        public async Task<bool> RepointSessionToMapAsync(
+            Orleans.IGrainFactory grainFactory,
+            Aetherium.WorldGen.MapGeneratorRegistry registry,
+            string sessionId,
+            string worldId,
+            string mapId,
+            Aetherium.Components.WorldLocation spawn,
+            Action<GameSession>? configure = null)
+        {
+            if (grainFactory is null || registry is null)
+                return false;
+
+            var mapGrain = grainFactory.GetGrain<Aetherium.Server.MultiWorld.IGameMapGrain>(mapId);
+            var snapshot = await mapGrain.GetWorldSnapshotForJoinerAsync(sessionId);
+            var builder = new Aetherium.WorldBuilders.SnapshotWorldBuilder(snapshot, registry);
+            var gateway = new Aetherium.Server.MultiWorld.GrainMutationGateway(grainFactory, mapId, sessionId);
+            return await RepointSessionAsync(sessionId, builder, worldId, mapId, spawn, gateway, configure);
+        }
+
         public bool RemoveSession(string connectionId)
         {
             dirtyPerception.TryRemove(connectionId, out _);

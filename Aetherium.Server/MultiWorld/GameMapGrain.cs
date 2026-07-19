@@ -2839,6 +2839,126 @@ namespace Aetherium.Server.MultiWorld
             return Task.FromResult(currency);
         }
 
+        // --- Boardable vehicles (add-boardable-vehicles Phase 2) ---
+
+        public async Task<bool> PlaceVehicleExteriorAsync(string vehicleInstanceId, string displayName,
+            int anchorX, int anchorY, int anchorZ, int footprintWidth, int footprintLength, int footprintDepth,
+            string exteriorTerrain, System.Collections.Generic.List<string> landingTerrain)
+        {
+            if (_world is null || _mapState.State is null || string.IsNullOrEmpty(vehicleInstanceId))
+                return false;
+
+            var entityId = $"vehicle:{vehicleInstanceId}";
+            if (_world.Entities.ContainsKey(entityId))
+                return false; // already parked here
+
+            var anchor = new Aetherium.Components.WorldLocation(anchorX, anchorY, anchorZ);
+            var exterior = new Aetherium.Entities.VehicleExterior { EntityId = entityId };
+            exterior.Set(anchor);
+            // Size3d is (length, width, depth): +Y, +X, +Z.
+            exterior.Set(new Aetherium.Components.Footprint
+            {
+                Size = new Aetherium.Core.Size3d(
+                    System.Math.Max(1, footprintLength),
+                    System.Math.Max(1, footprintWidth),
+                    System.Math.Max(1, footprintDepth)),
+            });
+            exterior.Set(new Aetherium.Components.Boardable
+            {
+                VehicleInstanceId = vehicleInstanceId,
+                DisplayName = displayName ?? string.Empty,
+            });
+            // A parked ship is solid — players walk up to it and board rather than through it.
+            exterior.Set(new Aetherium.Components.ObstructsMovement());
+
+            // Landing-terrain gate: when specified, every footprint tile must be an allowed landing terrain.
+            if (landingTerrain is { Count: > 0 })
+            {
+                foreach (var tile in exterior.Get<Aetherium.Components.Footprint>().OccupiedTiles(anchor))
+                {
+                    var terrainName = _world.GetTerrain(tile)?.Type?.Name;
+                    if (terrainName is null || !landingTerrain.Contains(terrainName))
+                        return false;
+                }
+            }
+
+            // Standard footprint validity (in-bounds, passable, unoccupied) then place + announce.
+            if (!_world.TryPlace(exterior))
+                return false;
+
+            await FanOutAsync(new EntityAddedDelta
+            {
+                MapId = _mapState.State.MapId,
+                Placement = EntityPlacement.FromLocation(entityId, nameof(Aetherium.Entities.VehicleExterior), anchor),
+            });
+            return true;
+        }
+
+        public async Task RemoveVehicleExteriorAsync(string vehicleInstanceId)
+        {
+            if (_world is null || _mapState.State is null || string.IsNullOrEmpty(vehicleInstanceId))
+                return;
+
+            var entityId = $"vehicle:{vehicleInstanceId}";
+            if (!_world.Entities.TryGetValue(entityId, out var entity))
+                return;
+
+            var loc = entity.Get<Aetherium.Components.WorldLocation>();
+            if (_world.TryRemoveEntity(entityId))
+            {
+                await FanOutAsync(new EntityRemovedDelta
+                {
+                    MapId = _mapState.State.MapId,
+                    EntityId = entityId,
+                    LastX = loc?.X ?? 0,
+                    LastY = loc?.Y ?? 0,
+                    LastZ = loc?.Z ?? 0,
+                });
+            }
+        }
+
+        public Task<Aetherium.Model.Vehicles.BoardableInfo> GetBoardableInfoAsync(string sessionId, string targetEntityId)
+        {
+            if (_world is null || string.IsNullOrEmpty(targetEntityId)
+                || !_world.Entities.TryGetValue(targetEntityId, out var entity)
+                || !entity.Has<Aetherium.Components.Boardable>())
+                return Task.FromResult(Aetherium.Model.Vehicles.BoardableInfo.NotFound());
+
+            var boardable = entity.Get<Aetherium.Components.Boardable>();
+            var info = new Aetherium.Model.Vehicles.BoardableInfo
+            {
+                Found = true,
+                VehicleInstanceId = boardable.VehicleInstanceId,
+                DisplayName = boardable.DisplayName,
+                InReach = false,
+            };
+
+            var player = GetPlayerCharacter(sessionId);
+            var playerLoc = player?.Get<Aetherium.Components.WorldLocation>();
+            var anchor = entity.Get<Aetherium.Components.WorldLocation>();
+            if (playerLoc is not null && anchor is not null)
+            {
+                var tiles = entity.Has<Aetherium.Components.Footprint>()
+                    ? entity.Get<Aetherium.Components.Footprint>().OccupiedTiles(anchor)
+                    : new[] { anchor };
+                foreach (var tile in tiles)
+                {
+                    if (tile.Z != playerLoc.Z)
+                        continue;
+                    var d = _world.Topology.Distance(
+                        Aetherium.Topology.GridCoord.From(playerLoc),
+                        Aetherium.Topology.GridCoord.From(tile));
+                    if (d <= 1)
+                    {
+                        info.InReach = true;
+                        break;
+                    }
+                }
+            }
+
+            return Task.FromResult(info);
+        }
+
         /// <summary>
         /// Casts a player's ability (engine gap-analysis §4.3, Phase 2 — see wire-abilities-live)
         /// from the map's per-world compiled <see cref="AbilityCatalog"/>. Gated in order by:

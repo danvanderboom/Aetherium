@@ -14,12 +14,12 @@
 - [x] 1.6 Tests: `FootprintOccupancyTests` — placement indexes all tiles / blocked by impassable, off-map, or overlap; move re-indexes & releases previous / blocked by a character; removal un-indexes all; single-tile fast path unchanged. Full suite (2508) green.
 
 ## 2. Phase 2 - Interior + boarding (parked vehicle)
-- [ ] 2.1 Define vehicle definition data (`VehicleConfig`): exterior footprint, interior source + spawn dock, landing rules, capacity, board hotspot
-- [ ] 2.2 Author a ship interior in `SpaceHackWorldBuilder` (or via `PrefabStamper`)
-- [ ] 2.3 Add `IVehicleGrain`/`VehicleGrain`: `InitializeAsync` creates the interior via `AddMapAsync`; `LandAsync` places the exterior footprint on a surface
-- [ ] 2.4 Implement `BoardAsync` (`MovePlayerToMapAsync` into interior + re-point each session) and `DisembarkAsync` (reverse onto valid surface tiles)
-- [ ] 2.5 Wire a `board`/`use` action on the exterior board-hotspot tile
-- [ ] 2.6 Tests: board a parked ship, walk the interior, disembark onto the surface (no travel yet)
+- [x] 2.1 `VehicleConfig` (`Aetherium.Model/Vehicles`): exterior footprint (W/L/D), interior generator+size, landing terrain, capacity. Pure data, passed to `InitializeAsync` (not hardcoded).
+- [x] 2.2 Interior authored as the "Main" map of the vehicle's own world, built by `VehicleConfig.InteriorGenerator` (a registered `IMapGenerator`). NOTE deviation: `AddMapAsync` takes a generator-type string and there is no `WorldBuilder`→generator bridge, so the empty `SpaceHackWorldBuilder` isn't used directly; a bespoke ship-interior generator/prefab is a follow-on.
+- [x] 2.3 `IVehicleGrain`/`VehicleGrain` (modeled on `DungeonInstanceGrain`, auto-discovered, "worldStore"): `InitializeAsync` creates the interior world+map; `LandAsync` places the exterior footprint via `IGameMapGrain.PlaceVehicleExteriorAsync` (`VehicleExterior` entity + `Footprint` + `Boardable` + solid `ObstructsMovement`, landing-terrain-gated).
+- [x] 2.4 `BoardAsync`/`DisembarkAsync`: cross-world re-point (interior is on the vehicle's own world) via `IGameMapGrain.JoinPlayerAsync` + `IWorldGrain.RegisterPlayerLocationAsync`/`UnregisterPlayerAsync` + `GameSessionManager.RepointSessionToMapAsync` (Phase 0). Capacity-bounded; surplus rejected.
+- [x] 2.5 `board`/`disembark` interaction tools (auto-discovered, Player-profile-allowed). `board` targets the exterior entity; the hub validates adjacency via `IGameMapGrain.GetBoardableInfoAsync` (pure read → no grain re-entrancy) then calls the vehicle grain directly. `disembark` resolves the vehicle from the interior world id.
+- [x] 2.6 Tests: `VehicleBoardingTests` — init creates a joinable interior; board moves a player into the interior & off the surface; disembark returns them; capacity rejects surplus; board requires a landed vehicle; boarding re-points a live session (fresh interior frame). Full suite 2513 passing.
 
 ## 3. Phase 3 - Timed voyage
 - [ ] 3.1 `DepartAsync`: remove exterior footprint from the origin surface, compute ETA (10-30 min) via `WorldClock`, mark `InTransit`
