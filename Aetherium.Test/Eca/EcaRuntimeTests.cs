@@ -21,9 +21,9 @@ namespace Aetherium.Test.Eca
             VictimCreatureType = "wolf",
             VictimEntityId = victim,
             KillerEntityId = killer,
-            VictimX = 5,
-            VictimY = 7,
-            VictimZ = 0,
+            EventX = 5,
+            EventY = 7,
+            EventZ = 0,
         };
 
         private static EcaConfig Config(params EcaRule[] rules) => new() { Rules = rules.ToList() };

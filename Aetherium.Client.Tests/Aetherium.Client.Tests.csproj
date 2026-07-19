@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <!-- In-proc server hosting for the integration suite (WebApplicationFactory). -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- This test project is the ONE place that references both sides of the wire
+         (docs/design/unity-sample/repo-structure.md): the server model (Orleans is fine
+         here — tests run server-side) and the client mirrors. The protocol drift suite
+         round-trips real server DTOs through hub JSON into the mirrors, so a new server
+         field breaks this build instead of a shipped game. -->
+    <ProjectReference Include="..\Aetherium.Client\Aetherium.Client.csproj" />
+    <ProjectReference Include="..\Aetherium.Model\Aetherium.Model.csproj" />
+    <!-- WorldInfo / WorldState / JoinWorldResult cross the wire from the SERVER assembly
+         (Aetherium.Server.MultiWorld), so their drift tests need this reference too. -->
+    <ProjectReference Include="..\Aetherium.Server\Aetherium.Server.csproj" />
+  </ItemGroup>
+
+</Project>

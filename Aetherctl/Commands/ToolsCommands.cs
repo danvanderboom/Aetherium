@@ -250,11 +250,22 @@ namespace Aetherctl.Commands
                     {
                         try
                         {
-                            var parsed = JsonSerializer.Deserialize<Dictionary<string, object>>(argsJson, new JsonSerializerOptions
+                            // Deserialize into JsonElement values, then convert to plain CLR
+                            // primitives (string/long/double/bool/List/Dictionary). The grain
+                            // call IGameManagementGrain.ExecuteToolAsync serializes these args
+                            // over Orleans, which has no copier for System.Text.Json.JsonElement.
+                            var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argsJson, new JsonSerializerOptions
                             {
                                 PropertyNameCaseInsensitive = false
                             });
-                            if (parsed != null) args = parsed;
+                            if (parsed != null)
+                            {
+                                foreach (var kvp in parsed)
+                                {
+                                    var value = ConvertJsonElement(kvp.Value);
+                                    if (value != null) args[kvp.Key] = value;
+                                }
+                            }
                         }
                         catch (JsonException ex)
                         {
@@ -438,6 +449,41 @@ namespace Aetherctl.Commands
             toolsCmd.AddCommand(testCmd);
             toolsCmd.AddCommand(profileCmd);
             root.AddCommand(toolsCmd);
+        }
+
+        /// <summary>
+        /// Converts a <see cref="JsonElement"/> into plain CLR values (string, long, double,
+        /// bool, null, <see cref="List{Object}"/>, <see cref="Dictionary{String,Object}"/>).
+        /// Tool args are handed to the Orleans grain call, which cannot serialize JsonElement.
+        /// </summary>
+        private static object? ConvertJsonElement(JsonElement element)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.String:
+                    return element.GetString();
+                case JsonValueKind.Number:
+                    return element.TryGetInt64(out var l) ? l : element.GetDouble();
+                case JsonValueKind.True:
+                    return true;
+                case JsonValueKind.False:
+                    return false;
+                case JsonValueKind.Null:
+                case JsonValueKind.Undefined:
+                    return null;
+                case JsonValueKind.Array:
+                    var list = new List<object?>();
+                    foreach (var item in element.EnumerateArray())
+                        list.Add(ConvertJsonElement(item));
+                    return list;
+                case JsonValueKind.Object:
+                    var dict = new Dictionary<string, object?>();
+                    foreach (var prop in element.EnumerateObject())
+                        dict[prop.Name] = ConvertJsonElement(prop.Value);
+                    return dict;
+                default:
+                    return element.ToString();
+            }
         }
     }
 }

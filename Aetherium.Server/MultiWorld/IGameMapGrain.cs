@@ -29,8 +29,10 @@ namespace Aetherium.Server.MultiWorld
         /// items, spawn mix (add-content-definitions); null means legacy hardcoded content.
         /// <paramref name="ecaConfig"/> is the owning world's reactive rules (add-eca-scripting); null
         /// means no rules fire.
+        /// <paramref name="startingCurrency"/> is the credits a joining player's Wallet starts with
+        /// (add-starting-currency-data); null falls back to <see cref="Aetherium.Components.Wallet.StartingCurrency"/>.
         /// </summary>
-        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null);
+        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null, Aetherium.Model.Economy.EconomyConfig? economyConfig = null, double? startingCurrency = null);
 
         /// <summary>
         /// Gets the current world state for this map.
@@ -92,6 +94,10 @@ namespace Aetherium.Server.MultiWorld
 
         Task<Aetherium.Model.InteractionResultDto> CloseAsync(string sessionId, string targetEntityId);
 
+        /// <summary>Buy or sell a good against the settlement market the session's player is standing in
+        /// (economy Item 2b). Mutates the canonical world's market stock and the player's wallet/hold.</summary>
+        Task<TradeResultDto> TradeAsync(string sessionId, string side, string good, double quantity);
+
         /// <summary>
         /// Resolves a melee attack by the session's Character against an adjacent target, applying
         /// damage to canonical state and fanning out a health-change or entity-removed delta.
@@ -105,6 +111,30 @@ namespace Aetherium.Server.MultiWorld
         /// see openspec/changes/wire-death-respawn-live): the world's configured policy, or
         /// <see cref="DeathPolicy.Default"/> if none was specified.</summary>
         Task<DeathPolicy> GetDeathPolicyAsync();
+
+        /// <summary>The credits currently on <paramref name="playerId"/>'s Wallet on this map
+        /// (add-starting-currency-data). Returns 0 when the player is not on the map or carries no
+        /// Wallet. Lets callers/tests read the per-world opening purse a joining player received.</summary>
+        Task<double> GetWalletAsync(string playerId);
+
+        /// <summary>Places a boardable vehicle's exterior footprint on this map (add-boardable-vehicles
+        /// Phase 2): a solid multi-tile <c>VehicleExterior</c> entity (id <c>vehicle:{vehicleInstanceId}</c>)
+        /// carrying a <c>Boardable</c> link back to the vehicle grain. Validates that every footprint tile
+        /// is in-bounds, passable, unoccupied, and — when <paramref name="landingTerrain"/> is non-empty —
+        /// one of the allowed landing terrains. Returns false (placing nothing) when any tile is invalid.</summary>
+        Task<bool> PlaceVehicleExteriorAsync(string vehicleInstanceId, string displayName,
+            int anchorX, int anchorY, int anchorZ, int footprintWidth, int footprintLength, int footprintDepth,
+            string exteriorTerrain, System.Collections.Generic.List<string> landingTerrain);
+
+        /// <summary>Removes the exterior footprint entity for <paramref name="vehicleInstanceId"/> from
+        /// this map (takeoff / voyage departure). No-op when it is not present.</summary>
+        Task RemoveVehicleExteriorAsync(string vehicleInstanceId);
+
+        /// <summary>Reports whether <paramref name="targetEntityId"/> is a boardable vehicle exterior on
+        /// this map and whether <paramref name="sessionId"/>'s player is within reach (adjacent to any
+        /// footprint tile) to board it (add-boardable-vehicles Phase 2). A pure read — the hub uses it to
+        /// validate a board request before calling the vehicle grain directly (avoiding grain re-entrancy).</summary>
+        Task<Aetherium.Model.Vehicles.BoardableInfo> GetBoardableInfoAsync(string sessionId, string targetEntityId);
 
         /// <summary>Casts the session's player ability from this map's per-world compiled catalog
         /// (engine gap-analysis §4.3 — see openspec/changes/wire-abilities-live). Gated by actionable

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Dual-target (docs/design/unity-sample/unity-client-library.md): netstandard2.1 is
+         today's Unity ceiling (Mono/IL2CPP); net10.0 is the CoreCLR future (Unity 6.8) and
+         every non-Unity consumer (console client, bots, test harnesses). -->
+    <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Aetherium.Client</RootNamespace>
+    <Version>0.1.0</Version>
+    <Description>Transport-agnostic .NET client core for Aetherium servers: connection lifecycle, mirror protocol DTOs, typed tool invocations, perception store with anchoring and frame diffing. No Unity, no engine assemblies.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The ONLY dependency (by design): the official SignalR client, so serialization is
+         symmetric with the server's default System.Text.Json hub protocol. 8.0.x is the
+         newest line that still ships a netstandard2.0 asset (consumable by Unity's
+         netstandard2.1 profile); net10.0 consumers get the same wire behavior. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Aetherium.Client.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -27,6 +27,16 @@ namespace Aetherium.Systems
             var height = bounds.Height;
             var visible = new bool[height, width];
 
+            // Per-frame cell-opacity memo. Rays overlap heavily near the origin — a cell close to
+            // the observer lies on almost every ray — so the naive cast recomputes each cell's
+            // opacity ~5–6x per frame, and each recompute is two dict lookups + a LINQ scan of the
+            // cell's entities (GetTerrain). Every line between two in-bounds points stays inside the
+            // bounding box, so a plain (bounds-sized) array indexed by local (y,x) covers every step;
+            // `opacityKnown` distinguishes "0.0, computed" from "not yet computed". Cuts terrain
+            // lookups to one per unique cell. (perception efficiency)
+            var opacityCache = new double[height, width];
+            var opacityKnown = new bool[height, width];
+
             // Origin is always visible to itself when inside the bounds.
             if (bounds.Contains(new Point(origin.X, origin.Y)))
                 visible[origin.Y - bounds.Y, origin.X - bounds.X] = true;
@@ -48,11 +58,28 @@ namespace Aetherium.Systems
                     if (distance > maxRange)
                         continue;
 
-                    CastRay(world, origin, target, bounds, visible);
+                    CastRay(world, origin, target, bounds, visible, opacityCache, opacityKnown);
                 }
             }
 
             return visible;
+        }
+
+        /// <summary>Cell opacity via the per-frame memo when the cell is inside <paramref name="bounds"/>
+        /// (the common case — every ray step is), else a direct uncached compute.</summary>
+        private static double CachedOpacity(
+            World world, WorldLocation cell, Rectangle bounds, double[,] cache, bool[,] known)
+        {
+            int lx = cell.X - bounds.X;
+            int ly = cell.Y - bounds.Y;
+            if (lx < 0 || ly < 0 || lx >= bounds.Width || ly >= bounds.Height)
+                return GetCellOpacity(world, cell);
+            if (!known[ly, lx])
+            {
+                cache[ly, lx] = GetCellOpacity(world, cell);
+                known[ly, lx] = true;
+            }
+            return cache[ly, lx];
         }
 
         /// <summary>
@@ -60,7 +87,8 @@ namespace Aetherium.Systems
         /// each cell visible until cumulative opacity reaches 1.0 (the blocking cell is
         /// the last marked). The origin cell is skipped — you see out of your own cell.
         /// </summary>
-        private static void CastRay(World world, WorldLocation origin, WorldLocation target, Rectangle bounds, bool[,] visible)
+        private static void CastRay(World world, WorldLocation origin, WorldLocation target, Rectangle bounds,
+            bool[,] visible, double[,] opacityCache, bool[,] opacityKnown)
         {
             double cumulativeOpacity = 0.0;
             var originCell = Aetherium.Topology.GridCoord.From(origin);
@@ -72,7 +100,7 @@ namespace Aetherium.Systems
 
                 var step = cell.ToWorldLocation();
                 var stepPoint = new Point(step.X, step.Y);
-                var cellOpacity = GetCellOpacity(world, step);
+                var cellOpacity = CachedOpacity(world, step, bounds, opacityCache, opacityKnown);
                 cumulativeOpacity += cellOpacity;
 
                 // Mark the cell visible whether or not it's the blocker — you can always
@@ -85,6 +113,55 @@ namespace Aetherium.Systems
                 if (cumulativeOpacity > 1.0 - 1e-9)
                     return;
             }
+        }
+
+        /// <summary>An intervening band at or above this opacity blocks the vertical line of sight.</summary>
+        public const double OpaqueThreshold = 1.0 - 1e-9;
+
+        /// <summary>
+        /// Sight opacity of band <paramref name="z"/> in column (x,y) for the vertical (up/down) line-of-sight test.
+        /// Combines the opacity of things exactly at that cell (terrain tile + entities, via
+        /// <see cref="GetCellOpacity"/>) with any Height-spanning <see cref="ObstructsView"/> obstruction that
+        /// covers the band (via <see cref="World.ColumnViewOpacity"/>). A glass skylight (Opacity 0) contributes
+        /// nothing even though it blocks movement, so a viewer sees through it.
+        /// </summary>
+        public static double BandVerticalOpacity(World world, int x, int y, int z)
+        {
+            var cell = new WorldLocation(x, y, z);
+            var exact = GetCellOpacity(world, cell);
+            var spanning = world.ColumnViewOpacity(x, y, z);
+            return Math.Max(exact, spanning);
+        }
+
+        /// <summary>
+        /// The bands (absolute Z, excluding the origin band) that are vertically visible in column (x,y): marching
+        /// up and down from <paramref name="originZ"/> within the slab, each band is visible up to and including the
+        /// first opaque band, which stops the ray (its surface — e.g. a bridge underside — is seen, nothing beyond).
+        /// Depth is bounded by the slab range clamped to the world band range.
+        /// </summary>
+        public List<int> VerticalVisibleBands(World world, int x, int y, int originZ, int depthBelow, int depthAbove)
+        {
+            var bands = new List<int>();
+            if (depthBelow <= 0 && depthAbove <= 0)
+                return bands;
+
+            int ceil = Math.Min(world.MaxBand, originZ + Math.Max(0, depthAbove));
+            for (int z = originZ + 1; z <= ceil; z++)
+            {
+                bands.Add(z);
+                if (BandVerticalOpacity(world, x, y, z) >= OpaqueThreshold)
+                    break; // opaque band: its surface is visible, nothing above it
+            }
+
+            int floor = Math.Max(world.MinBand, originZ - Math.Max(0, depthBelow));
+            for (int z = originZ - 1; z >= floor; z--)
+            {
+                bands.Add(z);
+                if (BandVerticalOpacity(world, x, y, z) >= OpaqueThreshold)
+                    break; // opaque band: its surface is visible, nothing below it
+            }
+
+            return bands;
         }
 
         public static double GetCellOpacity(World world, WorldLocation location)

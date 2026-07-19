@@ -66,7 +66,7 @@ namespace Aetherium.Test
             {
                 Assert.That(after.Visuals.ContainsKey(kvp.Key), Is.True,
                     $"Relative key {kvp.Key} disappeared after rotation");
-                Assert.That(after.Visuals[kvp.Key].Terrain?.Name, Is.EqualTo(kvp.Value.Terrain?.Name),
+                Assert.That(after.Visuals[kvp.Key].TileTypeId, Is.EqualTo(kvp.Value.TileTypeId),
                     $"Terrain at relative key {kvp.Key} changed after rotation");
             }
         }

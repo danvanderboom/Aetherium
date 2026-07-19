@@ -11,9 +11,15 @@ namespace Aetherium.WorldGen.Passes
 
         public void Execute(WorldGenerationContext context)
         {
-            var generator = new AdvancedOutdoorGenerator();
-            var world = generator.Generate(context.GeneratorContext);
-            context.World = world;
+            var gc = context.GeneratorContext;
+            // On a sphere (H3) the world is a shell of cells enumerated by resolution, not a
+            // Width×Height rectangle, and terrain is classified from 3-D noise over each cell's
+            // centre unit vector — a dedicated generator handles that. Every other tiling
+            // (square/hex/tri) uses the planar outdoor generator unchanged.
+            IMapGenerator generator = gc.Topology.Name == "h3"
+                ? new H3TerrainGenerator()
+                : new AdvancedOutdoorGenerator();
+            context.World = generator.Generate(gc);
         }
     }
 }

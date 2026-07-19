@@ -138,7 +138,10 @@ namespace Aetherium.Server
             {
                 PlayerId = session.SessionId,
                 // DO NOT send PlayerLocation - client should not know absolute world coordinates
-                PlayerHeading = session.Heading.ToDto()
+                PlayerHeading = session.Heading.ToDto(),
+                // Secret the client presents to ResumeSession after a reconnect to rebind
+                // to this session instead of playing on as a fresh spawn.
+                ResumeToken = session.ResumeToken
             };
 
             await Clients.Caller.SendAsync("ReceiveGameState", initialState);
@@ -178,46 +181,99 @@ namespace Aetherium.Server
         {
             Console.WriteLine($"Client disconnected: {Context.ConnectionId}");
             
-            // Get session ID before removing
-            var session = sessionManager.GetSession(Context.ConnectionId);
-            var sessionId = session?.SessionId;
+            // Session-resume: don't tear the session down yet. Detach it into the
+            // manager's grace-window set so a reconnecting client can rebind via
+            // ResumeSession with its position, inventory, and server-side mirror
+            // intact. The old inline teardown (management-grain unregister +
+            // map-grain LeavePlayer) now runs as the manager's SessionExpired
+            // cleanup — wired in Program.cs — only when the window lapses without
+            // a resume. DetachSession is a no-op when this connection's session
+            // was already rebound to a newer connection.
+            sessionManager.DetachSession(Context.ConnectionId);
+            await base.OnDisconnectedAsync(exception);
+        }
 
-            // Unregister from management grain
-            if (sessionId != null)
+        /// <summary>
+        /// Rebinds the caller's connection to a previous session within the resume grace
+        /// window, preserving position, inventory, health, and the server-side world
+        /// mirror. The caller must present the session id AND the resume token issued to
+        /// it in ReceiveGameState. On success the fresh session OnConnectedAsync just
+        /// created for this connection is unwound (it was never the player's real state)
+        /// and the current perception frame of the resumed session is returned so the
+        /// client can continue without a memory wipe. On failure (unknown id, bad token,
+        /// window lapsed) the caller keeps its fresh session — the fresh-join fallback.
+        /// </summary>
+        public async Task<ResumeSessionResultDto> ResumeSession(string sessionId, string resumeToken)
+        {
+            try
             {
+                if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(resumeToken))
+                    return new ResumeSessionResultDto { Success = false, Reason = "sessionId and resumeToken required" };
+
+                // Grab the fresh session BEFORE the rebind overwrites this connection's slot.
+                var freshSession = sessionManager.GetSession(Context.ConnectionId);
+                if (freshSession != null && freshSession.SessionId == sessionId)
+                    return new ResumeSessionResultDto { Success = true, Perception = freshSession.GetPerception() };
+
+                var resumed = sessionManager.TryResumeSession(sessionId, resumeToken, Context.ConnectionId);
+                if (resumed == null)
+                    return new ResumeSessionResultDto { Success = false, Reason = "Session expired or unknown" };
+
+                Console.WriteLine($"[GameHub] Session {sessionId} resumed on connection {Context.ConnectionId}");
+
+                // Unwind the throwaway session this connection got on reconnect: it was
+                // registered with the management grain and — if the client auto-joined via
+                // query string — spawned a player Character on the map grain.
+                if (freshSession != null)
+                {
+                    try
+                    {
+                        var managementGrain = GetManagementGrain();
+                        if (managementGrain != null)
+                            await managementGrain.UnregisterSessionAsync(freshSession.SessionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[GameHub] Failed to unregister throwaway session: {ex.Message}");
+                    }
+
+                    if (freshSession.MapId != null && clusterClient != null)
+                    {
+                        try
+                        {
+                            var mapGrain = clusterClient.GetGrain<IGameMapGrain>(freshSession.MapId);
+                            await mapGrain.LeavePlayerAsync(freshSession.SessionId);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[GameHub] Failed to unwind throwaway map join: {ex.Message}");
+                        }
+                    }
+                }
+
+                // Re-point the management grain's session→connection mapping at us.
                 try
                 {
                     var managementGrain = GetManagementGrain();
                     if (managementGrain != null)
-                    {
-                        await managementGrain.UnregisterSessionAsync(sessionId);
-                    }
+                        await managementGrain.RegisterSessionAsync(resumed.SessionId, Context.ConnectionId);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[GameHub] Failed to unregister session from grain: {ex.Message}");
+                    Console.WriteLine($"[GameHub] Failed to re-register resumed session: {ex.Message}");
                 }
-            }
 
-            // Phase 2c: if the session was grain-bound, tell the map grain to drop
-            // the player Character and emit an EntityRemovedDelta so other joined
-            // sessions see them leave. Phase-2 player persistence (deferred) will
-            // replace this with a snapshot-and-detach flow that lets players resume.
-            if (sessionId != null && session?.MapId != null && clusterClient != null)
+                return new ResumeSessionResultDto
+                {
+                    Success = true,
+                    Perception = resumed.GetPerception()
+                };
+            }
+            catch (Exception ex)
             {
-                try
-                {
-                    var mapGrain = clusterClient.GetGrain<IGameMapGrain>(session.MapId);
-                    await mapGrain.LeavePlayerAsync(sessionId);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[GameHub] Failed to leave map grain: {ex.Message}");
-                }
+                Console.WriteLine($"[GameHub] ResumeSession threw: {ex}");
+                return new ResumeSessionResultDto { Success = false, Reason = "Resume failed" };
             }
-
-            sessionManager.RemoveSession(Context.ConnectionId);
-            await base.OnDisconnectedAsync(exception);
         }
 
         // ----------------------------------------------------------------
@@ -302,31 +358,15 @@ namespace Aetherium.Server
 
             try
             {
-                // For now, if target is in same world, move player between maps
-                if (targetWorldId == session.WorldId)
-                {
-                    var worldGrain = clusterClient.GetGrain<IWorldGrain>(targetWorldId);
-                    var moved = await worldGrain.MovePlayerToMapAsync(session.SessionId, targetMapId);
-                    
-                    if (!moved)
-                        return new InteractionResultDto { Success = false, Reason = "Failed to move player to target map" };
-                }
-                else
-                {
-                    // Cross-world transport - remove from current world, add to target world
-                    var currentWorldGrain = clusterClient.GetGrain<IWorldGrain>(session.WorldId);
-                    await currentWorldGrain.RemovePlayerAsync(session.SessionId);
-                    
-                    var targetWorldGrain = clusterClient.GetGrain<IWorldGrain>(targetWorldId);
-                    var added = await targetWorldGrain.AddPlayerAsync(session.SessionId, targetMapId);
-                    
-                    if (!added)
-                        return new InteractionResultDto { Success = false, Reason = "Failed to add player to target world" };
-                    
-                    // Update session world ID
-                    session.WorldId = targetWorldId;
-                    // TODO: Load new world/map into session
-                }
+                // Re-point the caller's session onto the portal target through the shared path: leave
+                // the current map, join the target (creating the canonical Character), keep both
+                // worlds' player-location records in agreement, hydrate the session's World mirror, and
+                // push a fresh frame. This unifies the former same-world / cross-world split and closes
+                // the old "// TODO: Load new world/map into session" stub (add-boardable-vehicles Phase 0),
+                // so a portal now actually switches the player's perception — same-world and cross-world.
+                var repoint = await RepointCallerToMapAsync(session, targetWorldId, targetMapId);
+                if (!repoint.Success)
+                    return new InteractionResultDto { Success = false, Reason = repoint.Reason ?? "Portal transport failed" };
 
             // Emit arrival event for narrative system
             if (clusterClient != null && session.WorldId != null)
@@ -377,10 +417,7 @@ namespace Aetherium.Server
                 }
             }
 
-                // Send updated perception to client
-                var perception = session.GetPerception();
-                await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-                
+                // (The re-point above already pushed a fresh perception frame for the new map.)
                 return new InteractionResultDto { Success = true, Reason = $"Transported to {targetWorldId}:{targetMapId}" };
             }
             catch (Exception ex)
@@ -482,36 +519,15 @@ namespace Aetherium.Server
                         return JoinWorldResult.Fail("World has no maps");
                 }
 
-                // Register on the map grain and grab the spawn assignment.
-                var mapGrain = clusterClient.GetGrain<IGameMapGrain>(resolvedMapId);
-                var joinResult = await mapGrain.JoinPlayerAsync(session.SessionId);
-                if (!joinResult.Success)
-                    return JoinWorldResult.Fail(joinResult.Reason ?? "Join failed");
-
-                // Fetch a snapshot of the canonical world, omitting the joiner's own
-                // Character so they don't see themselves twice. Their local session
-                // creates a fresh Player on hydration with EntityId == SessionId.
-                var snapshot = await mapGrain.GetWorldSnapshotForJoinerAsync(session.SessionId);
-
-                var generatorRegistry = Context.GetHttpContext()?.RequestServices
-                    .GetService<Aetherium.WorldGen.MapGeneratorRegistry>();
-                if (generatorRegistry == null)
-                    return JoinWorldResult.Fail("Generator registry not available");
-
-                var builder = new Aetherium.WorldBuilders.SnapshotWorldBuilder(snapshot, generatorRegistry);
-                sessionManager.ReplaceSessionWorld(
-                    session, builder, worldId, resolvedMapId, joinResult.SpawnLocation());
-
-                // Phase 2c: swap the session's mutation gateway to a grain-routed one.
-                // From here on, every gameplay verb on this session's tools dispatches
-                // to the grain, which mutates canonical state and pushes deltas back
-                // to every joined session via NotifyMapMutationAsync.
-                session.Gateway = new Aetherium.Server.MultiWorld.GrainMutationGateway(
-                    clusterClient, resolvedMapId, session.SessionId);
-
-                // Push the first perception of the new world to the caller.
-                var perception = session.GetPerception();
-                await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
+                // Re-point the session onto the resolved world/map via the shared path: join the
+                // map grain (canonical Character + spawn), keep WorldGrain.PlayerLocations in
+                // agreement, hydrate the session's World mirror from the snapshot (omitting the
+                // joiner's own Character so they don't see themselves twice), swap in the grain
+                // mutation gateway, apply the game's player vision, and push the first perception
+                // frame (add-boardable-vehicles Phase 0 — the same re-point used by UsePortal).
+                var result = await RepointCallerToMapAsync(session, worldId, resolvedMapId!);
+                if (!result.Success)
+                    return result;
 
                 // Emit an arrival event so travel_to / reach_location objectives that target this
                 // world can complete on join. Previously only UsePortal emitted player_arrived, so
@@ -523,7 +539,7 @@ namespace Aetherium.Server
                     ["playerId"] = session.SessionId
                 });
 
-                return JoinWorldResult.Ok(worldId, resolvedMapId, joinResult.SpawnLocation());
+                return result;
             }
             catch (Exception ex)
             {
@@ -532,7 +548,140 @@ namespace Aetherium.Server
                 return JoinWorldResult.Fail("Join failed");
             }
         }
-        
+
+        /// <summary>
+        /// Applies a game's declared player-vision (game.yaml `player.vision:`) to a freshly
+        /// joined session: sets <see cref="GameSession.DirectionalVisionMode"/> and the mirror
+        /// Character's <see cref="Aetherium.Components.HasHeading"/> FOV/range, which is what
+        /// <see cref="GameSession.GetPerception"/> reads. Resolving from the world's source game
+        /// definition (rather than threading it through the whole grain-config chain) keeps this a
+        /// single host-side lookup. Best-effort: any missing piece leaves the engine default
+        /// (omnidirectional 360° sight), so bundles that declare no vision are unchanged.
+        /// </summary>
+        private void ApplyPlayerVision(GameSession session, string? gameDefinitionId)
+        {
+            if (string.IsNullOrEmpty(gameDefinitionId))
+                return;
+
+            var registry = Context.GetHttpContext()?.RequestServices
+                .GetService<Aetherium.Server.Games.GameDefinitionRegistry>();
+            if (registry is null || !registry.TryGet(gameDefinitionId, out var definition) || definition is null)
+                return;
+
+            var vision = definition.Player?.Vision;
+            // An always-day outdoor world declares the "daylight" tag: fix the sun at noon so
+            // night never collapses the view, and render under Sunlight.
+            bool daylight = definition.Tags != null && definition.Tags.Contains("daylight");
+            if (vision is null && !daylight)
+                return;
+
+            session.WithStateLock(() =>
+            {
+                if (vision is not null)
+                {
+                    session.DirectionalVisionMode = vision.Directional;
+                    if (session.Player is not null)
+                    {
+                        var heading = session.Player.Has<Aetherium.Components.HasHeading>()
+                            ? session.Player.Get<Aetherium.Components.HasHeading>()
+                            : new Aetherium.Components.HasHeading();
+                        heading.IsDirectional = vision.Directional;
+                        if (vision.Directional)
+                            heading.FieldOfViewDegrees = Math.Clamp(vision.FieldOfView, 1, 360);
+                        heading.ViewRange = vision.Range;
+                        session.Player.Set(heading);
+                    }
+
+                    // View distance: size the perception viewport so the horizon ≈ vision.range
+                    // (maxRange is derived from the viewport half-extent). Bundles that omit range
+                    // keep the default console-sized viewport.
+                    if (vision.Range is int r && r > 0)
+                    {
+                        var range = Math.Clamp(r, 4, 30);
+                        session.ViewportSize = new System.Drawing.Size(range * 4, range * 2);
+                    }
+                }
+
+                if (daylight)
+                {
+                    session.CurrentLightingMode = Aetherium.Model.LightingMode.Sunlight;
+                    session.SetFixedTimeOfDay(12.0); // permanent noon — no day/night cycle
+                }
+                return true;
+            });
+        }
+
+        /// <summary>
+        /// Re-points the caller's session onto (<paramref name="worldId"/>, <paramref name="mapId"/>):
+        /// leaves the map it is currently on (releasing that map's Character + spawn), joins the target
+        /// map (creating the canonical Character and reserving a spawn), keeps both worlds' player-
+        /// location records in agreement, hydrates the session's <see cref="GameSession.World"/> mirror
+        /// from the target-map snapshot, swaps in a grain-routed mutation gateway, applies the target
+        /// game's player vision, and pushes a fresh perception frame. This is the single "switch this
+        /// connection's perception to another world/map" path (add-boardable-vehicles Phase 0), shared
+        /// by <see cref="JoinWorld"/> and <see cref="UsePortal"/>. Callers still layer their own
+        /// concerns (narrative arrival events, discovery recording) on top.
+        /// </summary>
+        private async Task<JoinWorldResult> RepointCallerToMapAsync(GameSession session, string worldId, string mapId)
+        {
+            if (clusterClient == null)
+                return JoinWorldResult.Fail("Cluster client not available");
+            if (string.IsNullOrEmpty(worldId) || string.IsNullOrEmpty(mapId))
+                return JoinWorldResult.Fail("worldId and mapId required");
+
+            var worldGrain = clusterClient.GetGrain<IWorldGrain>(worldId);
+            var worldInfo = await worldGrain.GetInfoAsync();
+            if (worldInfo == null)
+                return JoinWorldResult.Fail("Target world not found");
+            if (await worldGrain.GetStateAsync() != WorldState.Active)
+                return JoinWorldResult.Fail("Target world is not active");
+
+            var registry = Context.GetHttpContext()?.RequestServices
+                .GetService<Aetherium.WorldGen.MapGeneratorRegistry>();
+            if (registry == null)
+                return JoinWorldResult.Fail("Generator registry not available");
+
+            // Leave the map we're currently on (strips the Character, frees the spawn, and fans out an
+            // EntityRemovedDelta so other sessions there see us go). Skipped on first join (no prev map).
+            var prevWorldId = session.WorldId;
+            var prevMapId = session.MapId;
+            if (!string.IsNullOrEmpty(prevMapId) && prevMapId != mapId)
+            {
+                var prevMap = clusterClient.GetGrain<IGameMapGrain>(prevMapId);
+                await prevMap.LeavePlayerAsync(session.SessionId);
+            }
+            // Drop the stale location record on the old world when moving worlds.
+            if (!string.IsNullOrEmpty(prevWorldId) && prevWorldId != worldId)
+            {
+                var prevWorld = clusterClient.GetGrain<IWorldGrain>(prevWorldId);
+                await prevWorld.UnregisterPlayerAsync(session.SessionId);
+            }
+
+            // Join the target map -> canonical Character + spawn.
+            var mapGrain = clusterClient.GetGrain<IGameMapGrain>(mapId);
+            var join = await mapGrain.JoinPlayerAsync(session.SessionId);
+            if (!join.Success)
+                return JoinWorldResult.Fail(join.Reason ?? "Join failed");
+
+            // Keep the destination world's player-location record in agreement — the invariant that
+            // GameSession.WorldId/MapId and WorldGrain.PlayerLocations must never disagree.
+            await worldGrain.RegisterPlayerLocationAsync(session.SessionId, mapId);
+
+            // Hydrate the session mirror from the snapshot (omitting the joiner's own Character), swap
+            // in the grain-routed gateway, apply per-game vision, and push a fresh frame — all silo-side
+            // via the reusable GameSessionManager.RepointSessionAsync.
+            var snapshot = await mapGrain.GetWorldSnapshotForJoinerAsync(session.SessionId);
+            var builder = new Aetherium.WorldBuilders.SnapshotWorldBuilder(snapshot, registry);
+            var gateway = new Aetherium.Server.MultiWorld.GrainMutationGateway(clusterClient, mapId, session.SessionId);
+            var gameDefinitionId = worldInfo.GameDefinitionId;
+
+            await sessionManager.RepointSessionAsync(
+                session.SessionId, builder, worldId, mapId, join.SpawnLocation(), gateway,
+                s => ApplyPlayerVision(s, gameDefinitionId));
+
+            return JoinWorldResult.Ok(worldId, mapId, join.SpawnLocation());
+        }
+
         // ============================================================
         // Unified Tool Execution API
         // ============================================================
@@ -612,7 +761,10 @@ namespace Aetherium.Server
                 };
                 
                 // Execute the tool
+                var _perfHub = Environment.GetEnvironmentVariable("AETHERIUM_PERF") == "1";
+                var _swTool = _perfHub ? System.Diagnostics.Stopwatch.StartNew() : null;
                 var result = await tool.ExecuteAsync(context, args);
+                _swTool?.Stop();
                 
                 // Process narrative consequences for interaction tools
                 if (result.Success && clusterClient != null && session.WorldId != null)
@@ -666,9 +818,14 @@ namespace Aetherium.Server
                 }
                 
                 // Send updated perception to client
+                var _swPerc = _perfHub ? System.Diagnostics.Stopwatch.StartNew() : null;
                 var perception = session.GetPerception();
+                _swPerc?.Stop();
                 await Clients.Caller.SendAsync("ReceivePerceptionUpdate", perception);
-                
+
+                if (_perfHub && (toolId == "move" || toolId == "rotate" || toolId == "changelevel"))
+                    Console.WriteLine($"[PERF] hub {toolId}: toolExec(incl. grain)={_swTool?.ElapsedMilliseconds}ms, getPerception={_swPerc?.ElapsedMilliseconds}ms");
+
                 return result.ToDto();
             }
             catch (Exception ex)

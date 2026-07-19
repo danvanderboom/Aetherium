@@ -4,6 +4,6 @@ Sample games demonstrating the engine across renderers. Each sample is **present
 
 | Sample | Engine | Status | Game bundle |
 |---|---|---|---|
-| [Aphelion](unity/Aphelion/) | Unity 6 (URP) | **In design/bring-up** — asset slice committed; client library pending (see [milestones](../docs/design/unity-sample/milestones.md)) | `Data/Games/aphelion/` *(pending)* |
+| [Aphelion](unity/Aphelion/) | Unity 6 (URP) | **M0 bring-up** — asset slice committed; [`Aetherium.Client`](../Aetherium.Client/) core + [`com.aetherium.unity`](../clients/unity/com.aetherium.unity/) package built; sample gameplay next (see [milestones](../docs/design/unity-sample/milestones.md)) | [`Data/Games/aphelion/`](../Data/Games/aphelion/) v0.1 — bestiary, kit, 4 reactive rules |
 | [Unreal sample](unreal/) | Unreal Engine | Placeholder — see the [Unreal client guide](../docs/clients/unreal-client-guide.md) | — |
-| [Console](console/) | Terminal (Spectre.Console) | Shipped as the top-level [`Aetherium.Console`](../Aetherium.Console/) project; relocation here is migration Phase C | plays any bundle (Emberfall, Neonveil) |
+| [Console](console/) | Terminal (Spectre.Console) | Shipped as the top-level [`Aetherium.Console`](../Aetherium.Console/) project; relocation here is migration Phase C | plays any bundle (Emberfall, Neonveil, Hexhaven, Trigrove, Aphelion) |

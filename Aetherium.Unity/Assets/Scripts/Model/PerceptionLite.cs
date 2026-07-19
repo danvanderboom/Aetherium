@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Aetherium.Unity.Model
 {
@@ -16,6 +17,22 @@ namespace Aetherium.Unity.Model
         public RectangleLite VisibleBounds { get; set; } = new RectangleLite();
         public Dictionary<string, VisualLite> Visuals { get; set; } = new Dictionary<string, VisualLite>();
         public Dictionary<string, TileTypeLite> TileTypes { get; set; } = new Dictionary<string, TileTypeLite>();
+
+        /// <summary>
+        /// The perceiver's flight envelope (band range + current band), present only when they can fly/pilot.
+        /// Drives the HUD altitude gauge. Null for non-flyers — additive, mirrors <c>PerceptionDto.FlightEnvelope</c>.
+        /// </summary>
+        public FlightEnvelopeLite? FlightEnvelope { get; set; }
+
+        /// <summary>Grid topology ("square" today; hex/tri/h3 later). Mirrors <c>PerceptionDto.Topology</c>.</summary>
+        public string Topology { get; set; } = "square";
+
+        /// <summary>Per-frame ambient light tint; null = neutral white. Mirrors <c>PerceptionDto.AmbientTint</c>.</summary>
+        public AmbientTintLite? AmbientTint { get; set; }
+
+        /// <summary>The ambient tint as a color, defaulting to white when absent.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public Color AmbientTintColor => AmbientTint?.ToColor() ?? Color.white;
 
         public PerceptionLite()
         {

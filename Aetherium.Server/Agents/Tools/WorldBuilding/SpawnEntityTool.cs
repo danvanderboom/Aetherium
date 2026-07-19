@@ -71,30 +71,62 @@ namespace Aetherium.Server.Agents.Tools.WorldBuilding
             if (string.IsNullOrWhiteSpace(entityType))
                 return Task.FromResult(ToolExecutionResult.Error("Entity type cannot be empty"));
 
-            if (!SpawnableEntityFactory.IsKnownType(entityType))
-            {
-                var supported = string.Join(", ", SpawnableEntityFactory.SupportedTypeNames);
-                return Task.FromResult(ToolExecutionResult.Error(
-                    $"Unknown entity type '{entityType}'. Supported types: {supported}"));
-            }
+            var world = worldContext.World;
+            var location = new WorldLocation(x, y, z);
+
+            // Location must be passable terrain and not already hold a character. This applies to
+            // creature types (see the World-dependent fallback below); general entities resolved via
+            // SpawnableEntityFactory (items, doors, lights, ...) may legitimately share or occupy
+            // non-passable tiles, so the check only gates the creature path.
+            bool IsOccupiedByCharacter() =>
+                world.EntitiesByLocation.TryGetValue(location, out var atLoc)
+                && atLoc.Values.Any(e => e is Aetherium.Character);
 
             Entity entity;
-            try
+
+            // SpawnableEntityFactory only discovers types with a public parameterless constructor,
+            // so it cannot construct World-dependent creatures (Monster, Zombie, ...). Try it first
+            // since it's the shared, general-purpose factory (items/doors/lights/etc.); fall back to
+            // the creature factory — which also accepts creature aliases (wolf/bear/bandit) — for
+            // types it can't reach.
+            if (SpawnableEntityFactory.IsKnownType(entityType))
             {
-                SpawnableEntityFactory.TryCreate(entityType, out entity);
+                try
+                {
+                    SpawnableEntityFactory.TryCreate(entityType, out entity);
+                }
+                catch (Exception ex)
+                {
+                    return Task.FromResult(ToolExecutionResult.Error(
+                        $"Failed to construct entity '{entityType}': {ex.Message}"));
+                }
             }
-            catch (Exception ex)
+            else
             {
-                return Task.FromResult(ToolExecutionResult.Error(
-                    $"Failed to construct entity '{entityType}': {ex.Message}"));
+                // Resolve the type before validating placement — an unknown type should fail as
+                // "unknown type", not as a location error, regardless of what's at that location.
+                var creature = Aetherium.Server.Entities.EntityFactory.TryCreate(entityType!, world);
+                if (creature == null)
+                {
+                    var supported = string.Join(", ", SpawnableEntityFactory.SupportedTypeNames
+                        .Concat(Aetherium.Server.Entities.EntityFactory.SupportedTypes).Distinct().OrderBy(n => n));
+                    return Task.FromResult(ToolExecutionResult.Error(
+                        $"Unknown entity type '{entityType}'. Supported types: {supported}"));
+                }
+
+                if (!world.PassableTerrain(location))
+                    return Task.FromResult(ToolExecutionResult.Error($"Location ({x}, {y}, {z}) is not passable"));
+                if (IsOccupiedByCharacter())
+                    return Task.FromResult(ToolExecutionResult.Error($"Location ({x}, {y}, {z}) is already occupied"));
+
+                entity = creature;
             }
 
-            var location = new WorldLocation(x, y, z);
             entity.Set(location);
 
             try
             {
-                worldContext.World.AddEntity(entity);
+                world.AddEntity(entity);
             }
             catch (Exception ex)
             {

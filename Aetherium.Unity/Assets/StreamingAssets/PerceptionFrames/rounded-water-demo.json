@@ -1,0 +1,2062 @@
+{
+  "PlayerLocation": {
+    "X": -5,
+    "Y": -5,
+    "Z": 0
+  },
+  "PlayerHeading": 0,
+  "HeadingDegrees": 0,
+  "Topology": "square",
+  "AmbientTint": {
+    "R": 1.0,
+    "G": 0.86,
+    "B": 0.68
+  },
+  "VisibleBounds": {
+    "X": -7,
+    "Y": -7,
+    "Width": 15,
+    "Height": 15
+  },
+  "Visuals": {
+    "-7,7,0": {
+      "Location": {
+        "X": -7,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "-6,7,0": {
+      "Location": {
+        "X": -6,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "-5,7,0": {
+      "Location": {
+        "X": -5,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "-4,7,0": {
+      "Location": {
+        "X": -4,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "-3,7,0": {
+      "Location": {
+        "X": -3,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "-2,7,0": {
+      "Location": {
+        "X": -2,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "-1,7,0": {
+      "Location": {
+        "X": -1,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "0,7,0": {
+      "Location": {
+        "X": 0,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "1,7,0": {
+      "Location": {
+        "X": 1,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "2,7,0": {
+      "Location": {
+        "X": 2,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "3,7,0": {
+      "Location": {
+        "X": 3,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "4,7,0": {
+      "Location": {
+        "X": 4,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "5,7,0": {
+      "Location": {
+        "X": 5,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "6,7,0": {
+      "Location": {
+        "X": 6,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "7,7,0": {
+      "Location": {
+        "X": 7,
+        "Y": 7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.94
+    },
+    "-7,6,0": {
+      "Location": {
+        "X": -7,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "-6,6,0": {
+      "Location": {
+        "X": -6,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "-5,6,0": {
+      "Location": {
+        "X": -5,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "-4,6,0": {
+      "Location": {
+        "X": -4,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "-3,6,0": {
+      "Location": {
+        "X": -3,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "-2,6,0": {
+      "Location": {
+        "X": -2,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "-1,6,0": {
+      "Location": {
+        "X": -1,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "0,6,0": {
+      "Location": {
+        "X": 0,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "1,6,0": {
+      "Location": {
+        "X": 1,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "2,6,0": {
+      "Location": {
+        "X": 2,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "3,6,0": {
+      "Location": {
+        "X": 3,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "4,6,0": {
+      "Location": {
+        "X": 4,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "5,6,0": {
+      "Location": {
+        "X": 5,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "6,6,0": {
+      "Location": {
+        "X": 6,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "7,6,0": {
+      "Location": {
+        "X": 7,
+        "Y": 6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.924
+    },
+    "-7,5,0": {
+      "Location": {
+        "X": -7,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "-6,5,0": {
+      "Location": {
+        "X": -6,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "-5,5,0": {
+      "Location": {
+        "X": -5,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "-4,5,0": {
+      "Location": {
+        "X": -4,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "-3,5,0": {
+      "Location": {
+        "X": -3,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "-2,5,0": {
+      "Location": {
+        "X": -2,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "-1,5,0": {
+      "Location": {
+        "X": -1,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "0,5,0": {
+      "Location": {
+        "X": 0,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "1,5,0": {
+      "Location": {
+        "X": 1,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "2,5,0": {
+      "Location": {
+        "X": 2,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "3,5,0": {
+      "Location": {
+        "X": 3,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "4,5,0": {
+      "Location": {
+        "X": 4,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "5,5,0": {
+      "Location": {
+        "X": 5,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "6,5,0": {
+      "Location": {
+        "X": 6,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "7,5,0": {
+      "Location": {
+        "X": 7,
+        "Y": 5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.909
+    },
+    "-7,4,0": {
+      "Location": {
+        "X": -7,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.893
+    },
+    "-6,4,0": {
+      "Location": {
+        "X": -6,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.893
+    },
+    "-5,4,0": {
+      "Location": {
+        "X": -5,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.893
+    },
+    "-4,4,0": {
+      "Location": {
+        "X": -4,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "-3,4,0": {
+      "Location": {
+        "X": -3,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "-2,4,0": {
+      "Location": {
+        "X": -2,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "-1,4,0": {
+      "Location": {
+        "X": -1,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "0,4,0": {
+      "Location": {
+        "X": 0,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "1,4,0": {
+      "Location": {
+        "X": 1,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "2,4,0": {
+      "Location": {
+        "X": 2,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "3,4,0": {
+      "Location": {
+        "X": 3,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "4,4,0": {
+      "Location": {
+        "X": 4,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "5,4,0": {
+      "Location": {
+        "X": 5,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.893
+    },
+    "6,4,0": {
+      "Location": {
+        "X": 6,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.893
+    },
+    "7,4,0": {
+      "Location": {
+        "X": 7,
+        "Y": 4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.893
+    },
+    "-7,3,0": {
+      "Location": {
+        "X": -7,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.877
+    },
+    "-6,3,0": {
+      "Location": {
+        "X": -6,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.877
+    },
+    "-5,3,0": {
+      "Location": {
+        "X": -5,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.877
+    },
+    "-4,3,0": {
+      "Location": {
+        "X": -4,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.877
+    },
+    "-3,3,0": {
+      "Location": {
+        "X": -3,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.877
+    },
+    "-2,3,0": {
+      "Location": {
+        "X": -2,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.877
+    },
+    "-1,3,0": {
+      "Location": {
+        "X": -1,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.877
+    },
+    "0,3,0": {
+      "Location": {
+        "X": 0,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.877
+    },
+    "1,3,0": {
+      "Location": {
+        "X": 1,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.877
+    },
+    "2,3,0": {
+      "Location": {
+        "X": 2,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.877
+    },
+    "3,3,0": {
+      "Location": {
+        "X": 3,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.877
+    },
+    "4,3,0": {
+      "Location": {
+        "X": 4,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.877
+    },
+    "5,3,0": {
+      "Location": {
+        "X": 5,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.877
+    },
+    "6,3,0": {
+      "Location": {
+        "X": 6,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.877
+    },
+    "7,3,0": {
+      "Location": {
+        "X": 7,
+        "Y": 3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.877
+    },
+    "-7,2,0": {
+      "Location": {
+        "X": -7,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.861
+    },
+    "-6,2,0": {
+      "Location": {
+        "X": -6,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.861
+    },
+    "-5,2,0": {
+      "Location": {
+        "X": -5,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.861
+    },
+    "-4,2,0": {
+      "Location": {
+        "X": -4,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "-3,2,0": {
+      "Location": {
+        "X": -3,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "-2,2,0": {
+      "Location": {
+        "X": -2,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "-1,2,0": {
+      "Location": {
+        "X": -1,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "0,2,0": {
+      "Location": {
+        "X": 0,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "1,2,0": {
+      "Location": {
+        "X": 1,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "2,2,0": {
+      "Location": {
+        "X": 2,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.861
+    },
+    "3,2,0": {
+      "Location": {
+        "X": 3,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "4,2,0": {
+      "Location": {
+        "X": 4,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "5,2,0": {
+      "Location": {
+        "X": 5,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.861
+    },
+    "6,2,0": {
+      "Location": {
+        "X": 6,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.861
+    },
+    "7,2,0": {
+      "Location": {
+        "X": 7,
+        "Y": 2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.861
+    },
+    "-7,1,0": {
+      "Location": {
+        "X": -7,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.846
+    },
+    "-6,1,0": {
+      "Location": {
+        "X": -6,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.846
+    },
+    "-5,1,0": {
+      "Location": {
+        "X": -5,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.846
+    },
+    "-4,1,0": {
+      "Location": {
+        "X": -4,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.846
+    },
+    "-3,1,0": {
+      "Location": {
+        "X": -3,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.846
+    },
+    "-2,1,0": {
+      "Location": {
+        "X": -2,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.846
+    },
+    "-1,1,0": {
+      "Location": {
+        "X": -1,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.846
+    },
+    "0,1,0": {
+      "Location": {
+        "X": 0,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.846
+    },
+    "1,1,0": {
+      "Location": {
+        "X": 1,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.846
+    },
+    "2,1,0": {
+      "Location": {
+        "X": 2,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.846
+    },
+    "3,1,0": {
+      "Location": {
+        "X": 3,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.846
+    },
+    "4,1,0": {
+      "Location": {
+        "X": 4,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.846
+    },
+    "5,1,0": {
+      "Location": {
+        "X": 5,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.846
+    },
+    "6,1,0": {
+      "Location": {
+        "X": 6,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.846
+    },
+    "7,1,0": {
+      "Location": {
+        "X": 7,
+        "Y": 1,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.846
+    },
+    "-7,0,0": {
+      "Location": {
+        "X": -7,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.83
+    },
+    "-6,0,0": {
+      "Location": {
+        "X": -6,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.83
+    },
+    "-5,0,0": {
+      "Location": {
+        "X": -5,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.83
+    },
+    "-4,0,0": {
+      "Location": {
+        "X": -4,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.83
+    },
+    "-3,0,0": {
+      "Location": {
+        "X": -3,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.83
+    },
+    "-2,0,0": {
+      "Location": {
+        "X": -2,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.83
+    },
+    "-1,0,0": {
+      "Location": {
+        "X": -1,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.83
+    },
+    "0,0,0": {
+      "Location": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.83
+    },
+    "1,0,0": {
+      "Location": {
+        "X": 1,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.83
+    },
+    "2,0,0": {
+      "Location": {
+        "X": 2,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.83
+    },
+    "3,0,0": {
+      "Location": {
+        "X": 3,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.83
+    },
+    "4,0,0": {
+      "Location": {
+        "X": 4,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.83
+    },
+    "5,0,0": {
+      "Location": {
+        "X": 5,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.83
+    },
+    "6,0,0": {
+      "Location": {
+        "X": 6,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.83
+    },
+    "7,0,0": {
+      "Location": {
+        "X": 7,
+        "Y": 0,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.83
+    },
+    "-7,-1,0": {
+      "Location": {
+        "X": -7,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.814
+    },
+    "-6,-1,0": {
+      "Location": {
+        "X": -6,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.814
+    },
+    "-5,-1,0": {
+      "Location": {
+        "X": -5,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.814
+    },
+    "-4,-1,0": {
+      "Location": {
+        "X": -4,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.814
+    },
+    "-3,-1,0": {
+      "Location": {
+        "X": -3,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.814
+    },
+    "-2,-1,0": {
+      "Location": {
+        "X": -2,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.814
+    },
+    "-1,-1,0": {
+      "Location": {
+        "X": -1,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.814
+    },
+    "0,-1,0": {
+      "Location": {
+        "X": 0,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.814
+    },
+    "1,-1,0": {
+      "Location": {
+        "X": 1,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.814
+    },
+    "2,-1,0": {
+      "Location": {
+        "X": 2,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.814
+    },
+    "3,-1,0": {
+      "Location": {
+        "X": 3,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.814
+    },
+    "4,-1,0": {
+      "Location": {
+        "X": 4,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.814
+    },
+    "5,-1,0": {
+      "Location": {
+        "X": 5,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.814
+    },
+    "6,-1,0": {
+      "Location": {
+        "X": 6,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.814
+    },
+    "7,-1,0": {
+      "Location": {
+        "X": 7,
+        "Y": -1,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.814
+    },
+    "-7,-2,0": {
+      "Location": {
+        "X": -7,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.799
+    },
+    "-6,-2,0": {
+      "Location": {
+        "X": -6,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.799
+    },
+    "-5,-2,0": {
+      "Location": {
+        "X": -5,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.799
+    },
+    "-4,-2,0": {
+      "Location": {
+        "X": -4,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.799
+    },
+    "-3,-2,0": {
+      "Location": {
+        "X": -3,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.799
+    },
+    "-2,-2,0": {
+      "Location": {
+        "X": -2,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.799
+    },
+    "-1,-2,0": {
+      "Location": {
+        "X": -1,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.799
+    },
+    "0,-2,0": {
+      "Location": {
+        "X": 0,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.799
+    },
+    "1,-2,0": {
+      "Location": {
+        "X": 1,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.799
+    },
+    "2,-2,0": {
+      "Location": {
+        "X": 2,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.799
+    },
+    "3,-2,0": {
+      "Location": {
+        "X": 3,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.799
+    },
+    "4,-2,0": {
+      "Location": {
+        "X": 4,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.799
+    },
+    "5,-2,0": {
+      "Location": {
+        "X": 5,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.799
+    },
+    "6,-2,0": {
+      "Location": {
+        "X": 6,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.799
+    },
+    "7,-2,0": {
+      "Location": {
+        "X": 7,
+        "Y": -2,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.799
+    },
+    "-7,-3,0": {
+      "Location": {
+        "X": -7,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.783
+    },
+    "-6,-3,0": {
+      "Location": {
+        "X": -6,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.783
+    },
+    "-5,-3,0": {
+      "Location": {
+        "X": -5,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.783
+    },
+    "-4,-3,0": {
+      "Location": {
+        "X": -4,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.783
+    },
+    "-3,-3,0": {
+      "Location": {
+        "X": -3,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.783
+    },
+    "-2,-3,0": {
+      "Location": {
+        "X": -2,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.783
+    },
+    "-1,-3,0": {
+      "Location": {
+        "X": -1,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.783
+    },
+    "0,-3,0": {
+      "Location": {
+        "X": 0,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.783
+    },
+    "1,-3,0": {
+      "Location": {
+        "X": 1,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.783
+    },
+    "2,-3,0": {
+      "Location": {
+        "X": 2,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.783
+    },
+    "3,-3,0": {
+      "Location": {
+        "X": 3,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.783
+    },
+    "4,-3,0": {
+      "Location": {
+        "X": 4,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.783
+    },
+    "5,-3,0": {
+      "Location": {
+        "X": 5,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.783
+    },
+    "6,-3,0": {
+      "Location": {
+        "X": 6,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.783
+    },
+    "7,-3,0": {
+      "Location": {
+        "X": 7,
+        "Y": -3,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.783
+    },
+    "-7,-4,0": {
+      "Location": {
+        "X": -7,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.767
+    },
+    "-6,-4,0": {
+      "Location": {
+        "X": -6,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.767
+    },
+    "-5,-4,0": {
+      "Location": {
+        "X": -5,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.767
+    },
+    "-4,-4,0": {
+      "Location": {
+        "X": -4,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.767
+    },
+    "-3,-4,0": {
+      "Location": {
+        "X": -3,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.767
+    },
+    "-2,-4,0": {
+      "Location": {
+        "X": -2,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.767
+    },
+    "-1,-4,0": {
+      "Location": {
+        "X": -1,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.767
+    },
+    "0,-4,0": {
+      "Location": {
+        "X": 0,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.767
+    },
+    "1,-4,0": {
+      "Location": {
+        "X": 1,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "water",
+      "LightLevel": 0.767
+    },
+    "2,-4,0": {
+      "Location": {
+        "X": 2,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.767
+    },
+    "3,-4,0": {
+      "Location": {
+        "X": 3,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.767
+    },
+    "4,-4,0": {
+      "Location": {
+        "X": 4,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.767
+    },
+    "5,-4,0": {
+      "Location": {
+        "X": 5,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.767
+    },
+    "6,-4,0": {
+      "Location": {
+        "X": 6,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.767
+    },
+    "7,-4,0": {
+      "Location": {
+        "X": 7,
+        "Y": -4,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.767
+    },
+    "-7,-5,0": {
+      "Location": {
+        "X": -7,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "-6,-5,0": {
+      "Location": {
+        "X": -6,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "-5,-5,0": {
+      "Location": {
+        "X": -5,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "-4,-5,0": {
+      "Location": {
+        "X": -4,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "-3,-5,0": {
+      "Location": {
+        "X": -3,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "-2,-5,0": {
+      "Location": {
+        "X": -2,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.751
+    },
+    "-1,-5,0": {
+      "Location": {
+        "X": -1,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.751
+    },
+    "0,-5,0": {
+      "Location": {
+        "X": 0,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.751
+    },
+    "1,-5,0": {
+      "Location": {
+        "X": 1,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.751
+    },
+    "2,-5,0": {
+      "Location": {
+        "X": 2,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "sand",
+      "LightLevel": 0.751
+    },
+    "3,-5,0": {
+      "Location": {
+        "X": 3,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "4,-5,0": {
+      "Location": {
+        "X": 4,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "5,-5,0": {
+      "Location": {
+        "X": 5,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "6,-5,0": {
+      "Location": {
+        "X": 6,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "7,-5,0": {
+      "Location": {
+        "X": 7,
+        "Y": -5,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.751
+    },
+    "-7,-6,0": {
+      "Location": {
+        "X": -7,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "-6,-6,0": {
+      "Location": {
+        "X": -6,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "-5,-6,0": {
+      "Location": {
+        "X": -5,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "-4,-6,0": {
+      "Location": {
+        "X": -4,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "-3,-6,0": {
+      "Location": {
+        "X": -3,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "-2,-6,0": {
+      "Location": {
+        "X": -2,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "-1,-6,0": {
+      "Location": {
+        "X": -1,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "0,-6,0": {
+      "Location": {
+        "X": 0,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "1,-6,0": {
+      "Location": {
+        "X": 1,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "2,-6,0": {
+      "Location": {
+        "X": 2,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "3,-6,0": {
+      "Location": {
+        "X": 3,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "4,-6,0": {
+      "Location": {
+        "X": 4,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "5,-6,0": {
+      "Location": {
+        "X": 5,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "6,-6,0": {
+      "Location": {
+        "X": 6,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "7,-6,0": {
+      "Location": {
+        "X": 7,
+        "Y": -6,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.736
+    },
+    "-7,-7,0": {
+      "Location": {
+        "X": -7,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "-6,-7,0": {
+      "Location": {
+        "X": -6,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "-5,-7,0": {
+      "Location": {
+        "X": -5,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "-4,-7,0": {
+      "Location": {
+        "X": -4,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "-3,-7,0": {
+      "Location": {
+        "X": -3,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "-2,-7,0": {
+      "Location": {
+        "X": -2,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "-1,-7,0": {
+      "Location": {
+        "X": -1,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "0,-7,0": {
+      "Location": {
+        "X": 0,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "1,-7,0": {
+      "Location": {
+        "X": 1,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "2,-7,0": {
+      "Location": {
+        "X": 2,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "3,-7,0": {
+      "Location": {
+        "X": 3,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "4,-7,0": {
+      "Location": {
+        "X": 4,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "5,-7,0": {
+      "Location": {
+        "X": 5,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "6,-7,0": {
+      "Location": {
+        "X": 6,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    },
+    "7,-7,0": {
+      "Location": {
+        "X": 7,
+        "Y": -7,
+        "Z": 0
+      },
+      "TileTypeId": "grass",
+      "LightLevel": 0.72
+    }
+  },
+  "TileTypes": {
+    "water": {
+      "Name": "water",
+      "Settings": {}
+    },
+    "sand": {
+      "Name": "sand",
+      "Settings": {}
+    },
+    "grass": {
+      "Name": "grass",
+      "Settings": {}
+    }
+  }
+}

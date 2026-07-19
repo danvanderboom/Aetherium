@@ -75,6 +75,11 @@ namespace Aetherctl
             Commands.VisionCommands.AddToRoot(rootCommand);
             Commands.WorldCommands.AddToRoot(rootCommand);
             Commands.GameCommands.AddToRoot(rootCommand);
+            Commands.PerceptionCommands.AddToRoot(rootCommand);
+            Commands.MemoryCommands.AddToRoot(rootCommand);
+            Commands.RecognitionCommands.AddToRoot(rootCommand);
+            Commands.ScenarioCommands.AddToRoot(rootCommand);
+            Commands.TelemetryCommands.AddToRoot(rootCommand);
             Commands.NarrativeCommands.AddToRoot(rootCommand);
             Commands.QuestCommands.AddToRoot(rootCommand);
             Commands.InstanceCommands.AddToRoot(rootCommand);

@@ -49,7 +49,8 @@ namespace Aetherium
         DoorOpened,
         DoorClosed,
         DoorLocked,
-        DoorUnlocked
+        DoorUnlocked,
+        Collision
     }
 
 

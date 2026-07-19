@@ -62,6 +62,13 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
         /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
         [Id(21)] public string? Topology { get; set; }
+
+        [Id(22)] public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
+
+        /// <summary>Per-world opening purse (add-starting-currency-data): the credits a joining player's
+        /// <c>Wallet</c> starts with, set once at InitializeAsync and applied to every map this world
+        /// creates. Null means every map falls back to <c>Aetherium.Components.Wallet.StartingCurrency</c>.</summary>
+        [Id(23)] public double? StartingCurrency { get; set; }
     }
 
     /// <summary>
@@ -164,6 +171,13 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
         /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
         [Id(16)] public string? Topology { get; set; }
+
+        [Id(17)] public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
+
+        /// <summary>Per-world opening purse (add-starting-currency-data): the credits a joining player's
+        /// <c>Wallet</c> starts with. Set by the definition→instance path from <c>player.startingCurrency</c>;
+        /// null elsewhere → the engine default <c>Aetherium.Components.Wallet.StartingCurrency</c>.</summary>
+        [Id(18)] public double? StartingCurrency { get; set; }
     }
 
     /// <summary>

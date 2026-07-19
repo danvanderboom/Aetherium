@@ -1,6 +1,7 @@
 using Orleans;
 using Orleans.Runtime;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using Aetherium.Core;
 using Aetherium.Components;
 using Aetherium.Entities;
@@ -56,6 +57,16 @@ namespace Aetherium.Server.MultiWorld
         // Behavior Tree Instance" requirement in specs/npc-behavior-trees/spec.md).
         // Pruned in StepNpcsAsync whenever a monster leaves _world.Entities.
         private readonly Dictionary<string, BehaviorTree> _monsterTrees = new();
+
+        // --- opt-in perf instrumentation (set AETHERIUM_PERF=1) ---
+        // Counts NPC steps and the deltas they fan out per window, so we can see how much the
+        // roaming-monster tick is driving the perception-flush load (each moved monster dirties
+        // every co-located session and schedules a fresh FOV perception).
+        private static readonly bool NpcPerfLog = Environment.GetEnvironmentVariable("AETHERIUM_PERF") == "1";
+        private long _npcPerfWindowStartMs = -1;
+        private long _npcPerfTicks;
+        private long _npcPerfMoves;
+        private int _npcPerfLastMonsterCount;
 
         // AP a monster spends per behavior-tree tick in the continuous action pipeline
         // (engine gap-analysis §4.1). A default Monster carries Speed == MaxBudget == this,
@@ -261,6 +272,12 @@ namespace Aetherium.Server.MultiWorld
             // has no MapState.DeathPolicy yet, so this leaves the field-initializer Default in place.
             if (_mapState.State?.DeathPolicy is not null)
                 _deathPolicy = _mapState.State.DeathPolicy;
+
+            // Rehydrate the per-world opening purse (add-starting-currency-data) from persisted state,
+            // for the same reason: InitializeAsync isn't called again after a silo restart. A brand-new
+            // grain has no MapState.StartingCurrency yet, leaving the field-initializer default in place.
+            if (_mapState.State?.StartingCurrency is { } startingCurrency)
+                _startingCurrency = startingCurrency;
 
             // Recompile the ability catalog + re-stamp resource-pool definitions from persisted config
             // (engine gap-analysis §4.3 — see wire-abilities-live), so abilities survive reactivation
@@ -515,6 +532,8 @@ namespace Aetherium.Server.MultiWorld
                 GeneratorVersion = recipe.GeneratorVersion,
                 Template = recipe.Template,
                 Parameters = new Dictionary<string, string>(recipe.Parameters, System.StringComparer.OrdinalIgnoreCase),
+                Topology = recipe.Topology,
+                Economy = recipe.Economy,
             };
             var orchestrator = new WorldGenerationOrchestrator(_generatorRegistry, BuildPasses(request.Template));
             var result = orchestrator.Generate(request);
@@ -523,11 +542,12 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null, Aetherium.Model.Economy.EconomyConfig? economyConfig = null, double? startingCurrency = null)
         {
             var mapId = this.GetPrimaryKeyString();
 
             _deathPolicy = deathPolicy ?? DeathPolicy.Default;
+            _startingCurrency = startingCurrency ?? Aetherium.Components.Wallet.StartingCurrency;
             ApplyAbilityConfig(abilityConfig);
             ApplyProgressionConfig(progressionConfig);
             ApplyFactionConfig(factionConfig);
@@ -557,7 +577,9 @@ namespace Aetherium.Server.MultiWorld
                 Seed = seed,
                 GeneratorVersion = parameters.TryGetValue("version", out var versionObj) ? versionObj?.ToString() ?? "1.0.0" : "1.0.0",
                 Template = ResolveTemplate(generatorType),
-                Parameters = parameterStrings
+                Parameters = parameterStrings,
+                Topology = topology,
+                Economy = economyConfig
             };
 
             var passes = BuildPasses(request.Template);
@@ -592,6 +614,18 @@ namespace Aetherium.Server.MultiWorld
             // means the standards checker and the pipeline disagree — log it loudly
             // rather than refusing a world players could still explore.
             ValidateGeneratedWorld(_world, mapId);
+
+            // Per-world memory policy overrides (see OpenSpec change add-character-memory).
+            ApplyMemoryPolicy(_world, parameters);
+
+            // Per-world recognition policy overrides (see OpenSpec change add-identity-recognition).
+            ApplyRecognitionPolicy(_world, parameters);
+
+            // Publish the live world to the in-process registry so operator/debug tooling
+            // (headless sessions, world snapshots) can read/drive it directly. Published after
+            // the setup above so consumers never observe a half-configured world.
+            var worldRegistry = ServiceProvider.GetService<Aetherium.Server.Services.WorldRegistry>();
+            worldRegistry?.Register(worldId, mapId, _world);
 
             // Partition map into regions and initialize region grains
             await PartitionIntoRegionsAsync();
@@ -631,6 +665,8 @@ namespace Aetherium.Server.MultiWorld
                 Width = size.Width,
                 Height = size.Height,
                 Levels = size.Depth,
+                Topology = topology,
+                Economy = economyConfig,
             };
 
             _mapState.State = new MapState
@@ -650,6 +686,7 @@ namespace Aetherium.Server.MultiWorld
                 ContentConfig = contentConfig,
                 EcaConfig = ecaConfig,
                 Topology = topology,
+                StartingCurrency = startingCurrency,
             };
 
             await _mapState.WriteStateAsync();
@@ -676,6 +713,196 @@ namespace Aetherium.Server.MultiWorld
             }
         }
 
+        /// <summary>
+        /// Applies memory-policy overrides from world generator parameters
+        /// (MemoryEnabled, MemoryMaxLocations, MemoryDecayHalfLifeSeconds).
+        /// </summary>
+        private static void ApplyMemoryPolicy(World world, Dictionary<string, object> parameters)
+        {
+            if (parameters == null)
+                return;
+
+            if (parameters.TryGetValue("MemoryEnabled", out var enabledObj)
+                && bool.TryParse(enabledObj?.ToString(), out var enabled))
+                world.MemoryPolicy.Enabled = enabled;
+
+            if (parameters.TryGetValue("MemoryMaxLocations", out var maxObj)
+                && int.TryParse(maxObj?.ToString(), out var max) && max > 0)
+                world.MemoryPolicy.MaxLocations = max;
+
+            if (parameters.TryGetValue("MemoryDecayHalfLifeSeconds", out var halfObj)
+                && double.TryParse(halfObj?.ToString(), out var half))
+                world.MemoryPolicy.DecayHalfLifeSeconds = half;
+
+            // Dynamics overrides (add-memory-dynamics): opt-in reinforcement/permanence/forgetting.
+            if (parameters.TryGetValue("MemoryDynamicsEnabled", out var dynObj)
+                && bool.TryParse(dynObj?.ToString(), out var dyn))
+                world.MemoryPolicy.DynamicsEnabled = dyn;
+
+            if (parameters.TryGetValue("MemoryStabilityGrowthFactor", out var growthObj)
+                && double.TryParse(growthObj?.ToString(), out var growth) && growth > 0)
+                world.MemoryPolicy.StabilityGrowthFactor = growth;
+
+            if (parameters.TryGetValue("MemoryMinReinforcementIntervalSeconds", out var minObj)
+                && double.TryParse(minObj?.ToString(), out var min) && min >= 0)
+                world.MemoryPolicy.MinReinforcementIntervalSeconds = min;
+
+            if (parameters.TryGetValue("MemoryPermanenceThresholdSeconds", out var permObj)
+                && double.TryParse(permObj?.ToString(), out var perm) && perm > 0)
+                world.MemoryPolicy.PermanenceThresholdSeconds = perm;
+
+            if (parameters.TryGetValue("MemoryForgetThreshold", out var forgetObj)
+                && double.TryParse(forgetObj?.ToString(), out var forget))
+                world.MemoryPolicy.ForgetThreshold = forget;
+        }
+
+        /// <summary>
+        /// Applies recognition-policy overrides from world generator parameters
+        /// (add-identity-recognition): Recognition{Enabled,RangeTiles,OwnKindAcuity,OtherKindAcuity,
+        /// Threshold,EncounterTimeoutSeconds,FamiliarityHalfLifeSeconds,MeetStrength,MaxIndividuals}.
+        /// </summary>
+        private static void ApplyRecognitionPolicy(World world, Dictionary<string, object> parameters)
+        {
+            if (parameters == null)
+                return;
+
+            var p = world.RecognitionPolicy;
+
+            if (parameters.TryGetValue("RecognitionEnabled", out var enObj)
+                && bool.TryParse(enObj?.ToString(), out var en))
+                p.Enabled = en;
+            if (parameters.TryGetValue("RecognitionRangeTiles", out var rtObj)
+                && int.TryParse(rtObj?.ToString(), out var rt) && rt > 0)
+                p.RangeTiles = rt;
+            if (parameters.TryGetValue("RecognitionOwnKindAcuity", out var okObj)
+                && double.TryParse(okObj?.ToString(), out var ok))
+                p.OwnKindAcuity = ok;
+            if (parameters.TryGetValue("RecognitionOtherKindAcuity", out var otObj)
+                && double.TryParse(otObj?.ToString(), out var ot))
+                p.OtherKindAcuity = ot;
+            if (parameters.TryGetValue("RecognitionThreshold", out var thObj)
+                && double.TryParse(thObj?.ToString(), out var th))
+                p.RecognitionThreshold = th;
+            if (parameters.TryGetValue("RecognitionEncounterTimeoutSeconds", out var etObj)
+                && double.TryParse(etObj?.ToString(), out var et) && et >= 0)
+                p.EncounterTimeoutSeconds = et;
+            if (parameters.TryGetValue("RecognitionFamiliarityHalfLifeSeconds", out var fhObj)
+                && double.TryParse(fhObj?.ToString(), out var fh) && fh > 0)
+                p.FamiliarityHalfLifeSeconds = fh;
+            if (parameters.TryGetValue("RecognitionMeetStrength", out var msObj)
+                && double.TryParse(msObj?.ToString(), out var ms))
+                p.MeetStrength = ms;
+            if (parameters.TryGetValue("RecognitionMaxIndividuals", out var miObj)
+                && int.TryParse(miObj?.ToString(), out var mi) && mi > 0)
+                p.MaxIndividuals = mi;
+        }
+
+        /// <summary>
+        /// Resolves an entity's "kind" for recognition (add-identity-recognition): its
+        /// <see cref="Aetherium.Components.CreatureTypeTag"/> value when present (so "wolf"/"bandit"
+        /// don't collapse to "monster"), else its CLR type name lowercased. Same rule the
+        /// <c>creature_died</c> path uses for the victim.
+        /// </summary>
+        internal static string ResolveKind(Entity entity) =>
+            Aetherium.Components.RecognitionKind.Resolve(entity);
+
+        /// <summary>
+        /// Sweeps the canonical world for characters within recognition range (add-identity-recognition)
+        /// and raises <c>character_recognized</c> rules once per encounter. Runs on the grain turn after
+        /// <see cref="StepNpcsAsync"/>, so PC canonical bodies (gateway-first) and NPCs are both at their
+        /// settled positions. Proximity uses the world topology on the same z-level. Familiarity state is
+        /// updated for every in-range pair regardless of whether rules exist; only recognized, new-
+        /// encounter observations dispatch through the rule runtime. No-op when the policy is disabled.
+        /// </summary>
+        private async Task RunRecognitionSweepAsync()
+        {
+            if (_world is null)
+                return;
+            var policy = _world.RecognitionPolicy;
+            if (!policy.Enabled)
+                return;
+
+            var characters = _world.Characters.Values
+                .Where(c => c.Has<Aetherium.Components.WorldLocation>()
+                            && !c.Has<Dying>() && !c.Has<Corpse>() && !c.Has<Downed>())
+                .ToList();
+            if (characters.Count < 2)
+                return;
+
+            var now = DateTime.UtcNow;
+            var events = new List<Aetherium.Server.Eca.EcaEventContext>();
+
+            foreach (var recognizer in characters)
+            {
+                var profile = recognizer.Has<Aetherium.Components.RecognitionProfile>()
+                    ? recognizer.Get<Aetherium.Components.RecognitionProfile>()
+                    : null;
+                // A character can opt out of being a recognizer without disabling the whole world.
+                if (profile?.EnabledOverride == false)
+                    continue;
+
+                var range = profile?.RangeTilesOverride ?? policy.RangeTiles;
+                var recLoc = recognizer.Get<Aetherium.Components.WorldLocation>();
+                var recCoord = Aetherium.Topology.GridCoord.From(recLoc);
+                var recKind = ResolveKind(recognizer);
+
+                Aetherium.Components.IndividualRecognition rec;
+                if (recognizer.Has<Aetherium.Components.IndividualRecognition>())
+                    rec = recognizer.Get<Aetherium.Components.IndividualRecognition>();
+                else
+                {
+                    rec = new Aetherium.Components.IndividualRecognition();
+                    recognizer.Set(rec);
+                }
+
+                foreach (var target in characters)
+                {
+                    if (target.EntityId == recognizer.EntityId)
+                        continue;
+                    var tgtLoc = target.Get<Aetherium.Components.WorldLocation>();
+                    if (tgtLoc.Z != recLoc.Z)
+                        continue; // same z-level only this slice
+
+                    var distance = _world.Topology.Distance(recCoord, Aetherium.Topology.GridCoord.From(tgtLoc));
+                    if (distance > range)
+                        continue;
+
+                    var tgtKind = ResolveKind(target);
+                    var obs = rec.Observe(target.EntityId, tgtKind, now, policy);
+
+                    var acuity = profile != null
+                        ? profile.AcuityFor(recKind, tgtKind, policy)
+                        : policy.AcuityFor(recKind, tgtKind);
+
+                    if (policy.Recognizes(acuity, obs.EffectiveFamiliarity) && obs.NewEncounter)
+                    {
+                        events.Add(new Aetherium.Server.Eca.EcaEventContext
+                        {
+                            TriggerKind = Aetherium.Server.Eca.CharacterRecognizedTrigger.Id,
+                            RecognizerEntityId = recognizer.EntityId,
+                            RecognizerKind = recKind,
+                            RecognizedEntityId = target.EntityId,
+                            RecognizedKind = tgtKind,
+                            Familiarity = obs.EffectiveFamiliarity,
+                            FirstMeeting = obs.FirstMeeting,
+                            EventX = recLoc.X,
+                            EventY = recLoc.Y,
+                            EventZ = recLoc.Z,
+                        });
+                    }
+                }
+            }
+
+            // Dispatch through the rule runtime (mirrors RunCreatureDiedRulesAsync). Familiarity state
+            // above is updated regardless; this only executes rules for recognized new encounters.
+            if (_ecaRuntime is not null)
+            {
+                foreach (var evt in events)
+                    foreach (var request in _ecaRuntime.Evaluate(evt))
+                        await ExecuteEcaRequestAsync(request);
+            }
+        }
+
         private static WorldGenerationTemplate ResolveTemplate(string generatorType)
         {
             var normalized = generatorType.ToLowerInvariant();
@@ -689,8 +916,13 @@ namespace Aetherium.Server.MultiWorld
 
         public Task<string?> GetWorldAsync()
         {
-            // TODO: Return serialized world when implemented
-            return Task.FromResult<string?>(null);
+            if (_world == null || _mapState.State == null)
+                return Task.FromResult<string?>(null);
+
+            // Serialize an omniscient snapshot (tiles + entities) of this map's live world.
+            var snapshot = Aetherium.Server.Management.WorldSnapshotBuilder.Build(
+                _world, _mapState.State.WorldId, _mapState.State.MapId);
+            return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(snapshot));
         }
 
         public Task<MapMetadata?> GetMetadataAsync()
@@ -753,6 +985,10 @@ namespace Aetherium.Server.MultiWorld
             character.Set(new Aetherium.Components.WorldLocation(spawn.X, spawn.Y, spawn.Z));
             character.Set(new Aetherium.Components.Inventory());
             character.Set(new Aetherium.Components.HasHeading { Heading = 0 });
+            // A starting purse so a joining player can trade against settlement markets (economy Item 2b).
+            // The amount is per-world data (add-starting-currency-data): _startingCurrency comes from the
+            // world's player.startingCurrency, falling back to the Wallet.StartingCurrency engine default.
+            character.Set(new Aetherium.Components.Wallet { Currency = _startingCurrency });
 
             // Stamp the world's configured resource pools onto the joining character (engine
             // gap-analysis §4.3 — see wire-abilities-live). Fresh instances per character so each
@@ -849,6 +1085,14 @@ namespace Aetherium.Server.MultiWorld
                 _mapState.State.MapId,
                 _mapState.State.Size,
                 excludePlayerEntityId: joinerPlayerId);
+
+            // Ghost forensics: the session mirror can only ever know what this snapshot
+            // carries — log canonical vs captured so a canonical→snapshot leak is visible.
+            var canonicalMonsters = _world.Entities.Values.OfType<Aetherium.Monster>().Count();
+            var snapshotMonsters = snapshot.Entities.Count(p => p.TypeName == nameof(Aetherium.Monster));
+            Console.WriteLine(
+                $"[GameMapGrain] joiner snapshot for {joinerPlayerId}: {snapshot.Entities.Count} placements " +
+                $"({snapshotMonsters} monsters) from canonical {_world.Entities.Count} entities ({canonicalMonsters} monsters)");
 
             return Task.FromResult(snapshot);
         }
@@ -952,8 +1196,24 @@ namespace Aetherium.Server.MultiWorld
             var bearing = character.Get<Aetherium.Components.HasHeading>()?.ToWorldDirection()
                 ?? Aetherium.WorldDirection.North;
 
+            // Honor the creature's per-type vision (content.yaml `vision:`): a directional
+            // creature only perceives its forward cone, exactly as the human player does when
+            // directional vision is on — so an AI hunter's field of view is a real constraint,
+            // not just a client presentation detail.
+            var heading = character.Get<Aetherium.Components.HasHeading>();
+            bool directional = heading?.IsDirectional ?? false;
+            int? headingDegrees = directional ? heading!.Heading : (int?)null;
+            int? fovDegrees = directional ? heading!.FieldOfViewDegrees : (int?)null;
+
+            // Passing the character as `self` populates the interoception channel — the
+            // player's own health/statuses/pools/cooldowns (add-interoception-channel).
             var perception = new Aetherium.Server.PerceptionService()
-                .ComputePerception(_world, location, bearing, new System.Drawing.Size(40, 40));
+                .ComputePerception(
+                    _world, location, bearing, new System.Drawing.Size(40, 40),
+                    Aetherium.Model.LightingMode.Torch, Aetherium.Model.VisionMode.Normal,
+                    heatTracker: null, currentTime: System.DateTime.UtcNow,
+                    directionalVision: directional, headingDegrees: headingDegrees, fovDegrees: fovDegrees,
+                    self: character);
             var json = System.Text.Json.JsonSerializer.Serialize(perception);
             return Task.FromResult<string?>(json);
         }
@@ -963,6 +1223,15 @@ namespace Aetherium.Server.MultiWorld
             if (_mapState.State == null || _regions == null)
                 return;
 
+            var tickTs0 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
+            // Advance autonomous flyers (flight plans) and satellites (orbits) on this map's world.
+            if (_world != null)
+            {
+                Aetherium.Server.Flying.FlightPlanSystem.Step(_world);
+                _satelliteSystem.Step(_world);
+            }
+
             // Tick all regions in parallel with game time
             var tickTasks = _regions.Values
                 .Select(region => region.TickAsync(gameTimeElapsed))
@@ -970,12 +1239,26 @@ namespace Aetherium.Server.MultiWorld
 
             await Task.WhenAll(tickTasks);
 
+            var msRegions = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs0).TotalMilliseconds : 0.0;
+            var tickTs1 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
             // Drive NPC/monster behavior. Runs on the grain's activation turn, so it
             // is serialized with player mutations on the same _world — no cross-thread
             // races. Movement + its delta fan-out happen here rather than in the
             // Monster entity so co-located players actually see monsters move.
             _tickCounter++;
             await StepNpcsAsync();
+
+            var msNpc = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs1).TotalMilliseconds : 0.0;
+            var tickTsRec = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
+            // Individual recognition (add-identity-recognition): after positions settle, sweep the
+            // canonical world for characters within recognition range and raise character_recognized
+            // rules. No-op when the world's RecognitionPolicy is disabled (the default).
+            await RunRecognitionSweepAsync();
+
+            var msRecognition = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTsRec).TotalMilliseconds : 0.0;
+            var tickTs2 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
             // Death lifecycle bookkeeping (engine gap-analysis §4.2/§4.11): advance every Dying
             // entity's countdown to Corpse, then age/expire corpses per DeathPolicy. Both are
@@ -993,12 +1276,24 @@ namespace Aetherium.Server.MultiWorld
                 // every actor's ability cooldowns and regenerate their resource pools. Silent,
                 // canonical-state-only — the read accessors expose the new values on demand.
                 TickAbilityUpkeep();
+
+                // Economy (docs/economy-simulation.md T2): settlements produce/consume, markets reprice,
+                // and goods arbitrage along the road graph. Rate-limited to its own slow cadence and a
+                // fast no-op on any world without markets (every square game today), so this is free
+                // there and cheap on the planet.
+                _economySystem.Step(_world, gameTimeElapsed);
             }
+
+            var msDeathAbility = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs2).TotalMilliseconds : 0.0;
+            var tickTs3 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
             // Player death lifecycle (engine gap-analysis §4.11, Phase 2 — see
             // wire-death-respawn-live): advance every Downed player's countdown and any
             // post-respawn invulnerability window.
             await TickDownedAndInvulnerablePlayersAsync();
+
+            var msDowned = NpcPerfLog ? System.Diagnostics.Stopwatch.GetElapsedTime(tickTs3).TotalMilliseconds : 0.0;
+            var tickTs4 = NpcPerfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
 
             // Heat trail cleanup. Capture which cells had trails before cleanup, run
             // cleanup, then diff to find cells that just lost their last trail. Emit
@@ -1028,6 +1323,17 @@ namespace Aetherium.Server.MultiWorld
             catch (Exception ex)
             {
                 Console.WriteLine($"[GameMapGrain] Heat cleanup failed: {ex.Message}");
+            }
+
+            if (NpcPerfLog)
+            {
+                var msHeat = System.Diagnostics.Stopwatch.GetElapsedTime(tickTs4).TotalMilliseconds;
+                var msTotal = System.Diagnostics.Stopwatch.GetElapsedTime(tickTs0).TotalMilliseconds;
+                var entityCount = _world?.Entities.Count ?? 0;
+                Console.WriteLine(
+                    $"[PERF] tick total={msTotal:F0}ms | regions({_regions.Count})={msRegions:F0} stepNpcs={msNpc:F0} " +
+                    $"recognition={msRecognition:F0} deathAbility={msDeathAbility:F0} downed={msDowned:F0} heat={msHeat:F0} " +
+                    $"| entities={entityCount} chars={_world?.Characters.Count ?? 0}");
             }
         }
 
@@ -1162,13 +1468,33 @@ namespace Aetherium.Server.MultiWorld
                 }
             }
 
-            // Phase 2 (async): broadcast. FanOutAsync persists each delta and routes
-            // it through the session manager, which reconciles every co-located
-            // session's mirror and pushes a fresh FOV-filtered perception.
-            foreach (var move in moves)
-                await FanOutAsync(move);
-            foreach (var delta in combatDeltas)
-                await FanOutAsync(delta);
+            if (NpcPerfLog)
+            {
+                var now = Environment.TickCount64;
+                if (_npcPerfWindowStartMs < 0) _npcPerfWindowStartMs = now;
+                _npcPerfTicks++;
+                _npcPerfMoves += moves.Count;
+                _npcPerfLastMonsterCount = monsters.Count;
+                var elapsed = now - _npcPerfWindowStartMs;
+                if (elapsed >= 2000)
+                {
+                    Console.WriteLine(
+                        $"[PERF] npc {this.GetPrimaryKeyString()}: monsters={_npcPerfLastMonsterCount}, " +
+                        $"{_npcPerfTicks} steps in {elapsed}ms, {_npcPerfMoves} moves fanned out " +
+                        $"({_npcPerfMoves * 1000.0 / elapsed:F1}/s)");
+                    _npcPerfTicks = 0; _npcPerfMoves = 0; _npcPerfWindowStartMs = now;
+                }
+            }
+
+            // Phase 2 (async): broadcast the whole tick as ONE batch. The session manager applies
+            // every delta under a single per-session lock and schedules a single perception flush —
+            // instead of one lock acquisition + flush schedule per monster, which contended with the
+            // flush and pinned this single-threaded grain (starving player commands). Moves first,
+            // then combat, preserving the order observers would have seen per-delta.
+            var tickDeltas = new List<MapDelta>(moves.Count + combatDeltas.Count);
+            tickDeltas.AddRange(moves);
+            tickDeltas.AddRange(combatDeltas);
+            await FanOutBatchAsync(tickDeltas);
             foreach (var evt in playerEvents)
                 await SendPlayerEventAsync(evt.SessionId, evt.EventName, evt.Vitals);
         }
@@ -1220,8 +1546,8 @@ namespace Aetherium.Server.MultiWorld
         {
             if (_world is null) return;
 
-            var downedPlayers = _world.Entities.Values.OfType<Character>().Where(c => c.Has<Downed>()).ToList();
-            var invulnerablePlayers = _world.Entities.Values.OfType<Character>().Where(c => c.Has<RespawnInvulnerable>()).ToList();
+            var downedPlayers = _world.Characters.Values.Where(c => c.Has<Downed>()).ToList();
+            var invulnerablePlayers = _world.Characters.Values.Where(c => c.Has<RespawnInvulnerable>()).ToList();
             if (downedPlayers.Count == 0 && invulnerablePlayers.Count == 0)
                 return;
 
@@ -1597,8 +1923,22 @@ namespace Aetherium.Server.MultiWorld
             {
                 var location = new WorldLocation(request.X, request.Y, request.Z);
 
-                // Check if location is valid
-                if (!_world.PassableTerrain(location))
+                var flies = request.Flies || IsFlyingCreatureType(request.CreatureType);
+
+                // Validate placement. Flyers spawn airborne and are validated against altitude bands and
+                // per-band obstruction rather than ground passability, so they may occupy open air.
+                if (flies)
+                {
+                    if (location.Z < request.MinBand || location.Z > request.MaxBand)
+                    {
+                        return new SpawnEntityResult { Success = false, ErrorMessage = "Spawn band is outside the flyer's range" };
+                    }
+                    if (_world.ColumnObstructsMovement(location.X, location.Y, location.Z))
+                    {
+                        return new SpawnEntityResult { Success = false, ErrorMessage = "Air location is obstructed" };
+                    }
+                }
+                else if (!_world.PassableTerrain(location))
                 {
                     return new SpawnEntityResult { Success = false, ErrorMessage = "Location is not passable" };
                 }
@@ -1670,6 +2010,25 @@ namespace Aetherium.Server.MultiWorld
 
                 // Set location and add to world
                 entity.Set(location);
+
+                if (flies)
+                {
+                    entity.Set(new Flight
+                    {
+                        State = FlightState.Airborne,
+                        MinBand = request.MinBand,
+                        MaxBand = request.MaxBand,
+                        CruiseBand = location.Z,
+                        CanLand = request.CanLand
+                    });
+
+                    // Attach the stock interaction profile for this flyer kind (hackable satellite, summonable
+                    // taxi, attackable drone, …) so it can be hacked/summoned/attacked/inspected.
+                    var profile = Aetherium.Server.Flying.FlyerProfiles.ForCreatureType(request.CreatureType);
+                    if (profile != null)
+                        entity.Set(profile);
+                }
+
                 _world.AddEntity(entity);
 
                 return new SpawnEntityResult { Success = true, EntityId = entity.EntityId };
@@ -1677,6 +2036,28 @@ namespace Aetherium.Server.MultiWorld
             catch (Exception ex)
             {
                 return new SpawnEntityResult { Success = false, ErrorMessage = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// Whether a creature-type name denotes a flyer that should spawn airborne with a Flight component.
+        /// </summary>
+        public static bool IsFlyingCreatureType(string creatureType)
+        {
+            switch ((creatureType ?? string.Empty).ToLowerInvariant())
+            {
+                case "bird":
+                case "drone":
+                case "satellite":
+                case "aircraft":
+                case "airplane":
+                case "helicopter":
+                case "airship":
+                case "dropship":
+                case "spaceship":
+                    return true;
+                default:
+                    return false;
             }
         }
 
@@ -1754,6 +2135,38 @@ namespace Aetherium.Server.MultiWorld
             {
                 // Mutation has already happened; a host-side failure must not roll it back.
                 Console.WriteLine($"[GameMapGrain] FanOut failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Fans out a whole tick's worth of deltas as one batch: sequences and persists each, then
+        /// hands the batch to the session manager, which applies them all under a single per-session
+        /// lock and schedules ONE perception flush. The per-delta <see cref="FanOutAsync"/> path took
+        /// the session lock once per delta — so a 20-monster tick took the lock 20 times, each
+        /// contending with the perception flush, stretching the tick to seconds and starving player
+        /// commands on this single-threaded grain. Used by <see cref="StepNpcsAsync"/>.
+        /// </summary>
+        private async Task FanOutBatchAsync(IReadOnlyList<MapDelta> deltas)
+        {
+            if (_mapState.State is null || deltas is null || deltas.Count == 0) return;
+
+            foreach (var delta in deltas)
+            {
+                delta.MapId = _mapState.State.MapId;
+                delta.Sequence = System.Threading.Interlocked.Increment(ref _nextSequence);
+                await PersistDeltaAsync(delta);
+            }
+
+            var mgr = GetSessionManager();
+            if (mgr is null) return; // not wired (TestingHost path) — no consumers, no problem
+
+            try
+            {
+                await mgr.NotifyMapMutationsAsync(_mapState.State.MapId, deltas);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameMapGrain] Batch FanOut failed: {ex.Message}");
             }
         }
 
@@ -1926,8 +2339,16 @@ namespace Aetherium.Server.MultiWorld
         // reactivation) rather than hardcoded, so different worlds can pick different death models
         // as data. Defaults to DeathPolicy.Default until InitializeAsync/OnActivateAsync sets it.
         private DeathPolicy _deathPolicy = DeathPolicy.Default;
+
+        // Per-world opening purse (add-starting-currency-data), sourced from InitializeAsync's
+        // startingCurrency argument (persisted on MapState so it survives reactivation) rather than
+        // the Wallet.StartingCurrency constant, so different worlds can grant different starting
+        // credits as data. Defaults to the engine constant until InitializeAsync/OnActivateAsync sets it.
+        private double _startingCurrency = Aetherium.Components.Wallet.StartingCurrency;
         private readonly DeathSystem _deathSystem = new DeathSystem();
         private readonly CorpseExpirySystem _corpseExpirySystem = new CorpseExpirySystem();
+        private readonly Aetherium.Server.Economy.EconomySystem _economySystem = new Aetherium.Server.Economy.EconomySystem();
+        private readonly Aetherium.Server.Satellites.SatelliteSystem _satelliteSystem = new Aetherium.Server.Satellites.SatelliteSystem();
 
         // Per-world ability content (engine gap-analysis §4.3 — see wire-abilities-live), compiled from
         // the world's AbilityConfig. The catalog is the runtime (compiled) form of the config's
@@ -2081,9 +2502,9 @@ namespace Aetherium.Server.MultiWorld
                     : victim.GetType().Name.ToLowerInvariant(),
                 VictimEntityId = victim.EntityId,
                 KillerEntityId = killer.EntityId,
-                VictimX = x,
-                VictimY = y,
-                VictimZ = z,
+                EventX = x,
+                EventY = y,
+                EventZ = z,
             };
 
             foreach (var request in _ecaRuntime.Evaluate(ctx))
@@ -2253,6 +2674,24 @@ namespace Aetherium.Server.MultiWorld
             return Ok();
         }
 
+        public Task<TradeResultDto> TradeAsync(string sessionId, string side, string good, double quantity)
+        {
+            var ctx = TryBuildActionContext(sessionId);
+            if (ctx is null) return Task.FromResult(TradeResultDto.Fail("Map not initialized or player not on map"));
+
+            // Canonical trade against the settlement market the player stands in — mutates _world's market
+            // stock and the player's wallet/hold. Prices aren't in perception yet, so no fan-out; the
+            // client re-fetches. (Economy Item 2b.)
+            var r = Aetherium.Server.Economy.MarketTrade.ExecuteAt(_world!, ctx.Player, side, good, quantity);
+            double wallet = ctx.Player.Has<Aetherium.Components.Wallet>()
+                ? ctx.Player.Get<Aetherium.Components.Wallet>().Currency : 0;
+            return Task.FromResult(new TradeResultDto
+            {
+                Success = r.Success, Reason = r.Reason, Side = side, Good = good,
+                Quantity = r.Quantity, UnitPrice = r.UnitPrice, Total = r.Total, WalletAfter = wallet,
+            });
+        }
+
         public async Task<Aetherium.Model.InteractionResultDto> DropAsync(string sessionId, string itemEntityId)
         {
             var ctx = TryBuildActionContext(sessionId);
@@ -2390,6 +2829,135 @@ namespace Aetherium.Server.MultiWorld
         }
 
         public Task<DeathPolicy> GetDeathPolicyAsync() => Task.FromResult(_deathPolicy);
+
+        public Task<double> GetWalletAsync(string playerId)
+        {
+            var player = GetPlayerCharacter(playerId);
+            var currency = player is not null && player.Has<Aetherium.Components.Wallet>()
+                ? player.Get<Aetherium.Components.Wallet>().Currency
+                : 0.0;
+            return Task.FromResult(currency);
+        }
+
+        // --- Boardable vehicles (add-boardable-vehicles Phase 2) ---
+
+        public async Task<bool> PlaceVehicleExteriorAsync(string vehicleInstanceId, string displayName,
+            int anchorX, int anchorY, int anchorZ, int footprintWidth, int footprintLength, int footprintDepth,
+            string exteriorTerrain, System.Collections.Generic.List<string> landingTerrain)
+        {
+            if (_world is null || _mapState.State is null || string.IsNullOrEmpty(vehicleInstanceId))
+                return false;
+
+            var entityId = $"vehicle:{vehicleInstanceId}";
+            if (_world.Entities.ContainsKey(entityId))
+                return false; // already parked here
+
+            var anchor = new Aetherium.Components.WorldLocation(anchorX, anchorY, anchorZ);
+            var exterior = new Aetherium.Entities.VehicleExterior { EntityId = entityId };
+            exterior.Set(anchor);
+            // Size3d is (length, width, depth): +Y, +X, +Z.
+            exterior.Set(new Aetherium.Components.Footprint
+            {
+                Size = new Aetherium.Core.Size3d(
+                    System.Math.Max(1, footprintLength),
+                    System.Math.Max(1, footprintWidth),
+                    System.Math.Max(1, footprintDepth)),
+            });
+            exterior.Set(new Aetherium.Components.Boardable
+            {
+                VehicleInstanceId = vehicleInstanceId,
+                DisplayName = displayName ?? string.Empty,
+            });
+            // A parked ship is solid — players walk up to it and board rather than through it.
+            exterior.Set(new Aetherium.Components.ObstructsMovement());
+
+            // Landing-terrain gate: when specified, every footprint tile must be an allowed landing terrain.
+            if (landingTerrain is { Count: > 0 })
+            {
+                foreach (var tile in exterior.Get<Aetherium.Components.Footprint>().OccupiedTiles(anchor))
+                {
+                    var terrainName = _world.GetTerrain(tile)?.Type?.Name;
+                    if (terrainName is null || !landingTerrain.Contains(terrainName))
+                        return false;
+                }
+            }
+
+            // Standard footprint validity (in-bounds, passable, unoccupied) then place + announce.
+            if (!_world.TryPlace(exterior))
+                return false;
+
+            await FanOutAsync(new EntityAddedDelta
+            {
+                MapId = _mapState.State.MapId,
+                Placement = EntityPlacement.FromLocation(entityId, nameof(Aetherium.Entities.VehicleExterior), anchor),
+            });
+            return true;
+        }
+
+        public async Task RemoveVehicleExteriorAsync(string vehicleInstanceId)
+        {
+            if (_world is null || _mapState.State is null || string.IsNullOrEmpty(vehicleInstanceId))
+                return;
+
+            var entityId = $"vehicle:{vehicleInstanceId}";
+            if (!_world.Entities.TryGetValue(entityId, out var entity))
+                return;
+
+            var loc = entity.Get<Aetherium.Components.WorldLocation>();
+            if (_world.TryRemoveEntity(entityId))
+            {
+                await FanOutAsync(new EntityRemovedDelta
+                {
+                    MapId = _mapState.State.MapId,
+                    EntityId = entityId,
+                    LastX = loc?.X ?? 0,
+                    LastY = loc?.Y ?? 0,
+                    LastZ = loc?.Z ?? 0,
+                });
+            }
+        }
+
+        public Task<Aetherium.Model.Vehicles.BoardableInfo> GetBoardableInfoAsync(string sessionId, string targetEntityId)
+        {
+            if (_world is null || string.IsNullOrEmpty(targetEntityId)
+                || !_world.Entities.TryGetValue(targetEntityId, out var entity)
+                || !entity.Has<Aetherium.Components.Boardable>())
+                return Task.FromResult(Aetherium.Model.Vehicles.BoardableInfo.NotFound());
+
+            var boardable = entity.Get<Aetherium.Components.Boardable>();
+            var info = new Aetherium.Model.Vehicles.BoardableInfo
+            {
+                Found = true,
+                VehicleInstanceId = boardable.VehicleInstanceId,
+                DisplayName = boardable.DisplayName,
+                InReach = false,
+            };
+
+            var player = GetPlayerCharacter(sessionId);
+            var playerLoc = player?.Get<Aetherium.Components.WorldLocation>();
+            var anchor = entity.Get<Aetherium.Components.WorldLocation>();
+            if (playerLoc is not null && anchor is not null)
+            {
+                var tiles = entity.Has<Aetherium.Components.Footprint>()
+                    ? entity.Get<Aetherium.Components.Footprint>().OccupiedTiles(anchor)
+                    : new[] { anchor };
+                foreach (var tile in tiles)
+                {
+                    if (tile.Z != playerLoc.Z)
+                        continue;
+                    var d = _world.Topology.Distance(
+                        Aetherium.Topology.GridCoord.From(playerLoc),
+                        Aetherium.Topology.GridCoord.From(tile));
+                    if (d <= 1)
+                    {
+                        info.InReach = true;
+                        break;
+                    }
+                }
+            }
+
+            return Task.FromResult(info);
+        }
 
         /// <summary>
         /// Casts a player's ability (engine gap-analysis §4.3, Phase 2 — see wire-abilities-live)
@@ -2578,7 +3146,11 @@ namespace Aetherium.Server.MultiWorld
         {
             if (_world is null) return;
 
-            foreach (var entity in _world.Entities.Values)
+            // Ability cooldowns and resource pools live only on characters (players/monsters).
+            // Iterate the Characters index, not world.Entities — on a large outdoor map the latter
+            // is ~150k tile entities, and scanning them all every tick cost ~2.6s and starved player
+            // input on the single-threaded grain (see the death/corpse systems, same fix).
+            foreach (var entity in _world.Characters.Values)
             {
                 if (entity.Has<AbilityCooldowns>())
                     entity.Get<AbilityCooldowns>().Tick();
@@ -3205,6 +3777,12 @@ namespace Aetherium.Server.MultiWorld
         /// reactivation without re-running InitializeAsync. Null/empty means square — so any
         /// map persisted before topologies shipped reactivates as square correctly.</summary>
         [Id(17)] public string? Topology { get; set; }
+
+        /// <summary>Per-world opening purse captured at <c>InitializeAsync</c> time
+        /// (add-starting-currency-data), so the grain can rehydrate <c>_startingCurrency</c> on
+        /// reactivation without re-running InitializeAsync. Null means the world specified none — the
+        /// grain falls back to <c>Aetherium.Components.Wallet.StartingCurrency</c>.</summary>
+        [Id(18)] public double? StartingCurrency { get; set; }
     }
 }
 

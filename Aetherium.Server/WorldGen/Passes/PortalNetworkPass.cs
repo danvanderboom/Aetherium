@@ -22,6 +22,11 @@ namespace Aetherium.WorldGen.Passes
 
         public bool SupportsTemplate(WorldGenerationTemplate template) => true;
 
+        // Finds link points with rectangular bounding boxes and walks square 6-neighbour reachability;
+        // both are square-grid assumptions. A single-shell H3 planet has no inter-level portals anyway.
+        public bool SupportsTopology(string? topology)
+            => !string.Equals(topology, "h3", System.StringComparison.OrdinalIgnoreCase);
+
         public void Execute(WorldGenerationContext context)
         {
             if (context.World == null)

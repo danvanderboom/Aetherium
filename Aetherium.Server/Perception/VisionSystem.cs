@@ -121,6 +121,58 @@ namespace Aetherium.Systems
                 }
             }
 
+            // 3D occluded slab: for each horizontally-visible column, march up/down through the configured band
+            // range and emit off-focus cells that pass the vertical line-of-sight test. Only cells that actually
+            // contain something (terrain or a non-terrain entity) are emitted — empty air is a silhouette gap, not
+            // a visible cell — which keeps off-focus perception cheap.
+            var (depthBelow, depthAbove) = world.EffectiveSlabDepth(origin.X, origin.Y, origin.Z);
+            if (depthBelow > 0 || depthAbove > 0)
+            {
+                for (int y = 0; y < bounds.Height; y++)
+                {
+                    for (int x = 0; x < bounds.Width; x++)
+                    {
+                        if (!visible[y, x])
+                            continue;
+
+                        int wx = bounds.X + x;
+                        int wy = bounds.Y + y;
+
+                        foreach (var z in fov.VerticalVisibleBands(world, wx, wy, origin.Z, depthBelow, depthAbove))
+                        {
+                            var loc = new WorldLocation(wx, wy, z);
+                            var terrainType = world.GetTerrainType(loc);
+
+                            var hasContent = terrainType != null;
+                            if (world.EntitiesByLocation.TryGetValue(loc, out var slabEntities))
+                            {
+                                var visual = new Visual(loc, terrainType?.TileType);
+                                foreach (var entity in slabEntities.Values)
+                                {
+                                    if (entity is Character)
+                                    {
+                                        AddSeen(visual, VisualType.Character, "count", 1);
+                                        hasContent = true;
+                                    }
+                                    else if (!(entity is Entities.Terrain))
+                                    {
+                                        AddSeen(visual, VisualType.Object, "count", 1);
+                                        hasContent = true;
+                                    }
+                                }
+
+                                if (hasContent)
+                                    frame.AddVisual(visual);
+                            }
+                            else if (hasContent)
+                            {
+                                frame.AddVisual(new Visual(loc, terrainType?.TileType));
+                            }
+                        }
+                    }
+                }
+            }
+
             return frame;
         }
 

@@ -50,6 +50,18 @@ namespace Aetherium.Server.MultiWorld
         [Id(5)] public int Width { get; set; }
         [Id(6)] public int Height { get; set; }
         [Id(7)] public int Levels { get; set; } = 1;
+
+        /// <summary>
+        /// Grid tiling name ("square"/"hex"/"tri"/"h3"); null ⇒ square. Persisted so a grain that
+        /// regenerates its world from the recipe on reactivation rebuilds it on the same tiling —
+        /// without it, an H3 sphere would silently regenerate as a square grid (docs/h3-topology.md).
+        /// </summary>
+        [Id(8)] public string? Topology { get; set; }
+
+        /// <summary>Per-world economy recipe (goods/prices/basket/biome production), persisted so a
+        /// regenerate-from-recipe reactivation re-seeds settlements with the same bundle goods. Null →
+        /// the engine default. Added append-only after Topology.</summary>
+        [Id(9)] public Aetherium.Model.Economy.EconomyConfig? Economy { get; set; }
     }
 
     /// <summary>

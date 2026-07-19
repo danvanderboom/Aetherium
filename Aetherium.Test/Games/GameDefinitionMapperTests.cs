@@ -48,6 +48,7 @@ namespace Aetherium.Test.Games
                 Factions = factions,
                 Content = content,
                 Rules = rules,
+                Player = new GamePlayerDefinition { StartingCurrency = 250.0 },
             };
 
             var request = GameDefinitionMapper.ToCreateWorldRequest(definition);
@@ -66,6 +67,7 @@ namespace Aetherium.Test.Games
             Assert.That(request.FactionConfig, Is.SameAs(factions));
             Assert.That(request.ContentConfig, Is.SameAs(content));
             Assert.That(request.EcaConfig, Is.SameAs(rules));
+            Assert.That(request.StartingCurrency, Is.EqualTo(250.0));
             Assert.That(request.GameDefinitionId, Is.EqualTo("emberfall"));
             Assert.That(request.GameDefinitionVersion, Is.EqualTo("1.2.3"));
         }

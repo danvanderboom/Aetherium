@@ -104,7 +104,12 @@
 - [x] Narrative commands (`narrative create|load|show|delete|list`)
 - [x] Server management (`server add|list|remove|connect`, `login`, `status`)
 - [x] Test suite (18 tests passing)
-- [x] Session termination (`session close <sessionId>`); session create pending server API
+- [x] Session termination (`session close <sessionId>`)
+- [x] Headless driving (`session create --world`, `perception get [--absolute]`, `world dump`) — see OpenSpec change `add-aetherctl-headless-driving`.
+- [x] Scripted / batch actions (`agent script <sessionId> --file`, `scenario run <file>`; server `ExecuteToolBatchAsync`) — see OpenSpec change `add-aetherctl-scripted-actions`.
+- [x] Runtime world-building (`world spawn`, `world edit <toolId>`; server `ExecuteWorldToolAsync`; `SpawnEntityTool` implemented via `EntityFactory`) — see OpenSpec change `add-aetherctl-runtime-worldbuilding`.
+- [x] Telemetry CLI (`telemetry snapshots|analysis|replays|replay|clear`) over the existing `AgentTelemetryGrain` — see OpenSpec change `add-aetherctl-telemetry`.
+- [x] Character memory ACTIVATED (`memory get <sessionId>`; perception-time recording into the ECS `Memory` component, per-world policy, lazy decay + caps; fixed a latent `AddMemory` copy-mutation bug) — see OpenSpec change `add-character-memory`. Remaining follow-ups: agent-grain episodic memory for LLM context (Layer 2), NPC perception ticks (NPCs are memory-less until they perceive), game-time decay, fog-of-war rendering from memory, item/prefab spawning beyond creatures, `BuildStructureAsync`, an `AgentRunner` scripted policy, conditionals/assertions in scripts, cross-character synchronization, region-bounded snapshots, and replay playback.
 - [ ] Delegation commands
 
 ### Phase 10: Documentation (In Progress)

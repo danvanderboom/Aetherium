@@ -18,6 +18,11 @@ namespace Aetherium.WorldGen.Passes
 
         public bool SupportsTemplate(WorldGenerationTemplate template) => true; // Works with all templates
 
+        // Anchors story beats with square-grid placement; a sphere-native story pass is the phased
+        // follow-up. Skipped on H3 so slice-1 planets generate clean terrain without broken anchors.
+        public bool SupportsTopology(string? topology)
+            => !string.Equals(topology, "h3", System.StringComparison.OrdinalIgnoreCase);
+
         public void Execute(WorldGenerationContext context)
         {
             if (context.World == null)

@@ -96,6 +96,22 @@ namespace Aetherium.Topology
         /// light falloff) must use this, never absolute cell centers.
         /// </summary>
         (double X, double Y) Delta(GridCoord from, GridCoord to);
+
+        // ---- perceiver-relative integer coordinates (the perception key) ----
+
+        /// <summary>
+        /// Integer coordinates of <paramref name="cell"/> in the perceiver's local frame anchored at
+        /// <paramref name="origin"/> — the offset a perception frame emits (as the string key
+        /// <c>"relX,relY,relZ"</c>) so a client can place the cell without ever learning absolute world
+        /// coordinates. Planar tilings (square/hex/tri) return the raw lattice difference, which is a
+        /// global coordinate; on a sphere a global "delta" is meaningless, so H3 returns perceiver-
+        /// anchored local i/j. Returns <c>null</c> when no stable local coordinate exists (e.g. across a
+        /// pentagon boundary at extreme range), in which case the cell is omitted from perception.
+        /// <para>Default is the raw lattice difference — correct for every planar lattice; only H3
+        /// overrides it.</para>
+        /// </summary>
+        (int RelX, int RelY)? RelativeCoords(GridCoord origin, GridCoord cell)
+            => (cell.X - origin.X, cell.Y - origin.Y);
     }
 
     /// <summary>

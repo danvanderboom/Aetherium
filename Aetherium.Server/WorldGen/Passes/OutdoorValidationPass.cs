@@ -11,6 +11,12 @@ namespace Aetherium.WorldGen.Passes
 
         public bool SupportsTemplate(WorldGenerationTemplate template) => template == WorldGenerationTemplate.Outdoor;
 
+        // Validates a single start→objective PrimaryPath and square-neighbour connectivity — neither
+        // is meaningful on an open H3 sphere (no border, no primary route). Sphere-native validation
+        // (great-circle reachability over topology.Neighbors) is the phased follow-up.
+        public bool SupportsTopology(string? topology)
+            => !string.Equals(topology, "h3", System.StringComparison.OrdinalIgnoreCase);
+
         public void Execute(WorldGenerationContext context)
         {
             var validation = _service.Validate(context);

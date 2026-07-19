@@ -1,0 +1,26 @@
+{
+  "PlayerLocation": { "X": 0, "Y": 0, "Z": 0 },
+  "PlayerHeading": 0,
+  "HeadingDegrees": 0,
+  "VisibleBounds": { "X": -3, "Y": -3, "Width": 7, "Height": 7 },
+  "Visuals": {
+    "0,0,0":   { "Location": { "X": 0,  "Y": 0,  "Z": 0 },  "TileTypeId": "road",  "LightLevel": 1.0 },
+    "1,0,0":   { "Location": { "X": 1,  "Y": 0,  "Z": 0 },  "TileTypeId": "road",  "LightLevel": 0.9 },
+    "-1,0,0":  { "Location": { "X": -1, "Y": 0,  "Z": 0 },  "TileTypeId": "road",  "LightLevel": 0.9 },
+    "0,1,0":   { "Location": { "X": 0,  "Y": 1,  "Z": 0 },  "TileTypeId": "stone", "LightLevel": 0.9 },
+    "0,-1,0":  { "Location": { "X": 0,  "Y": -1, "Z": 0 },  "TileTypeId": "stone", "LightLevel": 0.9 },
+    "0,0,-1":  { "Location": { "X": 0,  "Y": 0,  "Z": -1 }, "TileTypeId": "track", "LightLevel": 0.4 },
+    "0,1,-1":  { "Location": { "X": 0,  "Y": 1,  "Z": -1 }, "TileTypeId": "track", "LightLevel": 0.4 },
+    "0,-1,-1": { "Location": { "X": 0,  "Y": -1, "Z": -1 }, "TileTypeId": "track", "LightLevel": 0.4 },
+    "1,1,1":   { "Location": { "X": 1,  "Y": 1,  "Z": 1 },  "TileTypeId": "metal", "LightLevel": 0.8 },
+    "1,0,1":   { "Location": { "X": 1,  "Y": 0,  "Z": 1 },  "TileTypeId": "metal", "LightLevel": 0.8 },
+    "1,-1,2":  { "Location": { "X": 1,  "Y": -1, "Z": 2 },  "TileTypeId": "bird",  "LightLevel": 0.7 }
+  },
+  "TileTypes": {
+    "road":  { "Name": "Road",  "Settings": {} },
+    "stone": { "Name": "Stone", "Settings": {} },
+    "track": { "Name": "Track", "Settings": {} },
+    "metal": { "Name": "Metal", "Settings": {} },
+    "bird":  { "Name": "Bird",  "Settings": {} }
+  }
+}

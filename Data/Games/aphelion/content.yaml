@@ -1,0 +1,100 @@
+# Aphelion's cast and kit (docs/design/unity-sample/game-design.md): five creatures in a
+# clean threat ladder — each with a distinct silhouette, sound, and death-reaction (see
+# rules.yaml) — and six items covering heal / weapon / salvage roles. Glyphs/colors are the
+# console fallback; the Unity client binds these same ids to prefabs via its ThemeAsset.
+creatures:
+  - id: scrap-mite
+    name: Scrap Mite
+    description: Palm-sized repair swarmer gone feral. Pops when struck.
+    glyph: m
+    color: DarkGray
+    health: 8
+    attackPower: 2
+    speed: 1.5
+    behavior: wander-melee
+    lootItemId: alloy-scrap
+
+  - id: custodian
+    name: Custodian
+    description: Corrupted maintenance drone. Thirty years of unsupervised self-repair.
+    glyph: c
+    color: Yellow
+    health: 30
+    attackPower: 6
+    speed: 1.0
+    behavior: wander-melee
+    lootItemId: power-cell
+
+  - id: sentinel
+    name: Sentinel
+    description: AEGIS security synth still enforcing a lockdown no one ordered.
+    glyph: S
+    color: Red
+    health: 55
+    attackPower: 12
+    speed: 0.9
+    behavior: wander-melee
+    lootItemId: charge-capsule
+    # A focused optical scanner: a narrow, long forward cone it sweeps down corridors.
+    vision: { directional: true, fieldOfView: 70, range: 12 }
+
+  - id: vent-lurker
+    name: Vent Lurker
+    description: The Bloom's hunter-shape. Fast, quiet, warm on infrared.
+    glyph: v
+    color: Green
+    health: 25
+    attackPower: 8
+    speed: 1.4
+    behavior: wander-melee
+
+  - id: overseer-node
+    name: Overseer Node
+    description: A deck's governing sub-mind, armored in its own hull. The alarm dies with it.
+    glyph: O
+    color: Magenta
+    health: 120
+    attackPower: 15
+    speed: 0.6
+    behavior: wander-melee   # "sentry" preset is a proposed engine addition (engine-gaps)
+    lootItemId: core-shard
+
+items:
+  - id: medgel
+    name: Medgel Injector
+    icon: "+"
+    weight: 1
+    heal: { amount: 30, uses: 2 }
+  - id: arc-cutter
+    name: Arc Cutter
+    icon: "/"
+    weight: 3
+    weaponBonus: 8
+  - id: plasma-lance
+    name: Plasma Lance
+    icon: "!"
+    weight: 5
+    weaponBonus: 15
+  - id: alloy-scrap
+    name: Alloy Scrap
+    icon: "%"
+    weight: 2
+  - id: power-cell
+    name: Power Cell
+    icon: "*"
+    weight: 2
+  - id: charge-capsule
+    name: Charge Capsule
+    icon: "="
+    weight: 1
+  - id: core-shard
+    name: Overseer Core Shard
+    icon: "$"
+    weight: 1
+
+spawns:
+  - { creatureId: scrap-mite,    weight: 5 }
+  - { creatureId: custodian,     weight: 3 }
+  - { creatureId: sentinel,      weight: 2 }
+  - { creatureId: vent-lurker,   weight: 2 }
+  - { creatureId: overseer-node, weight: 1 }

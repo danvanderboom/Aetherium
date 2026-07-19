@@ -91,6 +91,8 @@ namespace Aetherium.Server.MultiWorld
             _worldState.State.ContentConfig = config.ContentConfig;
             _worldState.State.EcaConfig = config.EcaConfig;
             _worldState.State.Topology = config.Topology;
+            _worldState.State.EconomyConfig = config.EconomyConfig;
+            _worldState.State.StartingCurrency = config.StartingCurrency;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -172,7 +174,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig, _worldState.State.ContentConfig, _worldState.State.EcaConfig, _worldState.State.Topology);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig, _worldState.State.ContentConfig, _worldState.State.EcaConfig, _worldState.State.Topology, _worldState.State.EconomyConfig, _worldState.State.StartingCurrency);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -289,6 +291,35 @@ namespace Aetherium.Server.MultiWorld
             return Task.FromResult<string?>(mapId);
         }
 
+        public async Task RegisterPlayerLocationAsync(string playerId, string mapId)
+        {
+            if (string.IsNullOrEmpty(playerId) || string.IsNullOrEmpty(mapId))
+                return;
+
+            // Keep the world's player-location index in agreement with a re-point that the caller
+            // performed directly against the map grains (add-boardable-vehicles Phase 0). Only bump
+            // the count when this player wasn't already tracked, so re-points stay idempotent.
+            bool isNew = !_worldState.State.PlayerLocations.ContainsKey(playerId);
+            _worldState.State.PlayerLocations[playerId] = mapId;
+            if (isNew)
+                _worldState.State.Info.PlayerCount++;
+            _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
+            await _worldState.WriteStateAsync();
+        }
+
+        public async Task UnregisterPlayerAsync(string playerId)
+        {
+            if (string.IsNullOrEmpty(playerId))
+                return;
+
+            if (_worldState.State.PlayerLocations.Remove(playerId))
+            {
+                _worldState.State.Info.PlayerCount = Math.Max(0, _worldState.State.Info.PlayerCount - 1);
+                _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
+                await _worldState.WriteStateAsync();
+            }
+        }
+
         public async Task TickAsync()
         {
             if (_worldState.State.Info.State != WorldState.Active)
@@ -377,6 +408,15 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>The world's tiling (docs/grid-topologies.md), set once at InitializeAsync and
         /// applied to every map this world creates. Null/empty means square.</summary>
         public string? Topology { get; set; }
+
+        /// <summary>Per-world economy recipe (goods/prices/basket/biome production), set once at
+        /// InitializeAsync and applied to every map this world creates. Null means the engine default.</summary>
+        public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
+
+        /// <summary>Per-world opening purse (add-starting-currency-data), set once at InitializeAsync and
+        /// applied to every map this world creates. Null means every map falls back to
+        /// <see cref="Aetherium.Components.Wallet.StartingCurrency"/>.</summary>
+        public double? StartingCurrency { get; set; }
     }
 }
 

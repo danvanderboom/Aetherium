@@ -1,0 +1,116 @@
+# Aphelion Prime — the H3 (spherical) sci-fi sample world.
+#
+# The parallel, planet-scale companion to the square Aphelion station-crawler: instead of a
+# hibernating mega-station, this is the whole world the Aphelion crew has been orbiting —
+# rendered as a single H3 sphere (docs/h3-topology.md, docs/design/h3-sphere-worldgen.md).
+# The square Aphelion bundle is unchanged; this is a switchable alternative, not a replacement.
+#
+# The map is a shell of H3 cells at resolution 4 (~288,122 cells): a body-agnostic hex+pentagon
+# tiling of a sphere, procedurally terraformed by the sphere-aware H3TerrainGenerator (two 3-D
+# noise fields — elevation + moisture — sampled over each cell's centre unit vector, so there is
+# no map edge, no date-line seam, and no pole singularity). ~288k cells is roughly twice the
+# 384² Overworld and is deliberately sized to host a planetary economy: many settlements, trade
+# routes, and transport networks with real distance between them (see the design doc).
+#
+# Built: terrain + biomes, player-relative perception + sphere-native FOV/lighting, and sphere-native
+# rivers, tiered settlements (320 of them at these settings), and the wide road corridors between them.
+# Transit (rail/subway), satellites + full z-altitude, and markets are the remaining roadmap in
+# docs/design/h3-sphere-worldgen.md.
+id: aphelion-h3
+name: Aphelion Prime
+version: 0.1.0
+description: The planet the Aphelion crew orbits, rendered as a whole H3 sphere — a resolution-4 hex-tiled world of oceans, deserts, forests, hills, and mountains, sized for a living economy.
+tags: [scifi, openworld, planet, h3, sample, daylight]
+
+world:
+  # The sphere-aware terrain generator. "h3-terrain" resolves to the Outdoor pass template; the
+  # H3TerrainGenerator enumerates the whole res-4 shell and classifies each cell from 3-D noise.
+  generatorType: h3-terrain
+  # H3 is a sphere, not a rectangle — width/height are nominal and ignored by the generator, which
+  # sizes the world by h3Resolution. depth is the number of vertical levels (surface only here).
+  size: { width: 256, height: 256, depth: 1 }
+  # The tiling. Movement, FOV, reach, and facing all resolve on H3 hexagons + 12 pentagons.
+  topology: h3
+  maxPlayers: 40
+  generatorParameters:
+    seed: 20260718        # fixed for reproducible dev planets; remove for a random world
+    h3Resolution: 4       # ~288,122 cells. Lower it (3 ≈ 41k, 2 ≈ 5.9k) for a faster smaller planet.
+    # Feature scale on the unit sphere (domain is a unit vector). Larger => smaller, busier features.
+    elevScale: 1.7
+    moistScale: 2.4
+    octaves: 5
+    # A light scattering of wildlife so the planet isn't empty; the population pass is bounded and
+    # topology-agnostic. Raise deliberately — every roamer fans out a move delta each tick.
+    enemyCount: 12
+
+    # --- Z-altitude (docs/design/h3-sphere-worldgen.md P4.5) ---
+    # The planet models bands below the surface (subway/transit) and a tall column of sky above (room
+    # for many orbital bands of satellites). The perception slab reaches a couple of bands each way, so
+    # a surface player glimpses a tunnel mouth underfoot or a low flyer overhead; orbit sits far above
+    # the slab and is only detectable with a tuned radio (a separate perception channel).
+    minBand: -3
+    maxBand: 64
+    slabDepthBelow: 2
+    slabDepthAbove: 3
+
+    # --- Satellites (radio-only, never colliding) ---
+    # A constellation high above the surface. Each rides its own band (24, 26, 28, …) so however much the
+    # orbits criss-cross they never share a cell. They sit far above the perception slab, so they are
+    # invisible to the naked eye and detectable only with a tuned radio (a special item that adds an
+    # orbital channel of perception). Varied ring radii, start phases, and speeds keep the sky busy.
+    satelliteCount: 18
+    satelliteBaseBand: 24
+    satelliteBandGap: 2
+    satelliteMinRadius: 25
+    satelliteMaxRadius: 70
+    satelliteMinPeriod: 1
+    satelliteMaxPeriod: 5
+
+    # --- Sphere-native features (docs/design/h3-sphere-worldgen.md §7) ---
+    # Rivers: steepest-descent channels, carved as Water, widening toward the mouth so wide vehicles
+    # pass each other several lanes abreast near the coast. mouthWidth is a gridDisk half-width.
+    riverCount: 45
+    riverMouthWidth: 3
+    riverWidenSteps: 10
+    # Settlements: a busy, tiered world — the planet has room. Counts here override the land-scaled
+    # defaults; spacing is in cells (converted to great-circle radians at this resolution).
+    capitalCount: 6
+    cityCount: 24
+    townCount: 70
+    villageCount: 220
+    capitalSpacingCells: 80
+    citySpacingCells: 40
+    townSpacingCells: 18
+    villageSpacingCells: 9
+    # Roads: MST backbone + k nearest neighbours (loops → alternate trade routes). Widths are gridDisk
+    # half-widths — a trunk highway (highwayWidth 2 → 5 cells across) carries several lanes each way;
+    # feeder roads (roadWidth 1 → 3 cells) are narrower. Corridors bridge rivers and bays.
+    roadNeighbors: 2
+    highwayWidth: 2
+    roadWidth: 1
+    # Grade-separated transit: a rail backbone between the cities (surface), plus subway tunnels two bands
+    # underground from each capital — high-capacity freight the economy routes bulk goods over, and real
+    # terrain a surface player glimpses through the perception slab.
+    transit: 1
+    railCapacity: 6
+    subwayCapacity: 8
+    subwayBand: -2
+
+# Full 360° sight with a wide horizon so the open planet reads (range sizes the perception viewport).
+player:
+  vision:
+    directional: false
+    fieldOfView: 360
+    range: 18
+  # A generous opening purse for the planet's trade sandbox (add-starting-currency-data). Per-world
+  # data: omit this key and a joining player falls back to the engine default (Wallet.StartingCurrency,
+  # 500 credits). Tune it per game — a survival crawl might start players with far less.
+  startingCurrency: 750
+
+# A calm exploration/economy sandbox: no permadeath, nothing lost on death.
+death:
+  permadeath: false
+  downStateEnabled: false
+  dropOnDeath: None
+  respawnLocation: { mode: WorldSpawn }
+  xpLossPolicy: None

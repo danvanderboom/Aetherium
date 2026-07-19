@@ -1,0 +1,125 @@
+# Nightjar — the hexagonal heist bundle (docs/design/arcade-client/README.md §C.6).
+# A crew of cat burglars works the vaulted undercroft of a private museum, where every
+# gallery is a six-sided chamber and every chamber opens six ways. The hex lattice is the
+# point: six approaches, six sightlines, six ways for a patrol to round on you. Same engine
+# and same YAML schema as Aphelion/Emberfall — the only structural difference is
+# `world.topology: hex`, which resolves movement, FOV, light, and reach on hexagon
+# adjacency. This is the arcade's curated-hex flagship; Aphelion stays square.
+#
+# M0 scope: the kit is a blackjack + tools + the haul. No abilities yet, no bespoke
+# "gallery" generator — hex-caves stands in as the honeycomb of stone vaults. The console
+# glyphs/colors below are the fallback renderer; the Unity arcade binds these same ids to
+# prefabs through its ThemeAsset.
+id: nightjar
+name: Nightjar
+version: 0.1.0
+description: A moonlit heist through a museum's hexagonal vaults. Lift the haul, read the six ways, and be gone before the wardens round the corner.
+tags: [heist, stealth, hex, coop, sample]
+
+world:
+  generatorType: hex-caves
+  topology: hex
+  size: { width: 44, height: 44, depth: 1 }
+  maxPlayers: 4                 # a crew
+
+# Getting caught costs you, but the crew regroups at the fence's safehouse rather than
+# dying outright — friendlier for a demo, and you drop part of the haul when you're pinched.
+death:
+  permadeath: false
+  downStateEnabled: true        # a crewmate can pull you back up (revive verb is engine gap G7)
+  reviveWindowTicks: 8
+  respawnInvulnerabilityTicks: 3
+  corpseRetentionTicks: 300
+  dropOnDeath: Partial          # lose some of the haul when you're pinched
+  respawnLocation: { mode: WorldSpawn }   # the fence's safehouse
+  xpLossPolicy: None
+
+content:
+  creatures:
+    - id: housecat
+      name: House Cat
+      description: The curator's tabby. Harmless on its own, but it yowls, and yowls carry.
+      glyph: c
+      color: DarkYellow
+      health: 4
+      attackPower: 1
+      speed: 1.3
+      behavior: wander-melee
+
+    - id: nightwatch
+      name: Nightwatch
+      description: A bored guard walking the same six-sided round he has walked for years.
+      glyph: g
+      color: Cyan
+      health: 20
+      attackPower: 5
+      speed: 1.0
+      behavior: wander-melee
+      lootItemId: brass-key
+
+    - id: guard-hound
+      name: Guard Hound
+      description: Quick, low, and always coming from the edge you weren't watching.
+      glyph: h
+      color: DarkRed
+      health: 14
+      attackPower: 7
+      speed: 1.4
+      behavior: wander-melee
+
+    - id: warden
+      name: Warden
+      description: Head of the house watch. Slow, armored, and hard to talk your way past.
+      glyph: W
+      color: Red
+      health: 45
+      attackPower: 11
+      speed: 0.9
+      behavior: wander-melee
+      lootItemId: skeleton-key
+
+    - id: clockwork-sentry
+      name: Clockwork Sentry
+      description: A brass automaton that never sleeps and never blinks. The vault's last word.
+      glyph: S
+      color: Magenta
+      health: 70
+      attackPower: 14
+      speed: 0.6
+      behavior: wander-melee
+      lootItemId: sapphire
+
+  items:
+    - id: blackjack
+      name: Blackjack
+      icon: "!"
+      weight: 1
+      weaponBonus: 6           # quiet work, up close
+    - id: nerve-tonic
+      name: Nerve Tonic
+      icon: "+"
+      weight: 1
+      heal: { amount: 25, uses: 2 }
+    - id: lockpick
+      name: Lockpick Set
+      icon: "/"
+      weight: 1
+    - id: brass-key
+      name: Brass Key
+      icon: "-"
+      weight: 1
+    - id: skeleton-key
+      name: Skeleton Key
+      icon: "="
+      weight: 1
+    - id: sapphire
+      name: The Vaultlight Sapphire
+      icon: "$"
+      weight: 2               # the haul
+
+  spawns:
+    - { creatureId: housecat,         weight: 4 }
+    - { creatureId: nightwatch,       weight: 4 }
+    - { creatureId: guard-hound,      weight: 3 }
+    - { creatureId: warden,           weight: 2 }
+    - { creatureId: clockwork-sentry, weight: 1 }

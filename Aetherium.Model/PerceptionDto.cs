@@ -74,6 +74,30 @@ namespace Aetherium.Model
         // Audio perception
         public AudioPerceptionDto? Audio { get; set; }
 
+        /// <summary>
+        /// Interoception — the perceiver's own body state (health, felt statuses, resource
+        /// pools, ability readiness). Null when the frame was computed without a perceiving
+        /// self entity (openspec/changes/add-interoception-channel); always self-only.
+        /// </summary>
+        public InteroceptionDto? Interoception { get; set; }
+
+        /// <summary>
+        /// The perceiver's flight envelope (band range + current band + state), present only
+        /// when they can fly/pilot. Drives the altitude gauge. Null for non-flyers — additive
+        /// and non-breaking (see <see cref="FlightEnvelopeDto"/>).
+        /// </summary>
+        public FlightEnvelopeDto? FlightEnvelope { get; set; }
+
+        /// <summary>
+        /// Monotonic count of the perceiving player's own successful anchor-changing moves
+        /// (steps + level changes) at the moment this frame was computed. Starts at 1; a
+        /// value of 0 means an unsequenced legacy producer. Lets clients order frames
+        /// against their own movement: a frame carrying an older count than the client's
+        /// move tally is stale (computed pre-move, delivered post-response) and must not
+        /// be folded into position-anchored state.
+        /// </summary>
+        public long MoveSequence { get; set; }
+
         public PerceptionDto()
         {
         }

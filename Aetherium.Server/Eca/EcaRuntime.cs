@@ -12,12 +12,25 @@ namespace Aetherium.Server.Eca
     public sealed record EcaEventContext
     {
         public string TriggerKind { get; init; } = string.Empty;
+
+        // creature_died binds
         public string VictimCreatureType { get; init; } = string.Empty;
         public string? VictimEntityId { get; init; }
         public string? KillerEntityId { get; init; }
-        public int VictimX { get; init; }
-        public int VictimY { get; init; }
-        public int VictimZ { get; init; }
+
+        // character_recognized binds (add-identity-recognition)
+        public string? RecognizerEntityId { get; init; }
+        public string RecognizerKind { get; init; } = string.Empty;
+        public string? RecognizedEntityId { get; init; }
+        public string RecognizedKind { get; init; } = string.Empty;
+        public double Familiarity { get; init; }
+        public bool FirstMeeting { get; init; }
+
+        // Trigger-agnostic event location (creature_died: the death site; character_recognized:
+        // the recognizer's location). spawn_creature places relative to this.
+        public int EventX { get; init; }
+        public int EventY { get; init; }
+        public int EventZ { get; init; }
     }
 
     /// <summary>
@@ -107,6 +120,18 @@ namespace Aetherium.Server.Eca
                         if (_rng.NextDouble() >= condition.Probability)
                             return false;
                         break;
+                    case RecognizedKindIsCondition.Id:
+                        if (!string.Equals(condition.RecognizedKind, ctx.RecognizedKind, StringComparison.OrdinalIgnoreCase))
+                            return false;
+                        break;
+                    case FamiliarityAtLeastCondition.Id:
+                        if (ctx.Familiarity < condition.MinFamiliarity)
+                            return false;
+                        break;
+                    case FirstMeetingIsCondition.Id:
+                        if (ctx.FirstMeeting != condition.FirstMeeting)
+                            return false;
+                        break;
                     default:
                         // Unknown condition (should not occur past validation) fails closed.
                         return false;
@@ -124,9 +149,9 @@ namespace Aetherium.Server.Eca
                     {
                         Kind = action.Kind,
                         CreatureId = action.CreatureId,
-                        X = ctx.VictimX + action.OffsetX,
-                        Y = ctx.VictimY + action.OffsetY,
-                        Z = ctx.VictimZ,
+                        X = ctx.EventX + action.OffsetX,
+                        Y = ctx.EventY + action.OffsetY,
+                        Z = ctx.EventZ,
                     };
 
                 case DealDamageAction.Id:
@@ -167,6 +192,8 @@ namespace Aetherium.Server.Eca
         {
             EcaActionTarget.Killer => ctx.KillerEntityId,
             EcaActionTarget.Victim => ctx.VictimEntityId,
+            EcaActionTarget.Recognizer => ctx.RecognizerEntityId,
+            EcaActionTarget.Recognized => ctx.RecognizedEntityId,
             _ => null,
         };
     }

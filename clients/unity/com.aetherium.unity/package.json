@@ -1,0 +1,10 @@
+{
+  "name": "com.aetherium.unity",
+  "version": "0.1.0-preview",
+  "displayName": "Aetherium Client",
+  "description": "Unity adapter for the Aetherium server-authoritative simulation engine: connection lifecycle, main-thread dispatch of perception events, grid map + entity views, and ThemeAsset content binding. Wraps the pure-.NET Aetherium.Client core (vendored under Runtime/Plugins by scripts/pack-unity-client.ps1).",
+  "unity": "2022.3",
+  "author": { "name": "Aetherium" },
+  "license": "Apache-2.0",
+  "keywords": ["aetherium", "multiplayer", "signalr", "roguelike", "simulation"]
+}

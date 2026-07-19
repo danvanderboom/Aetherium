@@ -42,8 +42,12 @@ namespace Aetherium.Test.Eca
             var runtimeIds = new[]
             {
                 CreatureDiedTrigger.Id,
+                CharacterRecognizedTrigger.Id,
                 CreatureTypeIsCondition.Id,
                 ChanceCondition.Id,
+                RecognizedKindIsCondition.Id,
+                FamiliarityAtLeastCondition.Id,
+                FirstMeetingIsCondition.Id,
                 SpawnCreatureAction.Id,
                 DealDamageAction.Id,
                 ApplyStatusAction.Id,
@@ -55,9 +59,12 @@ namespace Aetherium.Test.Eca
         [Test]
         public void Roles_ArePartitionedAsExpected()
         {
-            Assert.That(EcaVocabulary.ByRole(EcaTileRole.Trigger).Select(d => d.Id), Is.EquivalentTo(new[] { "creature_died" }));
-            Assert.That(EcaVocabulary.ByRole(EcaTileRole.Condition).Select(d => d.Id), Is.EquivalentTo(new[] { "creature_type_is", "chance" }));
-            Assert.That(EcaVocabulary.ByRole(EcaTileRole.Action).Select(d => d.Id), Is.EquivalentTo(new[] { "spawn_creature", "deal_damage", "apply_status" }));
+            Assert.That(EcaVocabulary.ByRole(EcaTileRole.Trigger).Select(d => d.Id),
+                Is.EquivalentTo(new[] { "creature_died", "character_recognized" }));
+            Assert.That(EcaVocabulary.ByRole(EcaTileRole.Condition).Select(d => d.Id),
+                Is.EquivalentTo(new[] { "creature_type_is", "chance", "recognized_kind_is", "familiarity_at_least", "first_meeting_is" }));
+            Assert.That(EcaVocabulary.ByRole(EcaTileRole.Action).Select(d => d.Id),
+                Is.EquivalentTo(new[] { "spawn_creature", "deal_damage", "apply_status" }));
         }
     }
 }

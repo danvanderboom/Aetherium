@@ -22,6 +22,20 @@ namespace Aetherium.WorldGen
         public string LayoutGenerator { get; set; } = string.Empty;
         public string? OutdoorGenerator { get; set; }
             = null; // Optional override for outdoor template when layout differs.
+
+        /// <summary>
+        /// Grid tiling name ("square"/"hex"/"tri"/"h3"); null or empty ⇒ square. Threaded into
+        /// <see cref="GeneratorContext.Topology"/> and used to gate passes via
+        /// <see cref="IWorldGenerationPass.SupportsTopology"/>, so an H3 (sphere) world runs a
+        /// sphere-native layout and skips square-grid-only passes (docs/h3-topology.md).
+        /// </summary>
+        public string? Topology { get; set; }
+
+        /// <summary>Optional per-world economy recipe (goods/prices/basket/biome production). Flows to
+        /// <see cref="GeneratorContext.Economy"/> so the settlement seeder uses bundle-supplied goods;
+        /// null falls back to the engine default (<c>Goods.DefaultConfig()</c>).</summary>
+        public Aetherium.Model.Economy.EconomyConfig? Economy { get; set; }
+
         public WorldGenerationTemplate Template { get; set; } = WorldGenerationTemplate.Dungeon;
         public int Width { get; set; } = 80;
         public int Height { get; set; } = 80;

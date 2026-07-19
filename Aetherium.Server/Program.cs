@@ -15,6 +15,7 @@ using Aetherium.Server.Agents;
 using Aetherium.Server.Events;
 using Aetherium.Server.Management;
 using Aetherium.Server.Middleware;
+using Aetherium.Server.MultiWorld;
 using Aetherium.Server.Persistence;
 using Aetherium.Server.Simulation;
 using Aetherium.WorldGen;
@@ -95,7 +96,14 @@ namespace Aetherium.Server
             builder.Services.AddControllers(); // Add API controllers
             builder.Services.AddSingleton<IRandomSource, DefaultRandomSource>();
             builder.Services.AddSingleton<GameSessionManager>();
-            
+
+            // In-process bridge exposing live map worlds to operator tooling (headless
+            // sessions + world snapshots). GameMapGrain publishes, GameManagementGrain
+            // consumes; in this co-hosted setup grains resolve from this same container,
+            // no further Orleans-side registration needed (see the siloBuilder comment
+            // below on why per-grain "bridge" registrations were removed).
+            builder.Services.AddSingleton<Aetherium.Server.Services.WorldRegistry>();
+
             // Register world hosting service (only when Orleans is enabled)
             if (!disableOrleans)
             {
@@ -295,7 +303,14 @@ namespace Aetherium.Server
                 builder.Host.UseOrleans(siloBuilder =>
                 {
                     siloBuilder.UseLocalhostClustering();
-                    
+
+                    // Orleans reminders drive the self-scheduling grains (add-boardable-vehicles:
+                    // VehicleGrain self-drives its timed voyage via a reminder). In-memory is correct
+                    // for this single-silo localhost host — reminders survive grain deactivation but not
+                    // a full process restart, which the vehicle grain recovers from by re-arming from its
+                    // persisted ETA on activation.
+                    siloBuilder.UseInMemoryReminderService();
+
                     // Configure grain storage. Resolution centralized in ResolveStorageConfiguration
                     // so the snapshot-store DI binding (above) and the grain-storage providers stay in sync.
                     // Every [PersistentState(..., "<storeName>")] declared by a grain must have a
@@ -397,6 +412,45 @@ namespace Aetherium.Server
                 }
             }
             
+            // Session-resume (see GameHub.ResumeSession): the disconnect teardown that used
+            // to run inline in GameHub.OnDisconnectedAsync is deferred until a detached
+            // session's grace window lapses without a resume. It needs grain access, which
+            // the singleton GameSessionManager doesn't have — so wire it here where the
+            // cluster client lives. With Orleans disabled both steps are no-ops.
+            var resumeSessionManager = app.Services.GetRequiredService<GameSessionManager>();
+            var resumeClusterClient = clusterClient;
+            resumeSessionManager.SessionExpired = async session =>
+            {
+                if (resumeClusterClient == null)
+                    return;
+
+                try
+                {
+                    var managementGrain = resumeClusterClient.GetGrain<IGameManagementGrain>("GLOBAL");
+                    await managementGrain.UnregisterSessionAsync(session.SessionId);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Program] Failed to unregister expired session {session.SessionId}: {ex.Message}");
+                }
+
+                // Phase 2c: if the session was grain-bound, tell the map grain to drop the
+                // player Character and emit an EntityRemovedDelta so other joined sessions
+                // see them leave.
+                if (session.MapId != null)
+                {
+                    try
+                    {
+                        var mapGrain = resumeClusterClient.GetGrain<IGameMapGrain>(session.MapId);
+                        await mapGrain.LeavePlayerAsync(session.SessionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Program] Failed to remove expired session {session.SessionId} from map: {ex.Message}");
+                    }
+                }
+            };
+
             app.MapHub<GameHub>("/gamehub");
             app.MapHub<Hubs.AgentDashboardHub>("/agentDashboardHub"); // Map dashboard hub
             app.MapHub<Hubs.ManagementHub>("/managementHub"); // Map management hub for CLI

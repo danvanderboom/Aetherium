@@ -1,9 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Aetherctl.Orleans;
+using Aetherium.Model;
 
 namespace Aetherctl.Commands
 {
@@ -250,12 +255,85 @@ namespace Aetherctl.Commands
                 }
             });
 
+            // script: run an ordered action sequence from a JSON file against a session
+            var scriptCmd = new Command("script", "Run an ordered action script (JSON) against a session");
+            var scriptSessionArg = new Argument<string>("sessionId", "Session ID to drive");
+            var scriptFileOpt = new Option<string>("--file", "Path to JSON action list: [{\"tool\":\"move\",\"args\":{...}}]") { IsRequired = true };
+            var scriptStopOpt = new Option<bool>("--stop-on-error", "Halt at the first failing step");
+            scriptCmd.AddArgument(scriptSessionArg);
+            scriptCmd.AddOption(scriptFileOpt);
+            scriptCmd.AddOption(scriptStopOpt);
+            scriptCmd.SetHandler(async (InvocationContext ctx) =>
+            {
+                try
+                {
+                    var parseResult = ctx.ParseResult;
+                    var sessionId = parseResult.GetValueForArgument(scriptSessionArg);
+                    var file = parseResult.GetValueForOption(scriptFileOpt);
+                    var stopOnError = parseResult.GetValueForOption(scriptStopOpt);
+
+                    if (!File.Exists(file))
+                    {
+                        Common.WriteError(parseResult, $"Action file not found: {file}");
+                        return;
+                    }
+
+                    List<ScriptedActionDto> actions;
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(file));
+                        actions = ActionScript.ParseActions(doc.RootElement);
+                    }
+                    catch (JsonException ex)
+                    {
+                        Common.WriteError(parseResult, $"Invalid action file JSON: {ex.Message}");
+                        return;
+                    }
+
+                    if (actions.Count == 0)
+                    {
+                        Common.WriteError(parseResult, "Action file contains no actions.");
+                        return;
+                    }
+
+                    await using var factory = new OrleansClientFactory();
+                    await factory.ConnectAsync();
+                    var mgmt = factory.GetGameManagement();
+                    var results = await mgmt.ExecuteToolBatchAsync(sessionId, actions, stopOnError);
+
+                    var anyFailed = results.Count == 0 || results.Any(r => !r.Success);
+                    if (Common.IsJsonOutput(parseResult))
+                    {
+                        Common.WriteOutput(parseResult, new
+                        {
+                            success = !anyFailed,
+                            sessionId,
+                            steps = results.Select(r => new { index = r.Index, tool = r.Tool, success = r.Success, message = r.Message })
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Ran {results.Count} step(s) against {sessionId}:");
+                        foreach (var r in results)
+                            Console.WriteLine($"  [{r.Index}] {(r.Success ? "✓" : "✗")} {r.Tool}{(string.IsNullOrEmpty(r.Message) ? "" : $" — {r.Message}")}");
+                    }
+
+                    if (anyFailed)
+                        Common.ProcessExitCode = 1;
+                }
+                catch (Exception ex)
+                {
+                    Common.WriteError(ctx.ParseResult, $"Failed to run script: {ex.Message}");
+                }
+            });
+
             agentCmd.AddCommand(attachCmd);
             agentCmd.AddCommand(attachWorldCmd);
             agentCmd.AddCommand(stepCmd);
             agentCmd.AddCommand(runCmd);
             agentCmd.AddCommand(stopCmd);
             agentCmd.AddCommand(statusCmd);
+            agentCmd.AddCommand(scriptCmd);
             root.AddCommand(agentCmd);
         }
     }

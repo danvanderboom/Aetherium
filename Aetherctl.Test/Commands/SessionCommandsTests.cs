@@ -49,7 +49,7 @@ namespace Aetherctl.Test.Commands
             var sessionCmd = root.Subcommands.FirstOrDefault(c => c.Name == "session");
             var createCmd = sessionCmd?.Subcommands.FirstOrDefault(c => c.Name == "create");
             Assert.NotNull(createCmd);
-            Assert.Equal("Create a new session (pending server support)", createCmd.Description);
+            Assert.Equal("Create a headless session in a world", createCmd.Description);
         }
 
         [Fact]

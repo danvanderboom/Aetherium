@@ -14,6 +14,16 @@ namespace Aetherium.Server.MultiWorld
         [Id(2)] public int Y { get; set; }
         [Id(3)] public int Z { get; set; }
         [Id(4)] public double SpawnRate { get; set; }
+
+        /// <summary>
+        /// When true — or when <see cref="CreatureType"/> is a known flyer — the spawned entity is airborne
+        /// and receives a Flight component. Flying spawns are validated against altitude bands rather than
+        /// ground passability, so they may be placed in open air (e.g. a satellite in orbit).
+        /// </summary>
+        [Id(5)] public bool Flies { get; set; }
+        [Id(6)] public int MinBand { get; set; } = 1;
+        [Id(7)] public int MaxBand { get; set; } = 5;
+        [Id(8)] public bool CanLand { get; set; }
     }
 
     /// <summary>

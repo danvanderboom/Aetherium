@@ -55,11 +55,13 @@ rules:
         magnitude: 0.5
 ```
 
-- `when` names a single **trigger** tile. This slice ships one: `creature_died`, raised when a monster
-  is defeated by melee or an ability.
+- `when` names a single **trigger** tile: `creature_died` (a monster is defeated by melee or an
+  ability) or `character_recognized` (one character recognizes another within range, raised by the
+  canonical-world recognition sweep once per encounter — see add-identity-recognition).
 - `if` is a list of **condition** tiles, all of which must pass. An empty `if` always passes.
 - `do` is an ordered list of **action** tiles. Actions that target an entity take a `target` of
-  `Killer` or `Victim`.
+  `Killer` or `Victim` (on `creature_died`) or `Recognizer` or `Recognized` (on
+  `character_recognized`). A target that doesn't resolve for the current event skips that action.
 
 Rules are **data**: the same YAML keys are the camelCase of the underlying types, there is no separate
 schema to drift, and every trigger/condition/action id is validated at load against the vocabulary
@@ -106,6 +108,12 @@ _This section is generated from `EcaVocabulary`; edit the tile definitions, not 
 
 ### Triggers
 
+#### `character_recognized`
+
+Fires when one character recognizes another within range (once per encounter). Binds the recognizer, the recognized character, both kinds, the effective familiarity, whether this is a first meeting, and the recognizer's location.
+
+_No parameters._
+
 #### `creature_died`
 
 Fires when a creature is defeated (by melee or ability). Binds the victim's creature type, the killer, and the death location.
@@ -130,6 +138,30 @@ True when the event's creature is of the named type.
 |---|---|---|---|
 | `creatureType` | CreatureRef | yes | The content creature id to match against the event's victim. |
 
+#### `familiarity_at_least`
+
+True when the recognizer's effective familiarity with the recognized character is at least the given value (0..1).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `minFamiliarity` | Number | yes | Minimum effective familiarity in [0, 1]. |
+
+#### `first_meeting_is`
+
+True when the event's first-meeting flag equals the given value — distinguish a stranger (true) from a known individual (false).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `firstMeeting` | Boolean | yes | Whether the rule fires only on a first meeting (true) or only on a re-encounter (false). |
+
+#### `recognized_kind_is`
+
+True when the recognized character's kind equals the named kind (creature type, or "character" for a player).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `kind` | Text | yes | The kind to match against the recognized character. |
+
 ### Actions
 
 #### `apply_status`
@@ -142,7 +174,7 @@ Applies a shipped status effect to the target for a duration.
 | `durationTicks` | Integer | no | How many ticks the status lasts. |
 | `magnitude` | Number | no | Per-status magnitude: damage-per-tick for burning, speed multiplier for slowed; ignored for prone. |
 
-_Targets:_ `Killer`, `Victim`
+_Targets:_ `Killer`, `Victim`, `Recognizer`, `Recognized`
 
 #### `deal_damage`
 
@@ -153,7 +185,7 @@ Deals damage to the target through the map's damage pipeline (e.g. a death-surge
 | `amount` | Number | yes | Damage amount (must be > 0). |
 | `damageType` | Text | no | Damage type tag (campaign-defined; defaults to "physical"). |
 
-_Targets:_ `Killer`, `Victim`
+_Targets:_ `Killer`, `Victim`, `Recognizer`, `Recognized`
 
 #### `spawn_creature`
 

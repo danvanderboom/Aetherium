@@ -31,8 +31,77 @@ Quick examples:
 aetherctl session list --json
 # Close a session (server-supported)
 aetherctl session close <sessionId>
-# Create a session (pending server support; returns clear error)
-aetherctl session create
+
+# Headless driving (no game client required)
+# 1) create a world, then drop a client-less character into it
+aetherctl world create "Test" "Demo" --json          # -> worldId
+aetherctl session create --world <worldId> --json     # -> sessionId  (optionally --at x,y,z)
+# 2) drive it with the usual verbs (tools test / agent attach+run) against <sessionId>
+# 3) inspect what the character perceives (--absolute reveals true world coords)
+aetherctl perception get <sessionId> --absolute --json
+# 4) interrogate the whole world (god view), independent of any character's FOV
+aetherctl world dump <worldId>
+
+# Scripted / batch actions (deterministic, reproducible)
+# actions.json: [ {"tool":"move","args":{"direction":"forward"}}, {"tool":"rotate","args":{"degrees":90}} ]
+aetherctl agent script <sessionId> --file actions.json --json
+# Drive one OR MORE characters from a scenario file
+# scenario.json: { "characters": [ {"sessionId":"...","actions":[...]},
+#                                   {"world":"<worldId>","at":"10,10,0","actions":[...]} ] }
+aetherctl scenario run scenario.json --concurrent --json
+
+# Runtime world-building (edit a RUNNING world, no regeneration)
+aetherctl world spawn <worldId> --type snake --at 12,8,0
+aetherctl world edit <worldId> setterrain --args '{"x":12,"y":9,"terrainType":"Forest"}'
+aetherctl world edit <worldId> destroyentity --args '{"entityId":"<id>"}'
+
+# Character memory — what has this character actually seen?
+# Recorded automatically at perception time (terrain + entities in view);
+# per-world config via generator params: MemoryEnabled, MemoryMaxLocations,
+# MemoryDecayHalfLifeSeconds. Operator-gated (absolute coordinates).
+aetherctl memory get <sessionId>
+aetherctl memory get <sessionId> --json
+
+# Memory dynamics (opt-in, default OFF): memory that follows a real forgetting curve.
+# Enable per world via generator params:
+#   MemoryDynamicsEnabled=true            master switch
+#   MemoryStabilityGrowthFactor=2.0       stability ×= this on each SPACED revisit
+#   MemoryMinReinforcementIntervalSeconds=60   below this, a revisit is "massed" (no growth)
+#   MemoryPermanenceThresholdSeconds=2592000   stability past this ⇒ permanent (never fades)
+#   MemoryForgetThreshold=0.05            effective strength below this is culled at write time
+# Each memory grows its own decay half-life ("stability") as it is revisited with spacing;
+# frequently seen places entrench and eventually stick forever, unvisited ones fade and are
+# forgotten. Per-character overrides live on a MemoryProfile component (HalfLifeMultiplier,
+# StabilityGrowthMultiplier, MaxLocationsOverride) — forgetful vs eidetic as data. The
+# `memory get` table annotates each entry with " stab=<h>h" or " [permanent]".
+
+# Individual recognition (opt-in, default OFF): characters recognize other individuals.
+# Enable per world via generator params:
+#   RecognitionEnabled=true               master switch (sweep runs in the map-grain tick)
+#   RecognitionRangeTiles=6               topology range, same z-level
+#   RecognitionOwnKindAcuity=0.9          acuity toward own kind (good)
+#   RecognitionOtherKindAcuity=0.4        acuity toward other kinds (poor)
+#   RecognitionThreshold=0.25             recognized ⇔ acuity × effective familiarity ≥ this
+#   RecognitionEncounterTimeoutSeconds=300  apart longer than this ⇒ a new encounter
+#   RecognitionFamiliarityHalfLifeSeconds=86400  base familiarity half-life (reuses the memory curve)
+#   RecognitionMeetStrength=0.5           familiarity from a first meeting
+#   RecognitionMaxIndividuals=1000        per-character cap (weakest pruned first)
+# Familiarity builds on repeated spaced meetings and fades between them (same curve as memory
+# dynamics); recognition proximity raises the `character_recognized` ECA trigger (once per
+# encounter) with recognized_kind_is / familiarity_at_least / first_meeting_is conditions and
+# Recognizer/Recognized action targets. Per-character overrides live on a RecognitionProfile
+# component. Configure a character's memory/recognition profile live:
+aetherctl world edit <worldId> configurecharacter --args '{"entityId":"<id>","ownKindAcuity":0.95,"halfLifeMultiplier":0.2}'
+# Inspect who a character (PC or NPC) recognizes (operator-gated; entity id via `world dump`):
+aetherctl recognition get <worldId> <entityId>
+aetherctl recognition get <worldId> <entityId> --json
+
+# Agent telemetry (per-step snapshots, analysis, failed-run replays)
+aetherctl telemetry snapshots <agentId> --limit 20
+aetherctl telemetry analysis <agentId> --json
+aetherctl telemetry replays <agentId>
+aetherctl telemetry replay <agentId> <replayId> > replay.json
+aetherctl telemetry clear <agentId>
 
 # Tools
 aetherctl tools list
@@ -195,9 +264,21 @@ aetherctl session list --json
 # Terminate a session (server-supported)
 aetherctl session close <sessionId>
 
-# Create a session (pending server support)
-aetherctl session create
+# Create a headless session in an existing world (no interactive client required)
+aetherctl session create --world <worldId>
+aetherctl session create --world <worldId> --at 10,10,0 --json
+
+# Inspect a session's perception (operator/debug)
+aetherctl perception get <sessionId>
+aetherctl perception get <sessionId> --absolute --json   # true world coordinates
+
+# Omniscient world snapshot (all tiles/entities, not one character's FOV)
+aetherctl world dump <worldId> --json
 ```
+
+> Operator/"god-view" commands (`session create`, `perception get --absolute`, `world dump`)
+> run on the trusted local management path and are enabled by default. Set
+> `AETHERIUM_OPERATOR_DISABLED=1` on the server to lock them down.
 
 ### Tool Management Commands
 

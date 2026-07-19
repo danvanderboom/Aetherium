@@ -12,6 +12,11 @@ namespace Aetherium.WorldGen.Passes
 
         public bool SupportsTemplate(WorldGenerationTemplate template) => template == WorldGenerationTemplate.Outdoor;
 
+        // Places buildings/doors/keys with rectangular footprints and square offsets; a sphere-native
+        // settlement pass (footprints over topology.Range) is the phased follow-up.
+        public bool SupportsTopology(string? topology)
+            => !string.Equals(topology, "h3", System.StringComparison.OrdinalIgnoreCase);
+
         public void Execute(WorldGenerationContext context)
         {
             if (context.World == null)

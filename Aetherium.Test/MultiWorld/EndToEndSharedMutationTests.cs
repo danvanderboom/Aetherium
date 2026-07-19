@@ -297,6 +297,14 @@ namespace Aetherium.Test.MultiWorld
 
             // Observe isolation, direction 1: B acts in world 1 — only B's connection
             // may receive the perception update.
+            //
+            // First drain the debounced perception fan-out. The pre-travel
+            // LeavePlayerAsync above fanned out an EntityRemovedDelta on map 1 while A was
+            // still bound to it, marking conn-A dirty; that flush lands ~100ms later. If it
+            // straddles the Reset() below, its conn-A dispatch bleeds into the capture and
+            // the isolation assertion sees conn-A even though the move that follows never
+            // targets it. Quiesce so the capture starts genuinely clean.
+            await _sessionManager.WaitForPerceptionQuiescenceAsync(TimeSpan.FromSeconds(2));
             _hubContext.Reset();
             var moveB = await map1.MoveAsync(playerB, Aetherium.Model.RelativeDirection.Forward, 1);
             bool provedIsolation = false;
@@ -312,7 +320,11 @@ namespace Aetherium.Test.MultiWorld
                 provedIsolation = true;
             }
 
-            // Direction 2: A acts in world 2 — only A's connection may receive it.
+            // Direction 2: A acts in world 2 — only A's connection may receive it. Same
+            // guard as direction 1: direction 1's move left conn-B dirty, and
+            // WaitForDispatchesAsync returns on the first dispatch without waiting for the
+            // flush window to settle, so drain before resetting the capture again.
+            await _sessionManager.WaitForPerceptionQuiescenceAsync(TimeSpan.FromSeconds(2));
             _hubContext.Reset();
             var moveA = await map2.MoveAsync(playerA, Aetherium.Model.RelativeDirection.Forward, 1);
             if (moveA.Success)

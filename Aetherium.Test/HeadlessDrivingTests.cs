@@ -1,0 +1,1001 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
+using NUnit.Framework;
+using Microsoft.Extensions.DependencyInjection;
+using Orleans.TestingHost;
+using Orleans.Hosting;
+using Orleans.Configuration;
+using Orleans;
+using Aetherium.Model;
+using Aetherium.Server.Management;
+using Aetherium.Server.MultiWorld;
+
+namespace Aetherium.Test
+{
+    /// <summary>
+    /// Tests for the "aetherctl headless driving" change. Each test maps to an OpenSpec
+    /// requirement under changes/add-aetherctl-headless-driving/specs/game-management-grain.
+    /// </summary>
+    [TestFixture]
+    public class HeadlessDrivingTests
+    {
+        private TestCluster _cluster = null!;
+
+        private sealed class SiloConfigurator : ISiloConfigurator
+        {
+            public void Configure(ISiloBuilder siloBuilder)
+            {
+                siloBuilder.AddMemoryGrainStorage("worldStore");
+                siloBuilder.AddMemoryGrainStorage("mapStore");
+                siloBuilder.AddMemoryGrainStorage("management");
+
+                siloBuilder.Configure<SiloMessagingOptions>(opts =>
+                {
+                    opts.ResponseTimeout = TimeSpan.FromMinutes(3);
+                });
+
+                siloBuilder.ConfigureServices(services =>
+                {
+                    services.Configure<Aetherium.Server.Simulation.SimulationOptions>(opts =>
+                    {
+                        opts.RegionSize = 128;
+                        opts.EnableWeather = false;
+                        opts.EnableSeasons = false;
+                        opts.EnableAgentChanges = false;
+                        opts.EnableProceduralEvents = false;
+                    });
+
+                    services.AddSingleton<Aetherium.Server.Persistence.IWorldSnapshotStore, Aetherium.Test.TestStubs.InMemoryWorldSnapshotStore>();
+
+                    services.AddSingleton<Aetherium.WorldGen.MapGeneratorRegistry>(sp =>
+                    {
+                        var registry = new Aetherium.WorldGen.MapGeneratorRegistry();
+                        registry.DiscoverTypes(typeof(Aetherium.WorldGen.IMapGenerator).Assembly);
+                        return registry;
+                    });
+
+                    services.AddSingleton<Aetherium.Server.GameSessionManager>();
+
+                    // Tool registry (reflection-discovered) so ExecuteToolAsync / batch can run tools.
+                    services.AddSingleton<Aetherium.Server.Agents.Tools.AgentToolRegistry>(sp =>
+                    {
+                        var registry = new Aetherium.Server.Agents.Tools.AgentToolRegistry(sp);
+                        registry.DiscoverTools(typeof(Aetherium.Server.Agents.Tools.AgentToolRegistry).Assembly);
+                        return registry;
+                    });
+
+                    // The in-process bridge under test: GameMapGrain publishes worlds here,
+                    // GameManagementGrain reads/drives them for headless sessions + snapshots.
+                    services.AddSingleton<Aetherium.Server.Services.WorldRegistry>();
+
+                    services.AddSingleton<Microsoft.AspNetCore.SignalR.IHubContext<Aetherium.Server.GameHub>>(sp => new NullHubContext());
+                });
+            }
+
+            private sealed class NullHubContext : Microsoft.AspNetCore.SignalR.IHubContext<Aetherium.Server.GameHub>
+            {
+                public Microsoft.AspNetCore.SignalR.IHubClients Clients { get; } = new NullHubClients();
+                public Microsoft.AspNetCore.SignalR.IGroupManager Groups { get; } = new NullGroupManager();
+
+                private sealed class NullHubClients : Microsoft.AspNetCore.SignalR.IHubClients
+                {
+                    public Microsoft.AspNetCore.SignalR.IClientProxy All => new NullClientProxy();
+                    public Microsoft.AspNetCore.SignalR.IClientProxy AllExcept(System.Collections.Generic.IReadOnlyList<string> excludedConnectionIds) => new NullClientProxy();
+                    public Microsoft.AspNetCore.SignalR.IClientProxy Client(string connectionId) => new NullClientProxy();
+                    public Microsoft.AspNetCore.SignalR.IClientProxy Clients(System.Collections.Generic.IReadOnlyList<string> connectionIds) => new NullClientProxy();
+                    public Microsoft.AspNetCore.SignalR.IClientProxy Group(string groupName) => new NullClientProxy();
+                    public Microsoft.AspNetCore.SignalR.IClientProxy GroupExcept(string groupName, System.Collections.Generic.IReadOnlyList<string> excludedConnectionIds) => new NullClientProxy();
+                    public Microsoft.AspNetCore.SignalR.IClientProxy Groups(System.Collections.Generic.IReadOnlyList<string> groupNames) => new NullClientProxy();
+                    public Microsoft.AspNetCore.SignalR.IClientProxy User(string userId) => new NullClientProxy();
+                    public Microsoft.AspNetCore.SignalR.IClientProxy Users(System.Collections.Generic.IReadOnlyList<string> userIds) => new NullClientProxy();
+                }
+
+                private sealed class NullGroupManager : Microsoft.AspNetCore.SignalR.IGroupManager
+                {
+                    public System.Threading.Tasks.Task AddToGroupAsync(string connectionId, string groupName, System.Threading.CancellationToken cancellationToken = default) => System.Threading.Tasks.Task.CompletedTask;
+                    public System.Threading.Tasks.Task RemoveFromGroupAsync(string connectionId, string groupName, System.Threading.CancellationToken cancellationToken = default) => System.Threading.Tasks.Task.CompletedTask;
+                }
+
+                private sealed class NullClientProxy : Microsoft.AspNetCore.SignalR.IClientProxy
+                {
+                    public System.Threading.Tasks.Task SendCoreAsync(string method, object?[] args, System.Threading.CancellationToken cancellationToken = default) => System.Threading.Tasks.Task.CompletedTask;
+                }
+            }
+        }
+
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
+        {
+            var builder = new TestClusterBuilder(1);
+            builder.AddSiloBuilderConfigurator<SiloConfigurator>();
+            _cluster = builder.Build();
+            _cluster.Deploy();
+        }
+
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            _cluster.StopAllSilos();
+        }
+
+        private IGameManagementGrain Mgmt() => _cluster.GrainFactory.GetGrain<IGameManagementGrain>("GLOBAL");
+
+        private async Task<string> CreateWorldAsync(string name = "Headless Test World")
+        {
+            var request = new CreateWorldRequest
+            {
+                Name = name,
+                Description = "world for headless-driving tests",
+                GeneratorType = "maze",
+                MaxPlayers = 10,
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 }
+            };
+            return await Mgmt().CreateWorldAsync(request);
+        }
+
+        // Spec: game-management-grain / Headless Session Provisioning
+        //       Scenario "Create headless session in an existing world"
+        [Test]
+        public async Task CreateHeadlessSession_InExistingWorld_PlacesCharacterAndRegistersSession()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+
+            var result = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+
+            Assert.That(result.Success, Is.True, result.Message);
+            Assert.That(result.SessionId, Is.Not.Null.And.Not.Empty);
+
+            var sessions = await mgmt.ListSessionsAsync();
+            Assert.That(sessions.Any(s => s.SessionId == result.SessionId), Is.True);
+
+            // A character was placed, so perception is computable.
+            var perception = await mgmt.GetPerceptionAsync(result.SessionId!);
+            Assert.That(perception, Is.Not.Null.And.Not.Empty);
+        }
+
+        // Spec: game-management-grain / Headless Session Provisioning
+        //       Scenario "Create headless session at an explicit start location"
+        [Test]
+        public async Task CreateHeadlessSession_AtExplicitLocation_PlacesCharacterThere()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+
+            // Discover a valid, passable location by placing a character normally and reading its
+            // absolute position, then provision a second session pinned to that location.
+            var seed = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(seed.Success, Is.True, seed.Message);
+            using var seedDoc = JsonDocument.Parse((await mgmt.GetPerceptionAsync(seed.SessionId!, true))!);
+            var seedLoc = seedDoc.RootElement.GetProperty("PlayerLocation");
+            int lx = seedLoc.GetProperty("X").GetInt32();
+            int ly = seedLoc.GetProperty("Y").GetInt32();
+            int lz = seedLoc.GetProperty("Z").GetInt32();
+
+            var pinned = await mgmt.CreateHeadlessSessionAsync(worldId, lx, ly, lz, null);
+            Assert.That(pinned.Success, Is.True, pinned.Message);
+
+            using var pinnedDoc = JsonDocument.Parse((await mgmt.GetPerceptionAsync(pinned.SessionId!, true))!);
+            var pinnedLoc = pinnedDoc.RootElement.GetProperty("PlayerLocation");
+            Assert.That(pinnedLoc.GetProperty("X").GetInt32(), Is.EqualTo(lx));
+            Assert.That(pinnedLoc.GetProperty("Y").GetInt32(), Is.EqualTo(ly));
+            Assert.That(pinnedLoc.GetProperty("Z").GetInt32(), Is.EqualTo(lz));
+        }
+
+        // Spec: game-management-grain / Headless Session Provisioning
+        //       Scenario "Create headless session in a non-existent world"
+        [Test]
+        public async Task CreateHeadlessSession_UnknownWorld_Fails()
+        {
+            var result = await Mgmt().CreateHeadlessSessionAsync($"nonexistent-{Guid.NewGuid()}", null, null, null, null);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Message.ToLowerInvariant(), Does.Contain("not found").Or.Contain("not initialized"));
+        }
+
+        // Spec: game-management-grain / Headless Session Provisioning
+        //       Scenario "Drive a headless session with existing verbs"
+        [Test]
+        public async Task HeadlessSession_CanBeDriven_WithExistingVerbs()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            var op = await mgmt.SetDirectionalVisionAsync(session.SessionId!, true);
+            Assert.That(op.Success, Is.True, op.Message);
+
+            var json = await mgmt.GetPerceptionAsync(session.SessionId!);
+            Assert.That(json, Is.Not.Null);
+            using var doc = JsonDocument.Parse(json!);
+            Assert.That(doc.RootElement.GetProperty("IsDirectionalVision").GetBoolean(), Is.True);
+        }
+
+        // Spec: game-management-grain / Headless Session Provisioning
+        //       Scenario "Drive a headless session with existing verbs" (agent runner attaches with no client)
+        [Test]
+        public async Task AgentRunner_CanAttachToHeadlessSession()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            var runner = _cluster.GrainFactory.GetGrain<Aetherium.Server.Agents.IAgentRunnerGrain>($"runner-{Guid.NewGuid()}");
+            var attached = await runner.AttachAsync(session.SessionId!, "agent-headless");
+            Assert.That(attached, Is.True, "agent runner should attach to a headless session with no client connected");
+
+            var status = await runner.GetStatusAsync();
+            Assert.That(status.SessionId, Is.EqualTo(session.SessionId));
+        }
+
+        // Spec: game-management-grain / Operator Perception Retrieval
+        //       Scenarios "Retrieve perception with absolute coordinates" + default relativized
+        [Test]
+        public async Task Perception_AbsoluteReturnsTrueCoordinates_DefaultRelativized()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // Default (relative) perception is always (0,0,0).
+            var relativeJson = await mgmt.GetPerceptionAsync(session.SessionId!);
+            using var relDoc = JsonDocument.Parse(relativeJson!);
+            var relLoc = relDoc.RootElement.GetProperty("PlayerLocation");
+            Assert.That(relLoc.GetProperty("X").GetInt32(), Is.EqualTo(0));
+            Assert.That(relLoc.GetProperty("Y").GetInt32(), Is.EqualTo(0));
+            Assert.That(relLoc.GetProperty("Z").GetInt32(), Is.EqualTo(0));
+
+            // Absolute perception carries the character's true location, matching the snapshot.
+            var absoluteJson = await mgmt.GetPerceptionAsync(session.SessionId!, true);
+            using var absDoc = JsonDocument.Parse(absoluteJson!);
+            var absLoc = absDoc.RootElement.GetProperty("PlayerLocation");
+            int ax = absLoc.GetProperty("X").GetInt32();
+            int ay = absLoc.GetProperty("Y").GetInt32();
+            int az = absLoc.GetProperty("Z").GetInt32();
+
+            var snapshotJson = await mgmt.GetWorldSnapshotAsync(worldId);
+            using var snapDoc = JsonDocument.Parse(snapshotJson!);
+            var characters = snapDoc.RootElement.GetProperty("Entities").EnumerateArray()
+                .Where(e => e.GetProperty("Type").GetString() == "Character")
+                .ToList();
+            Assert.That(characters.Count, Is.GreaterThanOrEqualTo(1), "snapshot should contain the placed character");
+            bool matches = characters.Any(c =>
+            {
+                var l = c.GetProperty("Location");
+                return l.GetProperty("X").GetInt32() == ax
+                    && l.GetProperty("Y").GetInt32() == ay
+                    && l.GetProperty("Z").GetInt32() == az;
+            });
+            Assert.That(matches, Is.True, $"absolute perception ({ax},{ay},{az}) should match a character in the snapshot");
+        }
+
+        // Spec: game-management-grain / World State Snapshot
+        //       Scenario "Retrieve a world snapshot"
+        [Test]
+        public async Task WorldSnapshot_ReturnsEntitiesAndTiles()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            // Place a character so the snapshot contains at least one Character entity.
+            await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+
+            var json = await mgmt.GetWorldSnapshotAsync(worldId);
+            Assert.That(json, Is.Not.Null.And.Not.Empty);
+
+            using var doc = JsonDocument.Parse(json!);
+            var root = doc.RootElement;
+            Assert.That(root.GetProperty("EntityCount").GetInt32(), Is.GreaterThan(0));
+            Assert.That(root.GetProperty("Tiles").GetArrayLength(), Is.GreaterThan(0));
+            var hasCharacter = root.GetProperty("Entities").EnumerateArray()
+                .Any(e => e.GetProperty("Type").GetString() == "Character");
+            Assert.That(hasCharacter, Is.True);
+        }
+
+        // Spec: game-management-grain / World State Snapshot
+        //       Scenario "Snapshot for a non-existent world"
+        [Test]
+        public async Task WorldSnapshot_UnknownWorld_ReturnsNull()
+        {
+            var json = await Mgmt().GetWorldSnapshotAsync($"nonexistent-{Guid.NewGuid()}");
+            Assert.That(json, Is.Null);
+        }
+
+        // Spec: game-management-grain / Operator Authorization for God-View Operations
+        //       Scenarios "Player profile denied god-view operations" + "Operator caller permitted"
+        [Test]
+        public async Task OperatorGate_Disabled_DeniesGodViewOperations_ButNotRelativePerception()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            // Provision a session while operator access is enabled so we have a sessionId to probe.
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            try
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, "1");
+
+                // Denied: headless creation, absolute perception, world snapshot.
+                var denied = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+                Assert.That(denied.Success, Is.False);
+                Assert.That(denied.Message.ToLowerInvariant(), Does.Contain("operator access is disabled"));
+
+                Assert.That(await mgmt.GetWorldSnapshotAsync(worldId), Is.Null);
+                Assert.That(await mgmt.GetPerceptionAsync(session.SessionId!, true), Is.Null);
+
+                // Permitted regardless of the gate: ordinary relative perception.
+                Assert.That(await mgmt.GetPerceptionAsync(session.SessionId!), Is.Not.Null);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, null);
+            }
+
+            // Operator caller permitted once the gate is re-enabled.
+            var reenabled = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(reenabled.Success, Is.True, reenabled.Message);
+        }
+
+        // Spec: game-management-grain / Headless Session Provisioning
+        //       Scenario "Terminate and reap headless sessions" (reaper targets only headless sessions)
+        [Test]
+        public async Task ReapIdleHeadlessSessions_RemovesIdleHeadlessSession()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // Not idle yet: a large threshold reaps nothing and the session survives.
+            var reapedNone = await mgmt.ReapIdleHeadlessSessionsAsync(100000);
+            Assert.That(reapedNone, Is.EqualTo(0));
+            var stillThere = await mgmt.ListSessionsAsync();
+            Assert.That(stillThere.Any(s => s.SessionId == session.SessionId), Is.True);
+
+            // Zero idle threshold reaps the headless session.
+            var reaped = await mgmt.ReapIdleHeadlessSessionsAsync(0);
+            Assert.That(reaped, Is.GreaterThanOrEqualTo(1));
+            var afterReap = await mgmt.ListSessionsAsync();
+            Assert.That(afterReap.Any(s => s.SessionId == session.SessionId), Is.False);
+        }
+
+        // ---- Scripted / batch action execution (change: add-aetherctl-scripted-actions) ----
+
+        private static ScriptedActionDto Move(string dir = "forward") =>
+            new ScriptedActionDto { Tool = "move", Args = new Dictionary<string, object> { ["direction"] = dir } };
+
+        // Movement is now terrain-validated (walls/bounds/doors), so "move forward" is not a
+        // reliable always-succeeds step from a random start location. Batch-sequencing tests only
+        // need SOME action that reliably succeeds regardless of terrain; toggling vision does not
+        // depend on location (see Batch_ChangesObservableState).
+        private static ScriptedActionDto Toggle(bool enabled = true) =>
+            new ScriptedActionDto { Tool = "toggledirectionalvision", Args = new Dictionary<string, object> { ["enabled"] = enabled } };
+
+        private async Task<string> HeadlessSessionInNewWorldAsync()
+        {
+            var worldId = await CreateWorldAsync();
+            var session = await Mgmt().CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+            return session.SessionId!;
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Execute an ordered batch"
+        [Test]
+        public async Task Batch_RunsInOrder_OneResultPerStep()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+            var actions = new List<ScriptedActionDto> { Toggle(true), Toggle(false), Toggle(true) };
+
+            var results = await Mgmt().ExecuteToolBatchAsync(sessionId, actions, false);
+
+            Assert.That(results.Count, Is.EqualTo(3));
+            Assert.That(results.Select(r => r.Index), Is.EqualTo(new[] { 0, 1, 2 }));
+            Assert.That(results.All(r => r.Tool == "toggledirectionalvision"), Is.True);
+            Assert.That(results.All(r => r.Success), Is.True);
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Stop on first error"
+        [Test]
+        public async Task Batch_StopOnError_HaltsAtFirstFailure()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+            var actions = new List<ScriptedActionDto>
+            {
+                Toggle(),
+                new ScriptedActionDto { Tool = "no-such-tool", Args = new Dictionary<string, object>() },
+                Toggle()
+            };
+
+            var results = await Mgmt().ExecuteToolBatchAsync(sessionId, actions, stopOnError: true);
+
+            Assert.That(results.Count, Is.EqualTo(2), "should stop after the failing step");
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[1].Success, Is.False);
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Continue past errors"
+        [Test]
+        public async Task Batch_ContinuePastErrors_ReportsEachStep()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+            var actions = new List<ScriptedActionDto>
+            {
+                Toggle(),
+                new ScriptedActionDto { Tool = "no-such-tool", Args = new Dictionary<string, object>() },
+                Toggle()
+            };
+
+            var results = await Mgmt().ExecuteToolBatchAsync(sessionId, actions, stopOnError: false);
+
+            Assert.That(results.Count, Is.EqualTo(3));
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[1].Success, Is.False);
+            Assert.That(results[2].Success, Is.True);
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Unknown session"
+        [Test]
+        public async Task Batch_UnknownSession_SingleFailure()
+        {
+            var results = await Mgmt().ExecuteToolBatchAsync($"nope-{Guid.NewGuid()}", new List<ScriptedActionDto> { Move() }, false);
+
+            Assert.That(results.Count, Is.EqualTo(1));
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].Message.ToLowerInvariant(), Does.Contain("not found"));
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — Scenario "Empty and oversized batches"
+        [Test]
+        public async Task Batch_EmptyAndOversized()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+
+            var empty = await Mgmt().ExecuteToolBatchAsync(sessionId, new List<ScriptedActionDto>(), false);
+            Assert.That(empty, Is.Empty);
+
+            var oversized = Enumerable.Range(0, 1001).Select(_ => Move()).ToList();
+            var overResult = await Mgmt().ExecuteToolBatchAsync(sessionId, oversized, false);
+            Assert.That(overResult.Count, Is.EqualTo(1));
+            Assert.That(overResult[0].Success, Is.False);
+            Assert.That(overResult[0].Message.ToLowerInvariant(), Does.Contain("too large"));
+        }
+
+        // Spec: game-management-grain / Batch Action Execution — ordered batch changes observable state
+        [Test]
+        public async Task Batch_ChangesObservableState()
+        {
+            var sessionId = await HeadlessSessionInNewWorldAsync();
+            var actions = new List<ScriptedActionDto>
+            {
+                new ScriptedActionDto { Tool = "toggledirectionalvision", Args = new Dictionary<string, object> { ["enabled"] = true } }
+            };
+
+            var results = await Mgmt().ExecuteToolBatchAsync(sessionId, actions, false);
+            Assert.That(results.Single().Success, Is.True, results.Single().Message);
+
+            using var doc = JsonDocument.Parse((await Mgmt().GetPerceptionAsync(sessionId))!);
+            Assert.That(doc.RootElement.GetProperty("IsDirectionalVision").GetBoolean(), Is.True);
+        }
+
+        // Spec: aetherctl / Multi-Character Scenario Command — core capability the CLI orchestrates:
+        //       two characters in one world, each driven by its own batch, both reporting results.
+        [Test]
+        public async Task MultipleCharacters_InOneWorld_EachDrivenAndReport()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var a = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            var b = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(a.Success && b.Success, Is.True);
+            Assert.That(a.SessionId, Is.Not.EqualTo(b.SessionId));
+
+            var ra = await mgmt.ExecuteToolBatchAsync(a.SessionId!, new List<ScriptedActionDto> { Toggle(true), Toggle(false) }, false);
+            var rb = await mgmt.ExecuteToolBatchAsync(b.SessionId!, new List<ScriptedActionDto> { Toggle(true) }, false);
+
+            Assert.That(ra.Count, Is.EqualTo(2));
+            Assert.That(rb.Count, Is.EqualTo(1));
+            Assert.That(ra.All(r => r.Success) && rb.All(r => r.Success), Is.True);
+        }
+
+        // ---- Runtime world-building (change: add-aetherctl-runtime-worldbuilding) ----
+
+        private static readonly string[] PassableTerrains = { "Indoors", "Upstairs", "Downstairs", "Road", "Plains", "Forest", "Cave" };
+
+        /// <summary>Finds a passable tile with no character on it, using the world snapshot.</summary>
+        private async Task<(int x, int y, int z)> FindFreePassableTileAsync(string worldId)
+        {
+            var json = await Mgmt().GetWorldSnapshotAsync(worldId);
+            Assert.That(json, Is.Not.Null);
+            using var doc = JsonDocument.Parse(json!);
+            var root = doc.RootElement;
+
+            var occupied = root.GetProperty("Entities").EnumerateArray()
+                .Where(e => e.GetProperty("Type").GetString() == "Character")
+                .Select(e =>
+                {
+                    var l = e.GetProperty("Location");
+                    return (l.GetProperty("X").GetInt32(), l.GetProperty("Y").GetInt32(), l.GetProperty("Z").GetInt32());
+                })
+                .ToHashSet();
+
+            foreach (var t in root.GetProperty("Tiles").EnumerateArray())
+            {
+                if (!PassableTerrains.Contains(t.GetProperty("Terrain").GetString()))
+                    continue;
+                var l = t.GetProperty("Location");
+                var loc = (l.GetProperty("X").GetInt32(), l.GetProperty("Y").GetInt32(), l.GetProperty("Z").GetInt32());
+                if (!occupied.Contains(loc))
+                    return loc;
+            }
+
+            Assert.Fail("no free passable tile found");
+            return default;
+        }
+
+        // Spec: game-management-grain / Runtime World Tool Execution
+        //       Scenario "Spawn a creature into a running world"
+        [Test]
+        public async Task WorldTool_SpawnEntity_AddsCreatureVisibleInSnapshot()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var (x, y, z) = await FindFreePassableTileAsync(worldId);
+
+            var result = await mgmt.ExecuteWorldToolAsync(worldId, "spawnentity", new Dictionary<string, object>
+            {
+                ["x"] = x, ["y"] = y, ["z"] = z, ["entityType"] = "monster"
+            });
+
+            Assert.That(result.Success, Is.True, result.Message);
+            Assert.That(result.Data, Is.Not.Null);
+            var entityId = result.Data!["entityId"].ToString();
+
+            using var doc = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var found = doc.RootElement.GetProperty("Entities").EnumerateArray()
+                .Any(e => e.GetProperty("EntityId").GetString() == entityId);
+            Assert.That(found, Is.True, "spawned entity should appear in the world snapshot");
+        }
+
+        // Spec: game-management-grain / Runtime World Tool Execution
+        //       Scenario "Execute a world-building tool at runtime" (setterrain + destroyentity)
+        [Test]
+        public async Task WorldTool_SetTerrainAndDestroyEntity_Work()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var (x, y, z) = await FindFreePassableTileAsync(worldId);
+
+            // setterrain: reuse a PASSABLE terrain name that exists in this world, so the tile
+            // stays passable for the spawn below (a wall terrain would make it unspawnable).
+            using (var doc = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!))
+            {
+                var terrainName = doc.RootElement.GetProperty("Tiles").EnumerateArray()
+                    .Select(t => t.GetProperty("Terrain").GetString()!)
+                    .First(n => PassableTerrains.Contains(n));
+                var setResult = await mgmt.ExecuteWorldToolAsync(worldId, "setterrain", new Dictionary<string, object>
+                {
+                    ["x"] = x, ["y"] = y, ["z"] = z, ["terrainType"] = terrainName
+                });
+                Assert.That(setResult.Success, Is.True, setResult.Message);
+            }
+
+            // destroyentity: spawn then destroy, and verify it is gone from the snapshot.
+            var spawn = await mgmt.ExecuteWorldToolAsync(worldId, "spawnentity", new Dictionary<string, object>
+            {
+                ["x"] = x, ["y"] = y, ["z"] = z, ["entityType"] = "snake"
+            });
+            Assert.That(spawn.Success, Is.True, spawn.Message);
+            var entityId = spawn.Data!["entityId"].ToString()!;
+
+            var destroy = await mgmt.ExecuteWorldToolAsync(worldId, "destroyentity", new Dictionary<string, object>
+            {
+                ["entityId"] = entityId
+            });
+            Assert.That(destroy.Success, Is.True, destroy.Message);
+
+            using var after = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var stillThere = after.RootElement.GetProperty("Entities").EnumerateArray()
+                .Any(e => e.GetProperty("EntityId").GetString() == entityId);
+            Assert.That(stillThere, Is.False, "destroyed entity should be gone from the snapshot");
+        }
+
+        // Spec: game-management-grain / Runtime World Tool Execution
+        //       Scenarios "Unknown world or tool" + "Reject non-world-building tools"
+        [Test]
+        public async Task WorldTool_UnknownWorldToolOrNonWorldEditTool_Fail()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+
+            var unknownWorld = await mgmt.ExecuteWorldToolAsync($"nope-{Guid.NewGuid()}", "setterrain", new Dictionary<string, object>());
+            Assert.That(unknownWorld.Success, Is.False);
+            Assert.That(unknownWorld.Message.ToLowerInvariant(), Does.Contain("not found").Or.Contain("not initialized"));
+
+            var unknownTool = await mgmt.ExecuteWorldToolAsync(worldId, "no-such-tool", new Dictionary<string, object>());
+            Assert.That(unknownTool.Success, Is.False);
+            Assert.That(unknownTool.Message.ToLowerInvariant(), Does.Contain("tool not found"));
+
+            var characterTool = await mgmt.ExecuteWorldToolAsync(worldId, "move", new Dictionary<string, object>());
+            Assert.That(characterTool.Success, Is.False);
+            Assert.That(characterTool.Message.ToLowerInvariant(), Does.Contain("world_edit"));
+        }
+
+        // Spec: aetherctl / Telemetry Inspection Commands (change: add-aetherctl-telemetry) —
+        //       server anchor for the retrieval path the CLI uses: record snapshot + replay, read back.
+        [Test]
+        public async Task Telemetry_RecordAndReadBack_SnapshotsAnalysisReplay()
+        {
+            var agentId = $"agent-telemetry-{Guid.NewGuid()}";
+            var telemetry = _cluster.GrainFactory.GetGrain<Aetherium.Model.Telemetry.IAgentTelemetryGrain>(agentId);
+
+            await telemetry.RecordSnapshotAsync(new Aetherium.Model.Telemetry.PerformanceSnapshot
+            {
+                Timestamp = DateTime.UtcNow,
+                StepNumber = 1,
+                AgentId = agentId,
+                SessionId = "session-x",
+                ActionType = "move",
+                ActionSummary = "move F",
+                ActionSucceeded = true,
+                DecisionLatencyMs = 5,
+                PerceptionComplexity = 10
+            });
+
+            var snapshots = await telemetry.GetSnapshotsAsync(10);
+            Assert.That(snapshots.Count, Is.EqualTo(1));
+            Assert.That(snapshots[0].ActionType, Is.EqualTo("move"));
+
+            var analysis = await telemetry.GetAnalysisAsync();
+            Assert.That(analysis.TotalSteps, Is.EqualTo(1));
+            Assert.That(analysis.TotalSuccessfulActions, Is.EqualTo(1));
+
+            var replayId = await telemetry.RecordFailedRunAsync("{\"steps\":[]}");
+            var ids = await telemetry.GetFailedRunIdsAsync(10);
+            Assert.That(ids, Does.Contain(replayId));
+            var replay = await telemetry.GetReplayAsync(replayId);
+            Assert.That(replay, Is.EqualTo("{\"steps\":[]}"));
+
+            await telemetry.ClearTelemetryAsync();
+            Assert.That((await telemetry.GetSnapshotsAsync(10)).Count, Is.EqualTo(0));
+        }
+
+        // ---- Character memory (change: add-character-memory) ----
+
+        // Spec: character-memory / Perception-Time Memory Recording ("Record visible terrain and
+        //       entities") + game-management-grain / Character Memory Retrieval ("Retrieve memories")
+        [Test]
+        public async Task Memory_RecordsVisibleTerrain_CorroboratedBySnapshot()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // Perceiving (directly, and via an action) populates memory.
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.ExecuteToolBatchAsync(session.SessionId!, new List<ScriptedActionDto> { Move() }, false);
+
+            var memJson = await mgmt.GetMemoryAsync(session.SessionId!);
+            Assert.That(memJson, Is.Not.Null.And.Not.Empty);
+
+            using var memDoc = JsonDocument.Parse(memJson!);
+            var root = memDoc.RootElement;
+            Assert.That(root.GetProperty("TotalMemories").GetInt32(), Is.GreaterThan(0));
+
+            var terrainMemories = root.GetProperty("Memories").EnumerateArray()
+                .Where(m => m.GetProperty("ContentType").GetString() == "terrain")
+                .ToList();
+            Assert.That(terrainMemories.Count, Is.GreaterThan(0), "should remember visible terrain");
+
+            // Corroborate one remembered terrain against the omniscient snapshot.
+            var sample = terrainMemories[0];
+            var sLoc = sample.GetProperty("Location");
+            var (mx, my, mz) = (sLoc.GetProperty("X").GetInt32(), sLoc.GetProperty("Y").GetInt32(), sLoc.GetProperty("Z").GetInt32());
+            var content = sample.GetProperty("Content").GetString();
+
+            using var snapDoc = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var match = snapDoc.RootElement.GetProperty("Tiles").EnumerateArray().Any(t =>
+            {
+                var l = t.GetProperty("Location");
+                return l.GetProperty("X").GetInt32() == mx
+                    && l.GetProperty("Y").GetInt32() == my
+                    && l.GetProperty("Z").GetInt32() == mz
+                    && t.GetProperty("Terrain").GetString() == content;
+            });
+            Assert.That(match, Is.True, $"remembered terrain '{content}' at ({mx},{my},{mz}) should match the snapshot");
+        }
+
+        // Spec: character-memory / Perception-Time Memory Recording — Scenario "Reinforcement on re-encounter"
+        [Test]
+        public async Task Memory_RepeatedPerception_BumpsImpressions()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            var maxImpressions = doc.RootElement.GetProperty("Memories").EnumerateArray()
+                .Max(m => m.GetProperty("Impressions").GetInt32());
+            Assert.That(maxImpressions, Is.GreaterThanOrEqualTo(2), "re-perceiving the same content should bump impressions");
+        }
+
+        // Spec: character-memory / Per-World Memory Configuration — Scenario "Overrides via world
+        //       generation parameters" (MemoryEnabled=false records nothing)
+        [Test]
+        public async Task Memory_DisabledPerWorld_RecordsNothing()
+        {
+            var mgmt = Mgmt();
+            var request = new CreateWorldRequest
+            {
+                Name = "Memoryless World",
+                Description = "memory disabled via generator parameters",
+                GeneratorType = "maze",
+                MaxPlayers = 10,
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                GeneratorParameters = new Dictionary<string, object> { ["MemoryEnabled"] = false }
+            };
+            var worldId = await mgmt.CreateWorldAsync(request);
+
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            Assert.That(doc.RootElement.GetProperty("TotalMemories").GetInt32(), Is.EqualTo(0));
+        }
+
+        // Spec: game-management-grain / Character Memory Retrieval — Scenarios "Unknown session" + "Operator gating"
+        [Test]
+        public async Task Memory_UnknownSessionAndOperatorGate()
+        {
+            var mgmt = Mgmt();
+            Assert.That(await mgmt.GetMemoryAsync($"nope-{Guid.NewGuid()}"), Is.Null);
+
+            var worldId = await CreateWorldAsync();
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            try
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, "1");
+                Assert.That(await mgmt.GetMemoryAsync(session.SessionId!), Is.Null);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, null);
+            }
+
+            Assert.That(await mgmt.GetMemoryAsync(session.SessionId!), Is.Not.Null);
+        }
+
+        // ---- Memory dynamics (change: add-memory-dynamics) ----
+
+        // Spec: character-memory / Memory Dynamics Opt-In — Scenario "Default off preserves legacy behavior"
+        [Test]
+        public async Task MemoryDynamics_DefaultOff_WritesNoStabilityOrPermanence()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync(); // no dynamics parameters ⇒ default off
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // Two perceptions: without dynamics, a re-encounter must not write stability/permanence.
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            var memories = doc.RootElement.GetProperty("Memories").EnumerateArray().ToList();
+            Assert.That(memories.Count, Is.GreaterThan(0));
+            Assert.That(memories.All(m => m.GetProperty("StabilitySeconds").GetDouble() == 0),
+                Is.True, "dynamics off ⇒ no stability is ever written");
+            Assert.That(memories.All(m => !m.GetProperty("Permanent").GetBoolean()),
+                Is.True, "dynamics off ⇒ nothing becomes permanent");
+        }
+
+        // Spec: character-memory / Memory Stability and Reinforcement — Scenario "Spaced re-encounter grows
+        //       stability" (observed through the read API; DTO carries the new fields)
+        [Test]
+        public async Task MemoryDynamics_SpacedReencounter_GrowsStability_VisibleViaReadApi()
+        {
+            var mgmt = Mgmt();
+            // Min interval 0 makes every re-encounter count as spaced, so the test needs no wall-clock wait.
+            var request = new CreateWorldRequest
+            {
+                Name = "Dynamics World",
+                Description = "memory dynamics enabled via generator parameters",
+                GeneratorType = "maze",
+                MaxPlayers = 10,
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                GeneratorParameters = new Dictionary<string, object>
+                {
+                    ["MemoryDynamicsEnabled"] = true,
+                    ["MemoryMinReinforcementIntervalSeconds"] = 0,
+                }
+            };
+            var worldId = await mgmt.CreateWorldAsync(request);
+            var session = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(session.Success, Is.True, session.Message);
+
+            // First pass records; second pass re-encounters the same content and reinforces.
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+            await mgmt.GetPerceptionAsync(session.SessionId!);
+
+            using var doc = JsonDocument.Parse((await mgmt.GetMemoryAsync(session.SessionId!))!);
+            var memories = doc.RootElement.GetProperty("Memories").EnumerateArray().ToList();
+            Assert.That(memories.Count, Is.GreaterThan(0));
+
+            // The DTO carries the new fields, and at least one re-encountered memory grew stability.
+            Assert.That(memories[0].TryGetProperty("StabilitySeconds", out _), Is.True, "DTO exposes StabilitySeconds");
+            Assert.That(memories[0].TryGetProperty("Permanent", out _), Is.True, "DTO exposes Permanent");
+            Assert.That(memories.Any(m => m.GetProperty("StabilitySeconds").GetDouble() > 0),
+                Is.True, "a spaced re-encounter grows a memory's stability");
+        }
+
+        // ---- Individual recognition (change: add-identity-recognition) ----
+
+        /// <summary>
+        /// Provisions a recognition encounter: a world (recognition optionally enabled, with a large
+        /// range so two auto-placed characters are always in range), two headless characters, and one
+        /// map-grain tick to run the sweep. Returns the worldId, the player Characters' actual entity
+        /// ids discovered from the world snapshot (a headless character's EntityId is a fresh id, not the
+        /// SessionId — an operator likewise discovers ids via `world dump`), and every entity id in the
+        /// world (players + any generator-placed monster NPCs — the large range sweeps those in too, so
+        /// a recognized individual may legitimately be a monster, not just one of the two players).
+        /// </summary>
+        private async Task<(string worldId, List<string> characterIds, HashSet<string> allEntityIds)> SetUpRecognitionEncounterAsync(bool enabled)
+        {
+            var mgmt = Mgmt();
+            var request = new CreateWorldRequest
+            {
+                Name = "Recognition World",
+                Description = "recognition sweep test",
+                GeneratorType = "maze",
+                MaxPlayers = 10,
+                Size = new WorldSize { Width = 40, Height = 40, Depth = 1 },
+                GeneratorParameters = enabled
+                    ? new Dictionary<string, object> { ["RecognitionEnabled"] = true, ["RecognitionRangeTiles"] = 1000 }
+                    : new Dictionary<string, object>()
+            };
+            var worldId = await mgmt.CreateWorldAsync(request);
+
+            var a = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(a.Success, Is.True, a.Message);
+            var b = await mgmt.CreateHeadlessSessionAsync(worldId, null, null, null, null);
+            Assert.That(b.Success, Is.True, b.Message);
+
+            using var sdoc = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var mapId = sdoc.RootElement.GetProperty("MapId").GetString()!;
+            await _cluster.GrainFactory.GetGrain<IGameMapGrain>(mapId).TickAsync(TimeSpan.FromSeconds(1));
+
+            // Re-snapshot after the tick. Type=="Character" isolates the two players (Monster : Character
+            // reports Type "Monster"); the full entity id set covers everything the sweep could recognize.
+            using var after = JsonDocument.Parse((await mgmt.GetWorldSnapshotAsync(worldId))!);
+            var entities = after.RootElement.GetProperty("Entities").EnumerateArray().ToList();
+            var characterIds = entities
+                .Where(e => e.GetProperty("Type").GetString() == "Character")
+                .Select(e => e.GetProperty("EntityId").GetString()!)
+                .ToList();
+            var allEntityIds = entities.Select(e => e.GetProperty("EntityId").GetString()!).ToHashSet();
+
+            return (worldId, characterIds, allEntityIds);
+        }
+
+        // Spec: identity-recognition / Recognition Proximity Sweep ("PCs and NPCs both participate")
+        //       + game-management-grain / Recognition Memory Retrieval ("Read a character's known individuals")
+        [Test]
+        public async Task Recognition_Sweep_RecordsCharacter_ReadableViaApi()
+        {
+            var mgmt = Mgmt();
+            var (worldId, characterIds, allEntityIds) = await SetUpRecognitionEncounterAsync(enabled: true);
+            Assert.That(characterIds.Count, Is.GreaterThanOrEqualTo(2), "two player characters were provisioned");
+
+            // At least one character now recognizes another individual, exposed via the read API with
+            // the recognition fields populated.
+            var withKnown = new List<(string id, JsonElement individual)>();
+            foreach (var id in characterIds)
+            {
+                var json = await mgmt.GetRecognitionAsync(worldId, id);
+                if (string.IsNullOrEmpty(json))
+                    continue;
+                using var doc = JsonDocument.Parse(json);
+                foreach (var ind in doc.RootElement.GetProperty("Individuals").EnumerateArray())
+                    withKnown.Add((id, ind.Clone()));
+            }
+
+            Assert.That(withKnown, Is.Not.Empty, "the sweep should record at least one known individual");
+            var (_, sample) = withKnown[0];
+            Assert.That(sample.GetProperty("Encounters").GetInt32(), Is.GreaterThanOrEqualTo(1));
+            Assert.That(sample.TryGetProperty("EffectiveFamiliarity", out _), Is.True, "DTO exposes EffectiveFamiliarity");
+            Assert.That(sample.TryGetProperty("Permanent", out _), Is.True, "DTO exposes Permanent");
+            // The recognized individual is a real entity in the world — with the range this wide, the
+            // sweep may legitimately recognize a generator-placed monster NPC, not just the two players.
+            Assert.That(allEntityIds, Does.Contain(sample.GetProperty("EntityId").GetString()));
+        }
+
+        // Spec: identity-recognition / Per-World Recognition Configuration — Scenario "Opt-in default off"
+        [Test]
+        public async Task Recognition_DisabledByDefault_NoState()
+        {
+            var mgmt = Mgmt();
+            var (worldId, characterIds, _) = await SetUpRecognitionEncounterAsync(enabled: false);
+            Assert.That(characterIds, Is.Not.Empty);
+
+            foreach (var id in characterIds)
+                Assert.That(await mgmt.GetRecognitionAsync(worldId, id), Is.Null,
+                    "recognition disabled ⇒ no recognition component recorded ⇒ null read");
+        }
+
+        // Spec: game-management-grain / Recognition Memory Retrieval —
+        //       Scenario "Operator gate" + "Unknown world or entity"
+        [Test]
+        public async Task Recognition_OperatorGate_And_Unknown()
+        {
+            var mgmt = Mgmt();
+
+            // Unknown world.
+            Assert.That(await mgmt.GetRecognitionAsync($"nope-{Guid.NewGuid()}", "x"), Is.Null);
+
+            var (worldId, characterIds, _) = await SetUpRecognitionEncounterAsync(enabled: true);
+
+            // Find a character that actually has recognition state.
+            string? known = null;
+            foreach (var id in characterIds)
+            {
+                if (!string.IsNullOrEmpty(await mgmt.GetRecognitionAsync(worldId, id)))
+                {
+                    known = id;
+                    break;
+                }
+            }
+            Assert.That(known, Is.Not.Null, "at least one character should have recognition state");
+
+            // Unknown entity in a real world.
+            Assert.That(await mgmt.GetRecognitionAsync(worldId, $"ghost-{Guid.NewGuid()}"), Is.Null);
+
+            // Operator gate.
+            try
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, "1");
+                Assert.That(await mgmt.GetRecognitionAsync(worldId, known), Is.Null);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, null);
+            }
+
+            Assert.That(await mgmt.GetRecognitionAsync(worldId, known), Is.Not.Null);
+        }
+
+        // Spec: game-management-grain / Runtime World Tool Execution — Scenario "Operator gating"
+        [Test]
+        public async Task WorldTool_OperatorGate_Denies()
+        {
+            var mgmt = Mgmt();
+            var worldId = await CreateWorldAsync();
+
+            try
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, "1");
+                var denied = await mgmt.ExecuteWorldToolAsync(worldId, "setterrain", new Dictionary<string, object>());
+                Assert.That(denied.Success, Is.False);
+                Assert.That(denied.Message.ToLowerInvariant(), Does.Contain("operator access is disabled"));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(OperatorAccess.DisableEnvVar, null);
+            }
+        }
+    }
+}

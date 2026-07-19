@@ -1,0 +1,39 @@
+## 0. Phase 0 - Session -> world/map perception re-point (foundation)
+- [x] 0.1 Build grain -> session hydration: reusable `GameSessionManager.RepointSessionAsync` (swaps the session World from a target-map snapshot builder, rebinds world/map, swaps gateway, pushes a fresh frame) — silo-side so both `GameHub` and grains can drive it
+- [x] 0.2 `GameHub.JoinWorld` routed through the shared `RepointCallerToMapAsync` path (it already hydrated; now it also registers the world-grain player location)
+- [x] 0.3 Close the `GameHub.UsePortal` cross-world `// TODO: Load new world/map into session` — both same-world and cross-world branches now re-point via the shared path
+- [x] 0.4 `IWorldGrain.RegisterPlayerLocationAsync`/`UnregisterPlayerAsync` keep `WorldGrain.PlayerLocations` in agreement with the map-grain re-point; the shared helper updates both sides on every re-point
+- [x] 0.5 Tests: `SessionRepointTests` — the location invariant (register/re-point/unregister, no count inflation) + `RepointSessionAsync` switches the map, pushes a fresh frame, and perception follows the new map; existing `Travel_Rebinds_Session…` isolation test still green
+
+## 1. Phase 1 - Footprint / multi-tile occupancy
+- [x] 1.1 `Footprint` component (box `Size3d` or explicit relative `Cells`; `OccupiedTiles(anchor)` enumerator, mirroring `WorldChunk.AllLocations`)
+- [x] 1.2 Index every occupied tile on `World.AddEntity`/`TryRemoveEntity`/`MoveEntity` (idempotent multi-tile indexing over `EntitiesByLocation`), guarded by `Has<Footprint>()`
+- [x] 1.3 `World.TryPlace`/`TryMoveFootprint` + `CanPlaceFootprint`: validate every destination tile for passability and collision; no two footprints overlap
+- [x] 1.4 Footprint-aware landing validity: `CanPlaceFootprint` requires every tile under the footprint passable, in-bounds, and unoccupied — the landing check `VehicleGrain.LandAsync` will call
+- [x] 1.5 Single-tile fast path preserved for entities without a `Footprint` (every footprint branch guarded by `Has<Footprint>()`)
+- [x] 1.6 Tests: `FootprintOccupancyTests` — placement indexes all tiles / blocked by impassable, off-map, or overlap; move re-indexes & releases previous / blocked by a character; removal un-indexes all; single-tile fast path unchanged. Full suite (2508) green.
+
+## 2. Phase 2 - Interior + boarding (parked vehicle)
+- [x] 2.1 `VehicleConfig` (`Aetherium.Model/Vehicles`): exterior footprint (W/L/D), interior generator+size, landing terrain, capacity. Pure data, passed to `InitializeAsync` (not hardcoded).
+- [x] 2.2 Interior authored as the "Main" map of the vehicle's own world, built by `VehicleConfig.InteriorGenerator` (a registered `IMapGenerator`). NOTE deviation: `AddMapAsync` takes a generator-type string and there is no `WorldBuilder`→generator bridge, so the empty `SpaceHackWorldBuilder` isn't used directly; a bespoke ship-interior generator/prefab is a follow-on.
+- [x] 2.3 `IVehicleGrain`/`VehicleGrain` (modeled on `DungeonInstanceGrain`, auto-discovered, "worldStore"): `InitializeAsync` creates the interior world+map; `LandAsync` places the exterior footprint via `IGameMapGrain.PlaceVehicleExteriorAsync` (`VehicleExterior` entity + `Footprint` + `Boardable` + solid `ObstructsMovement`, landing-terrain-gated).
+- [x] 2.4 `BoardAsync`/`DisembarkAsync`: cross-world re-point (interior is on the vehicle's own world) via `IGameMapGrain.JoinPlayerAsync` + `IWorldGrain.RegisterPlayerLocationAsync`/`UnregisterPlayerAsync` + `GameSessionManager.RepointSessionToMapAsync` (Phase 0). Capacity-bounded; surplus rejected.
+- [x] 2.5 `board`/`disembark` interaction tools (auto-discovered, Player-profile-allowed). `board` targets the exterior entity; the hub validates adjacency via `IGameMapGrain.GetBoardableInfoAsync` (pure read → no grain re-entrancy) then calls the vehicle grain directly. `disembark` resolves the vehicle from the interior world id.
+- [x] 2.6 Tests: `VehicleBoardingTests` — init creates a joinable interior; board moves a player into the interior & off the surface; disembark returns them; capacity rejects surplus; board requires a landed vehicle; boarding re-points a live session (fresh interior frame). Full suite 2513 passing.
+
+## 3. Phase 3 - Timed voyage
+- [x] 3.1 `DepartAsync`: removes the exterior footprint from the origin surface, records an ETA (UtcNow + voyageMinutes; the route/caller decides the 10-30 min duration), marks `InTransit`
+- [x] 3.2 `VehicleGrain : IRemindable` + `RegisterOrUpdateReminder` (added `UseInMemoryReminderService()` to Program.cs — there were no reminder grains before). Reminder arming is try/caught so a host without a reminder service still runs (voyage driven via `TickVoyageAsync`)
+- [x] 3.3 `TickVoyageAsync` (called by the reminder + directly by tests): before ETA, ticks the interior map and pushes a `ReceiveVoyageProgress` update to passengers
+- [x] 3.4 On ETA: places the exterior at the destination dock (`PlaceVehicleExteriorAsync`), unregisters the reminder, transitions to `Landed` at the destination (blocked-dock case retries next wake)
+- [x] 3.5 Recovery: `OnActivateAsync` re-arms the reminder from the persisted ETA when a grain reactivates mid-voyage
+- [x] 3.6 Tests: `VehicleVoyageTests` — depart removes the origin exterior & marks in-transit; a wake before ETA stays in transit; arrival at ETA re-docks at the destination and the passenger (who travelled in the interior) disembarks onto the destination surface; depart requires a landed vehicle
+
+## 4. Phase 4 - In-transit events
+- [x] 4.1 On departure, `DepartAsync` schedules the config's authored `InTransitEvents` (`VoyageEventDef`: offset + type + description) at absolute due times on the vehicle's own voyage schedule. NOTE deviation: they are fired on the voyage reminder the grain already drives, NOT via `EventSchedulerGrain.ScheduleEventAsync` — that path fires through the *global tick driver* the design deliberately avoids, and its handlers spawn region caravans/invasions rather than broadcasting an encounter to passengers. Routing through EventScheduler/IEventInstanceGrain is a follow-on if/when the global tick driver lands.
+- [x] 4.2 On a due event, `TickVoyageAsync`→`FireDueEventsAsync` broadcasts `ReceiveVoyageEvent` to everyone aboard (each passenger's session via `GameSessionManager.NotifyPlayerEventAsync`) while the interior keeps ticking; each event fires at most once.
+- [x] 4.3 Tests: `VehicleVoyageTests.InTransitEvent_FiresAndBroadcastsToPassengers` — a due in-transit event is broadcast to a boarded passenger's session, the vehicle stays in transit, and the event does not re-broadcast on a later wake.
+
+## 5. Validation
+- [x] 5.1 `openspec validate add-boardable-vehicles --strict` passes with zero errors
+- [x] 5.2 Full test suite green (`dotnet test`)

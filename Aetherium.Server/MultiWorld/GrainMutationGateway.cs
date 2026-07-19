@@ -58,5 +58,8 @@ namespace Aetherium.Server.MultiWorld
 
         public Task<AttackResultDto> AttackAsync(string targetEntityId)
             => MapGrain.AttackAsync(_sessionId, targetEntityId);
+
+        public Task<TradeResultDto> TradeAsync(string side, string good, double quantity)
+            => MapGrain.TradeAsync(_sessionId, side, good, quantity);
     }
 }

@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using Aetherium;
 using Aetherium.Components;
 using Aetherium.Core;
@@ -14,6 +16,15 @@ namespace Aetherium.Server
 	public class GameSession
 	{
 		public string SessionId { get; set; } = Guid.NewGuid().ToString();
+
+		/// <summary>
+		/// Secret issued to the owning client at join (rides ReceiveGameState) and required
+		/// to rebind this session to a new connection via GameHub.ResumeSession. SessionId
+		/// alone is not sufficient — it doubles as the visible PlayerId, so without the
+		/// token any client that ever saw a player could hijack their session.
+		/// </summary>
+		public string ResumeToken { get; } = Guid.NewGuid().ToString("N");
+
 		public string ConnectionId { get; set; } = string.Empty;
 		public string? WorldId { get; set; } // Multi-world support - which world is this session in?
 		public string? MapId { get; set; }  // Phase 2c: which map within that world
@@ -26,6 +37,12 @@ namespace Aetherium.Server
 		/// on demand.
 		/// </summary>
 		public Aetherium.Server.MultiWorld.IMapMutationGateway? Gateway { get; set; }
+
+		/// <summary>
+		/// True when this session was provisioned headlessly (no interactive SignalR client).
+		/// Used to distinguish operator/automation sessions from client-backed ones (e.g. for idle reaping).
+		/// </summary>
+		public bool IsHeadless { get; set; } = false;
 		public World World { get; set; }
 		public Character? Player { get; set; }
 		public WorldLocation? ViewLocation { get; set; }
@@ -199,9 +216,28 @@ namespace Aetherium.Server
 	public void ApplyDelta(Aetherium.Server.MultiWorld.MapDelta delta)
 	{
 		if (delta is null) return;
-
 		lock (_stateLock)
-		{
+			ApplyDeltaLocked(delta);
+	}
+
+	/// <summary>
+	/// Applies a batch of deltas under a SINGLE lock acquisition. The NPC tick fans out one
+	/// move delta per roaming monster; applying them one-at-a-time meant one lock acquisition
+	/// per monster per tick, each contending with the ~100ms perception flush that holds the
+	/// same lock — which stretched even a 20-monster tick to ~1.7s and starved player input on
+	/// the single-threaded map grain. Batching collapses that to one lock hold per tick.
+	/// </summary>
+	public void ApplyDeltas(System.Collections.Generic.IReadOnlyList<Aetherium.Server.MultiWorld.MapDelta> deltas)
+	{
+		if (deltas is null || deltas.Count == 0) return;
+		lock (_stateLock)
+			foreach (var delta in deltas)
+				if (delta is not null)
+					ApplyDeltaLocked(delta);
+	}
+
+	private void ApplyDeltaLocked(Aetherium.Server.MultiWorld.MapDelta delta)
+	{
 			switch (delta)
 			{
 				case Aetherium.Server.MultiWorld.EntityMovedDelta moved:
@@ -271,7 +307,6 @@ namespace Aetherium.Server
 					Console.WriteLine($"[GameSession] Ignoring unknown delta type {delta.GetType().Name}");
 					break;
 			}
-		}
 	}
 
 	private void ApplyComponentFieldChanged(Aetherium.Server.MultiWorld.ComponentFieldChangedDelta delta)
@@ -430,13 +465,29 @@ namespace Aetherium.Server
 		// Skip the player's own move — the gateway-route already advanced ViewLocation
 		// (in legacy mode) or this is a no-op (in grain mode the entity moves via the
 		// grain; the local mirror just needs the index update).
-		if (!World.Entities.TryGetValue(delta.EntityId, out _))
+		if (!World.Entities.TryGetValue(delta.EntityId, out var moving))
 			return;
-		World.MoveEntity(delta.EntityId, new WorldLocation(delta.NewX, delta.NewY, delta.NewZ));
+		var destination = new WorldLocation(delta.NewX, delta.NewY, delta.NewZ);
+		World.MoveEntity(delta.EntityId, destination);
+
+		// Ghost forensics: MoveEntity silently no-ops when the entity isn't indexed at
+		// its recorded source (EntitiesByLocation bucket miss). A no-op here freezes the
+		// mirror copy in place forever — rendered at a stale cell while the canonical
+		// entity walks off and attacks from "empty" floor. Catch it in the act.
+		var after = moving.Get<WorldLocation>();
+		if (after is null || after != destination)
+			Console.WriteLine($"[GameSession] MOVE NO-OP: {delta.EntityId} stuck at " +
+				$"({after?.X},{after?.Y},{after?.Z}), delta wanted ({delta.NewX},{delta.NewY},{delta.NewZ}) " +
+				$"old=({delta.OldX},{delta.OldY},{delta.OldZ})");
 
 		// If this delta concerns the player Character, keep ViewLocation in sync.
+		// This is the grain-routed session's own-move path, so it advances the move
+		// sequence exactly like local MoveView does.
 		if (Player is not null && delta.EntityId == Player.EntityId)
+		{
 			ViewLocation = new WorldLocation(delta.NewX, delta.NewY, delta.NewZ);
+			_moveSequence++;
+		}
 	}
 
 	private void ApplyEntityRemoved(Aetherium.Server.MultiWorld.EntityRemovedDelta delta)
@@ -465,6 +516,14 @@ namespace Aetherium.Server
 		var heading = entity.Get<HasHeading>();
 		if (heading is not null)
 			heading.Heading = delta.Degrees;
+
+		// A rotation is an embodied state change exactly like a move: bump the
+		// sequence so frames computed before the rotate (e.g. the debounced tick
+		// flush, which runs off the grain's ordering) rank stale and get dropped
+		// by the client instead of racing the rotate's own frame and visibly
+		// snapping the camera back to the old heading.
+		if (Player is not null && delta.EntityId == Player.EntityId)
+			_moveSequence++;
 	}
 
 	private void ApplyDoorStateChanged(Aetherium.Server.MultiWorld.DoorStateChangedDelta delta)
@@ -519,14 +578,25 @@ namespace Aetherium.Server
 	/// </summary>
 	private void InitializePlayer(WorldBuilder? worldBuilder, WorldLocation? startLocation = null)
 	{
-		// Determine start location
-		if (startLocation == null)
+		// Determine start location.
+		//
+		// NOTE: use the `is null` / `is not null` patterns, NOT `== null` / `!= null`.
+		// WorldLocation is a class that overloads operator== so a null operand always
+		// compares *unequal* — its Equals returns false whenever either side is null
+		// (see Aetherium.Components.WorldLocation). That means `startLocation == null` is
+		// false even when startLocation really is null, which previously skipped spawn
+		// selection entirely and dropped every auto-spawned player onto the (15,15,0)
+		// fallback below. That looked fine on square maps (where (15,15,0) is a real
+		// passable cell near the origin) but spawned off-map on H3/spherical worlds whose
+		// cells use large packed coordinates. The `is` patterns bypass the operator and
+		// test the reference directly.
+		if (startLocation is null)
 		{
 			if (worldBuilder is AudioTestWorldBuilder audioBuilder)
 			{
 				startLocation = audioBuilder.StartLocation;
 			}
-			else if (worldBuilder is FovDiagnosticWorldBuilder fovBuilder && fovBuilder.StartLocation != null)
+			else if (worldBuilder is FovDiagnosticWorldBuilder fovBuilder && fovBuilder.StartLocation is not null)
 			{
 				startLocation = fovBuilder.StartLocation;
 			}
@@ -542,6 +612,8 @@ namespace Aetherium.Server
 			Player = new Character();
 			Player.Set(new WorldLocation(loc.X, loc.Y, loc.Z));
 			Player.Set(new Inventory());
+			// A starting purse so this session can trade against settlement markets (economy Item 2b).
+			Player.Set(new Wallet { Currency = Wallet.StartingCurrency });
 
 			// For audio test, preload a compass into inventory so compass widget is visible
 			if (worldBuilder is AudioTestWorldBuilder)
@@ -555,13 +627,16 @@ namespace Aetherium.Server
 		}
 		else
 		{
-			// Fallback
-			var locations = World.EntitiesByLocation.Keys;
-			if (locations.Count > 0)
+			// Fallback: no passable cell was resolved (a degenerate world with no passable
+			// terrain). Spawn on any occupied cell rather than a hardcoded (15,15,0), which is
+			// not a valid coordinate on non-square topologies (e.g. H3, whose cells use large
+			// packed coordinates).
+			var anyLocation = World.EntitiesByLocation.Keys.FirstOrDefault();
+			if (anyLocation is not null)
 			{
-				ViewLocation = new WorldLocation(15, 15, 0);
+				ViewLocation = anyLocation;
 				Player = new Character();
-				Player.Set(new WorldLocation(15, 15, 0));
+				Player.Set(new WorldLocation(anyLocation.X, anyLocation.Y, anyLocation.Z));
 				Player.Set(new Inventory());
 				World.AddEntity(Player);
 			}
@@ -585,7 +660,19 @@ namespace Aetherium.Server
 			return action();
 	}
 
-	public Aetherium.Model.PerceptionDto GetPerception()
+	// Monotonic count of the player's own successful embodied state changes — steps,
+	// level changes, AND rotations — stamped on every perception frame as MoveSequence.
+	// Starts at 1 so a real frame can never carry 0 (0 = legacy/unsequenced). This is
+	// what lets a client order frames against its own actions: a frame computed before
+	// a move/rotate but delivered after its response (tick flushes and tool responses
+	// share one connection but not one ordering) carries the old count and can be
+	// recognized as stale instead of corrupting client-side position- or
+	// heading-anchored state. Always mutated under _stateLock, the same lock that
+	// guards ViewLocation/HeadingDegrees and GetPerception — (location, heading,
+	// sequence) stay consistent.
+	private long _moveSequence = 1;
+
+	public Aetherium.Model.PerceptionDto GetPerception(bool absoluteCoordinates = false)
 	{
 		lock (_stateLock)
 		{
@@ -605,7 +692,12 @@ namespace Aetherium.Server
 				fovDegrees = hasHeading?.FieldOfViewDegrees ?? 120; // Default 120 for humans
 			}
 
-			return perceptionService.ComputePerception(
+			// Passing the session's player as `self` populates the interoception channel on
+			// every hub-pushed frame (add-interoception-channel) — the same wiring the grain's
+			// agent path has. For local sessions the World is authoritative; for grain-bound
+			// sessions the mirror player's Health stays current via ("Health","Level") deltas
+			// in ApplyDelta (statuses/pools mirror as those deltas are added).
+			var perception = perceptionService.ComputePerception(
 				World,
 				ViewLocation,
 				Heading,
@@ -616,7 +708,121 @@ namespace Aetherium.Server
 				GetCurrentGameTime(),
 				DirectionalVisionMode,
 				DirectionalVisionMode ? (int?)HeadingDegrees : null,
-				fovDegrees);
+				fovDegrees,
+				self: Player,
+				absoluteCoordinates: absoluteCoordinates);
+			perception.MoveSequence = _moveSequence;
+
+			// Record what the character just perceived into their Memory component
+			// (see OpenSpec change add-character-memory).
+			RecordMemories(perception);
+
+			return perception;
+		}
+	}
+
+	/// <summary>
+	/// Records the visible tiles' terrain and visible non-terrain entities into the player
+	/// character's Memory component, at absolute world locations. Governed by the world's
+	/// per-world MemoryPolicy; enforces the location cap oldest-first. Called under
+	/// <c>_stateLock</c> from <see cref="GetPerception"/>.
+	/// </summary>
+	private void RecordMemories(Aetherium.Model.PerceptionDto perception)
+	{
+		var policy = World.MemoryPolicy;
+		if (!policy.Enabled || Player == null || ViewLocation == null || !Player.Has<Memory>())
+			return;
+
+		var memory = Player.Get<Memory>();
+
+		// Fold this character's MemoryProfile (if any) into the world policy for this pass.
+		// Dynamics off ⇒ the profile is ignored and this is the exact legacy path.
+		var profile = Player.Has<MemoryProfile>() ? Player.Get<MemoryProfile>() : null;
+		var dynamics = policy.ResolveDynamics(
+			profile?.HalfLifeMultiplier ?? 1.0,
+			profile?.StabilityGrowthMultiplier ?? 1.0,
+			profile?.MaxLocationsOverride);
+
+		var now = DateTime.Now;
+		var touched = dynamics.Enabled && dynamics.ForgetThreshold > 0
+			? new HashSet<WorldLocation>()
+			: null;
+
+		foreach (var key in perception.Visuals.Keys)
+		{
+			// Visuals keys are relative "x,y,z" offsets from the player; convert to absolute.
+			var parts = key.Split(',');
+			if (parts.Length != 3
+				|| !int.TryParse(parts[0], out var rx)
+				|| !int.TryParse(parts[1], out var ry)
+				|| !int.TryParse(parts[2], out var rz))
+				continue;
+
+			var loc = new WorldLocation(ViewLocation.X + rx, ViewLocation.Y + ry, ViewLocation.Z + rz);
+
+			var terrainName = World.GetTerrain(loc)?.Type?.Name;
+			if (terrainName != null)
+			{
+				memory.Remember(loc, "terrain", terrainName, dynamics);
+				touched?.Add(loc);
+			}
+
+			if (World.EntitiesByLocation.TryGetValue(loc, out var atLoc))
+			{
+				foreach (var entity in atLoc.Values)
+				{
+					if (entity is Aetherium.Entities.Terrain || entity.EntityId == Player.EntityId)
+						continue;
+					memory.Remember(loc, "entity", $"{entity.GetType().Name}:{entity.EntityId}", dynamics);
+					touched?.Add(loc);
+				}
+			}
+		}
+
+		// Write-time forgetting (add-memory-dynamics): cull sub-threshold entries at the locations
+		// this pass touched. Reads stay pure; cold locations elsewhere are swept by the cap below.
+		if (touched != null)
+		{
+			foreach (var loc in touched)
+				memory.CullForgotten(loc, dynamics.ForgetThreshold, dynamics.BaseHalfLifeSeconds, now);
+		}
+
+		// Enforce the per-character location cap. When dynamics culling is active, drop
+		// fully-forgotten locations first, then fall back to oldest-first (by that location's most
+		// recent memory activity). Locations holding a permanent memory are never "all-forgotten"
+		// but remain eligible for the oldest-first pass — a hard resource bound outranks fidelity.
+		var maxLocations = dynamics.MaxLocations;
+		if (memory.LocationsTracked > maxLocations)
+		{
+			if (dynamics.Enabled && dynamics.ForgetThreshold > 0)
+			{
+				foreach (var kvp in memory.SpaceTimeMemories.ToList())
+				{
+					if (memory.LocationsTracked <= maxLocations)
+						break;
+					var list = kvp.Value;
+					var allForgotten = list.Count > 0 && list.All(m => !m.Permanent
+						&& MemoryPolicy.EffectiveStrength(m.Strength, now - m.LastEventTime,
+							m.StabilitySeconds, m.Permanent, dynamics.BaseHalfLifeSeconds) < dynamics.ForgetThreshold);
+					if (allForgotten)
+						memory.SpaceTimeMemories.TryRemove(kvp.Key, out _);
+				}
+			}
+
+			if (memory.LocationsTracked > maxLocations)
+			{
+				var oldestFirst = memory.SpaceTimeMemories
+					.OrderBy(kvp => kvp.Value.Count == 0 ? DateTime.MinValue : kvp.Value.Max(m => m.LastEventTime))
+					.Select(kvp => kvp.Key)
+					.ToList();
+
+				foreach (var loc in oldestFirst)
+				{
+					if (memory.LocationsTracked <= maxLocations)
+						break;
+					memory.SpaceTimeMemories.TryRemove(loc, out _);
+				}
+			}
 		}
 	}
 
@@ -637,6 +843,18 @@ namespace Aetherium.Server
 		{
 			var gameTime = GetCurrentGameTime();
 			return gameTime.TimeOfDay.TotalHours % 24.0;
+		}
+
+		/// <summary>
+		/// Freeze the in-game clock at a fixed hour of day (0-24), disabling the day/night
+		/// cycle. Always-daylight outdoor worlds use this so the sun never sets — otherwise a
+		/// session that happens to start at a night hour renders the whole map dark (sunlight
+		/// intensity is zero below the horizon, which then collapses the visible range).
+		/// </summary>
+		public void SetFixedTimeOfDay(double hourOfDay)
+		{
+			GameStartTime = DateTime.UtcNow.Date.AddHours(((hourOfDay % 24.0) + 24.0) % 24.0);
+			TimeScale = 0.0; // frozen: GetCurrentGameTime now always returns GameStartTime
 		}
 
 		public Aetherium.Core.MoveOutcome MoveView(Aetherium.Model.RelativeDirection direction, int distance = 1)
@@ -672,6 +890,8 @@ namespace Aetherium.Server
 					if (outcome.FinalLocation != null)
 						ViewLocation = new WorldLocation(
 							outcome.FinalLocation.X, outcome.FinalLocation.Y, outcome.FinalLocation.Z);
+					if (outcome.Success)
+						_moveSequence++;
 					return outcome;
 				}
 
@@ -685,6 +905,7 @@ namespace Aetherium.Server
 					Aetherium.WorldDirection.West => ViewLocation.FromDelta(-distance, 0, 0),
 					_ => ViewLocation
 				};
+				_moveSequence++;
 				return new Aetherium.Core.MoveOutcome
 				{
 					Success = true,
@@ -711,6 +932,9 @@ namespace Aetherium.Server
 				HeadingDegrees = (HeadingDegrees + degrees) % 360;
 				if (HeadingDegrees < 0)
 					HeadingDegrees += 360;
+				// Same sequencing contract as the grain-routed path (ApplyHeadingChanged):
+				// rotations rank frames just like moves do.
+				_moveSequence++;
 			}
 		}
 
@@ -763,11 +987,14 @@ namespace Aetherium.Server
 					if (outcome.FinalLocation != null)
 						ViewLocation = new WorldLocation(
 							outcome.FinalLocation.X, outcome.FinalLocation.Y, outcome.FinalLocation.Z);
+					if (outcome.Success)
+						_moveSequence++;
 					return outcome;
 				}
 
 				// Observer session: free camera, no validation.
 				ViewLocation = ViewLocation.FromDelta(0, 0, deltaZ);
+				_moveSequence++;
 				return new Aetherium.Core.MoveOutcome
 				{
 					Success = true,
@@ -775,6 +1002,92 @@ namespace Aetherium.Server
 					FinalLocation = ViewLocation,
 				};
 			}
+		}
+
+		public bool Land()
+		{
+			if (Player == null)
+				return false;
+
+			var landed = Aetherium.Server.Flying.FlightController.TryLand(World, Player);
+			if (landed)
+				SyncViewToPlayer();
+			return landed;
+		}
+
+		public bool Takeoff()
+		{
+			if (Player == null)
+				return false;
+
+			var airborne = Aetherium.Server.Flying.FlightController.TryTakeoff(World, Player);
+			if (airborne)
+				SyncViewToPlayer();
+			return airborne;
+		}
+
+		private void SyncViewToPlayer()
+		{
+			if (Player == null)
+				return;
+
+			var loc = Player.Get<WorldLocation>();
+			ViewLocation = new WorldLocation(loc.X, loc.Y, loc.Z);
+		}
+
+		private Character? ResolveFlyer(string entityId) =>
+			World.Entities.TryGetValue(entityId, out var e) ? e as Character : null;
+
+		/// <summary>The altitude-aware affordances a flyer offers the player (hack/summon/attack/inspect).</summary>
+		public System.Collections.Generic.IReadOnlyList<Aetherium.Server.Flying.FlyerAffordanceState> FlyerAffordances(string targetEntityId)
+		{
+			if (Player == null)
+				return new System.Collections.Generic.List<Aetherium.Server.Flying.FlyerAffordanceState>();
+
+			var target = ResolveFlyer(targetEntityId);
+			if (target == null)
+				return new System.Collections.Generic.List<Aetherium.Server.Flying.FlyerAffordanceState>();
+
+			return Aetherium.Server.Flying.FlyerInteractionSystem.Affordances(World, Player, target);
+		}
+
+		/// <summary>Hack a flyer over an uplink (band-agnostic, range-gated), e.g. an orbital satellite.</summary>
+		public Aetherium.Server.Flying.FlyerInteractionOutcome Hack(string targetEntityId)
+		{
+			if (Player == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No player");
+
+			var target = ResolveFlyer(targetEntityId);
+			if (target == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No such target");
+
+			return Aetherium.Server.Flying.FlyerInteractionSystem.TryHack(World, Player, target);
+		}
+
+		/// <summary>Summon/hail an air taxi: it plans an AdHoc route to the player and lands to board.</summary>
+		public Aetherium.Server.Flying.FlyerInteractionOutcome Summon(string targetEntityId)
+		{
+			if (Player == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No player");
+
+			var target = ResolveFlyer(targetEntityId);
+			if (target == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No such target");
+
+			return Aetherium.Server.Flying.FlyerInteractionSystem.TrySummon(World, Player, target);
+		}
+
+		/// <summary>Attack/shoot a flyer: range-gated and band-limited, so orbit is out of reach.</summary>
+		public Aetherium.Server.Flying.FlyerInteractionOutcome Attack(string targetEntityId)
+		{
+			if (Player == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No player");
+
+			var target = ResolveFlyer(targetEntityId);
+			if (target == null)
+				return Aetherium.Server.Flying.FlyerInteractionOutcome.Fail("No such target");
+
+			return Aetherium.Server.Flying.FlyerInteractionSystem.TryAttack(World, Player, target);
 		}
 
 		public void JumpToRandomLocation()

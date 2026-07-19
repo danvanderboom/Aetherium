@@ -128,6 +128,54 @@ namespace Aetherium.Test.Games
             AssertAllSectionsBound(result.Definition!);
         }
 
+        // The economy recipe, inline under an `economy:` key (for game.yaml) and as a bare body (for a
+        // sibling economy.yaml). Both must bind to GameDefinition.Economy — different loader code paths.
+        private const string EconomyInline = """
+            economy:
+              goods:
+                - { name: Spice, basePrice: 12.0, consumePerPop: 0.002 }
+                - { name: Crystal, basePrice: 40.0, consumePerPop: 0.001 }
+              coastalGood: Pearl
+              coastalPerPop: 0.004
+              production:
+                - { biome: Desert, good: Spice, perPop: 0.02 }
+                - { biome: Hills, good: Crystal, perPop: 0.01 }
+            """;
+
+        private const string EconomyBody = """
+            goods:
+              - { name: Spice, basePrice: 12.0, consumePerPop: 0.002 }
+              - { name: Crystal, basePrice: 40.0, consumePerPop: 0.001 }
+            coastalGood: Pearl
+            coastalPerPop: 0.004
+            production:
+              - { biome: Desert, good: Spice, perPop: 0.02 }
+              - { biome: Hills, good: Crystal, perPop: 0.01 }
+            """;
+
+        [Test]
+        public void LoadBundle_EconomySection_BindsGoodsAndRecipe()
+        {
+            // Inline in game.yaml and as a sibling economy.yaml must both bind the recipe.
+            foreach (var (label, files) in new[]
+            {
+                ("inline", new[] { ("game.yaml", Manifest + "\n" + EconomyInline) }),
+                ("split",  new[] { ("game.yaml", Manifest), ("economy.yaml", EconomyBody) }),
+            })
+            {
+                var dir = WriteBundle($"economy-{label}", files);
+                var result = new GameDefinitionLoader().LoadBundle(dir);
+                Assert.That(result.Success, Is.True, $"[{label}] " + string.Join("; ", result.Diagnostics));
+
+                var eco = result.Definition!.Economy;
+                Assert.That(eco, Is.Not.Null, $"[{label}] the economy section must bind");
+                Assert.That(eco!.Goods.Select(g => g.Name), Is.EquivalentTo(new[] { "Spice", "Crystal" }), $"[{label}] goods");
+                Assert.That(eco.Goods.Single(g => g.Name == "Crystal").BasePrice, Is.EqualTo(40.0).Within(1e-9), $"[{label}] price");
+                Assert.That(eco.CoastalGood, Is.EqualTo("Pearl"), $"[{label}] coastal good");
+                Assert.That(eco.Production.Single(p => p.Biome == "Desert").Good, Is.EqualTo("Spice"), $"[{label}] production");
+            }
+        }
+
         [Test]
         public void LoadBundle_SplitFiles_BindsAllSections()
         {
@@ -144,6 +192,52 @@ namespace Aetherium.Test.Games
 
             Assert.That(result.Success, Is.True, string.Join("; ", result.Diagnostics));
             AssertAllSectionsBound(result.Definition!);
+        }
+
+        [Test]
+        public void LoadBundle_BindsPlayerAndCreatureVision()
+        {
+            // Per-character-type vision (directionality/FOV/range): the human player gets a
+            // forward cone; a creature can carry its own. Proves the YAML `player.vision:` and
+            // `creatures[].vision:` keys bind to the config model that the join path consumes.
+            var dir = WriteBundle("vision", ("game.yaml", Manifest + """
+
+                player:
+                  vision:
+                    directional: true
+                    fieldOfView: 120
+                content:
+                  creatures:
+                    - id: hunter
+                      name: Hunter
+                      health: 20
+                      vision: { directional: true, fieldOfView: 70, range: 12 }
+                    - id: blob
+                      name: Blob
+                      health: 10
+                  spawns:
+                    - { creatureId: hunter, weight: 1 }
+                """));
+
+            var result = new GameDefinitionLoader().LoadBundle(dir);
+
+            Assert.That(result.Success, Is.True, string.Join("; ", result.Diagnostics));
+            var def = result.Definition!;
+
+            Assert.That(def.Player, Is.Not.Null);
+            Assert.That(def.Player!.Vision, Is.Not.Null);
+            Assert.That(def.Player.Vision!.Directional, Is.True);
+            Assert.That(def.Player.Vision.FieldOfView, Is.EqualTo(120));
+
+            var hunter = def.Content!.Creatures.Single(c => c.Id == "hunter");
+            Assert.That(hunter.Vision, Is.Not.Null);
+            Assert.That(hunter.Vision!.Directional, Is.True);
+            Assert.That(hunter.Vision.FieldOfView, Is.EqualTo(70));
+            Assert.That(hunter.Vision.Range, Is.EqualTo(12));
+
+            // A creature with no vision block stays omnidirectional (null = legacy default).
+            var blob = def.Content.Creatures.Single(c => c.Id == "blob");
+            Assert.That(blob.Vision, Is.Null);
         }
 
         [Test]

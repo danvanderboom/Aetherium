@@ -28,7 +28,20 @@ namespace Aetherium.Components
             SpaceTimeMemories = new ConcurrentDictionary<WorldLocation, List<SpaceTimeMemory>>();
         }
 
-        public void AddMemory(SpaceTimeMemory newMemory)
+        public void AddMemory(SpaceTimeMemory newMemory) =>
+            AddMemory(newMemory, default, newMemory.LastEventTime);
+
+        /// <summary>
+        /// Records a perceived memory, applying memory dynamics (add-memory-dynamics) when
+        /// <paramref name="dynamics"/> is enabled: a re-encounter of existing content spaced at least
+        /// <c>MinReinforcementIntervalSeconds</c> after it was last seen grows the memory's stability
+        /// and refreshes its strength, latching permanence past the threshold. A massed re-encounter
+        /// (within the interval) bumps impressions and last-seen only — never compounding durability.
+        /// A default (<c>Enabled = false</c>) <paramref name="dynamics"/> reproduces the exact legacy
+        /// path: impressions and last-seen update, nothing else. <paramref name="now"/> is the time
+        /// used for the spacing comparison and last-seen stamp (passed in for deterministic tests).
+        /// </summary>
+        public void AddMemory(SpaceTimeMemory newMemory, MemoryDynamics dynamics, DateTime now)
         {
             SpaceTimeMemories.TryAdd(newMemory.Location, new List<SpaceTimeMemory>());
 
@@ -38,20 +51,59 @@ namespace Aetherium.Components
             // references). RemoveMemory already uses the stored list; this keeps them consistent.
             var locationMemories = SpaceTimeMemories[newMemory.Location];
 
-            var matchingMemory = locationMemories.FirstOrDefault(m => 
-                m.Location == newMemory.Location 
+            var matchingMemory = locationMemories.FirstOrDefault(m =>
+                m.Location == newMemory.Location
                 && m.ContentType == newMemory.ContentType
                 && m.Content == newMemory.Content);
 
             if (matchingMemory != null)
             {
-                matchingMemory.LastEventTime = newMemory.LastEventTime;
+                // Reinforcement is decided from the PRIOR last-seen time, before it is overwritten
+                // below — a spaced revisit compounds stability; massed re-exposure does not.
+                if (dynamics.Enabled && !matchingMemory.Permanent)
+                {
+                    var elapsed = now - matchingMemory.LastEventTime;
+                    if (elapsed.TotalSeconds >= dynamics.MinReinforcementIntervalSeconds)
+                    {
+                        matchingMemory.StabilitySeconds = MemoryPolicy.ReinforceStability(
+                            matchingMemory.StabilitySeconds,
+                            dynamics.BaseHalfLifeSeconds,
+                            dynamics.StabilityGrowthFactor);
+                        matchingMemory.Strength = 1.0;
+                        if (matchingMemory.StabilitySeconds >= dynamics.PermanenceThresholdSeconds)
+                            matchingMemory.Permanent = true;
+                    }
+                }
+
+                matchingMemory.LastEventTime = now;
                 matchingMemory.Impressions++;
             }
             else
             {
                 locationMemories.Add(newMemory);
             }
+        }
+
+        /// <summary>
+        /// Removes non-permanent memories at <paramref name="location"/> whose effective strength has
+        /// decayed below <paramref name="forgetThreshold"/> (add-memory-dynamics). Called at write time
+        /// only, so reads stay pure. A non-positive threshold disables culling. Returns the count
+        /// removed; drops the location entirely when it empties.
+        /// </summary>
+        public int CullForgotten(WorldLocation location, double forgetThreshold,
+            double fallbackHalfLifeSeconds, DateTime now)
+        {
+            if (forgetThreshold <= 0 || !SpaceTimeMemories.TryGetValue(location, out var locationMemories))
+                return 0;
+
+            var removed = locationMemories.RemoveAll(m => !m.Permanent
+                && MemoryPolicy.EffectiveStrength(m.Strength, now - m.LastEventTime,
+                    m.StabilitySeconds, m.Permanent, fallbackHalfLifeSeconds) < forgetThreshold);
+
+            if (locationMemories.Count == 0)
+                SpaceTimeMemories.TryRemove(location, out _);
+
+            return removed;
         }
 
         public void RemoveMemory(WorldLocation location, string contentType)
@@ -79,18 +131,28 @@ namespace Aetherium.Components
 
         public bool Knows(WorldLocation location) => Knowledge(location).Count > 0;
 
-        public void Remember(WorldLocation location, string contentType, string content, 
-            double strength = 1, double bias = 0)
+        public void Remember(WorldLocation location, string contentType, string content,
+            double strength = 1, double bias = 0) =>
+            Remember(location, contentType, content, default, strength, bias);
+
+        /// <summary>
+        /// Records a perceived memory under the given <paramref name="dynamics"/> (add-memory-dynamics).
+        /// See <see cref="AddMemory(SpaceTimeMemory, MemoryDynamics, DateTime)"/> for the reinforcement
+        /// semantics; a default <paramref name="dynamics"/> is the legacy path.
+        /// </summary>
+        public void Remember(WorldLocation location, string contentType, string content,
+            MemoryDynamics dynamics, double strength = 1, double bias = 0)
         {
+            var now = DateTime.Now;
             AddMemory(new SpaceTimeMemory
             {
                 Location = location,
-                LastEventTime = DateTime.Now,
+                LastEventTime = now,
                 ContentType = contentType,
                 Content = content,
                 Strength = strength,
                 Bias = bias
-            });
+            }, dynamics, now);
         }
     }
 }

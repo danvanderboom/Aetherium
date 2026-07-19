@@ -29,6 +29,7 @@ namespace Aetherium.Server.Management
         private readonly IGrainFactory _grainFactory;
         private readonly InteractionSystem _interactionSystem = new InteractionSystem();
         private readonly Aetherium.Server.Services.IWorldHost? _worldHost;
+        private readonly Aetherium.Server.Services.WorldRegistry? _liveWorlds;
         private readonly IServiceProvider _serviceProvider;
 
         private class SessionMetadata
@@ -36,6 +37,21 @@ namespace Aetherium.Server.Management
             public string SessionId { get; set; } = string.Empty;
             public string ConnectionId { get; set; } = string.Empty;
             public DateTime ConnectedAt { get; set; }
+            public DateTime LastActivityAt { get; set; }
+        }
+
+        // Default idle timeout for reaping abandoned headless sessions (env-overridable).
+        private const int DefaultHeadlessIdleSeconds = 1800;
+        private static int HeadlessIdleSeconds()
+        {
+            var raw = Environment.GetEnvironmentVariable("AETHERIUM_HEADLESS_IDLE_SECONDS");
+            return int.TryParse(raw, out var v) && v > 0 ? v : DefaultHeadlessIdleSeconds;
+        }
+
+        private void TouchSession(string sessionId)
+        {
+            if (_sessionIndex.TryGetValue(sessionId, out var meta))
+                meta.LastActivityAt = DateTime.UtcNow;
         }
 
         public GameManagementGrain(
@@ -48,6 +64,7 @@ namespace Aetherium.Server.Management
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
             _worldHost = serviceProvider.GetService<Aetherium.Server.Services.IWorldHost>();
+            _liveWorlds = serviceProvider.GetService<Aetherium.Server.Services.WorldRegistry>();
             _serviceProvider = serviceProvider;
         }
 
@@ -55,6 +72,18 @@ namespace Aetherium.Server.Management
         {
             var grainKey = this.GetPrimaryKeyString();
             Console.WriteLine($"[GameManagementGrain] Activated: {grainKey}");
+
+            // Best-effort background reaping of abandoned headless sessions.
+            RegisterTimer(
+                async _ =>
+                {
+                    try { await ReapIdleHeadlessSessionsAsync(HeadlessIdleSeconds()); }
+                    catch (Exception ex) { Console.WriteLine($"[GameManagementGrain] Reaper error: {ex.Message}"); }
+                },
+                null,
+                TimeSpan.FromMinutes(5),
+                TimeSpan.FromMinutes(5));
+
             return base.OnActivateAsync(cancellationToken);
         }
 
@@ -70,7 +99,8 @@ namespace Aetherium.Server.Management
             {
                 SessionId = sessionId,
                 ConnectionId = connectionId,
-                ConnectedAt = DateTime.UtcNow
+                ConnectedAt = DateTime.UtcNow,
+                LastActivityAt = DateTime.UtcNow
             };
 
             _sessionIndex[sessionId] = metadata;
@@ -370,6 +400,293 @@ namespace Aetherium.Server.Management
         // Gameplay control + perception (for agents)
         // ============================================================
 
+        // ---- Operator / headless driving ------------------------------------------------
+
+        public Task<HeadlessSessionResult> CreateHeadlessSessionAsync(string worldId, int? startX, int? startY, int? startZ, string? profile)
+        {
+            if (!OperatorAccess.IsEnabled())
+                return Task.FromResult(HeadlessSessionResult.Error("Operator access is disabled"));
+
+            if (string.IsNullOrEmpty(worldId))
+                return Task.FromResult(HeadlessSessionResult.Error("World ID cannot be null or empty"));
+
+            var world = _liveWorlds?.Resolve(worldId);
+            if (world == null)
+                return Task.FromResult(HeadlessSessionResult.Error($"World not found or not initialized in this process: {worldId}"));
+
+            WorldLocation? start = (startX.HasValue && startY.HasValue)
+                ? new WorldLocation(startX.Value, startY.Value, startZ ?? 0)
+                : null;
+
+            try
+            {
+                var connectionId = $"headless:{Guid.NewGuid()}";
+                var session = _sessionManager.CreateHeadlessSession(connectionId, worldId, world, start);
+
+                // Register in the session index (mirrors RegisterSessionAsync) so all existing
+                // verbs (perception, move, ExecuteTool, agent attach) resolve this session.
+                _sessionIndex[session.SessionId] = new SessionMetadata
+                {
+                    SessionId = session.SessionId,
+                    ConnectionId = connectionId,
+                    ConnectedAt = DateTime.UtcNow,
+                    LastActivityAt = DateTime.UtcNow
+                };
+                _connectionToSession[connectionId] = session.SessionId;
+
+                // profile is reserved for future tool-profile wiring; ExecuteToolAsync currently
+                // applies the Player profile to all sessions.
+                Console.WriteLine($"[GameManagementGrain] Created headless session {session.SessionId} in world {worldId} (profile={profile ?? "player"})");
+                return Task.FromResult(HeadlessSessionResult.Ok(session.SessionId, worldId, connectionId));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error creating headless session: {ex.Message}");
+                return Task.FromResult(HeadlessSessionResult.Error($"Failed to create headless session: {ex.Message}"));
+            }
+        }
+
+        public Task<int> ReapIdleHeadlessSessionsAsync(int maxIdleSeconds)
+        {
+            var cutoff = DateTime.UtcNow.AddSeconds(-maxIdleSeconds);
+            int reaped = 0;
+
+            foreach (var meta in _sessionIndex.Values.ToList())
+            {
+                // Only reap headless sessions; client-backed sessions are removed on disconnect.
+                var session = _sessionManager.GetSession(meta.ConnectionId);
+                if (session == null || !session.IsHeadless)
+                    continue;
+
+                if (meta.LastActivityAt <= cutoff)
+                {
+                    _sessionIndex.TryRemove(meta.SessionId, out _);
+                    _connectionToSession.TryRemove(meta.ConnectionId, out _);
+                    _sessionManager.RemoveSession(meta.ConnectionId);
+                    reaped++;
+                    Console.WriteLine($"[GameManagementGrain] Reaped idle headless session {meta.SessionId} (idle since {meta.LastActivityAt:o})");
+                }
+            }
+
+            return Task.FromResult(reaped);
+        }
+
+        public Task<string?> GetPerceptionAsync(string sessionId, bool absoluteCoordinates)
+        {
+            // Absolute coordinates are a god-view read; gate them behind operator access.
+            if (absoluteCoordinates && !OperatorAccess.IsEnabled())
+                return Task.FromResult<string?>(null);
+
+            TouchSession(sessionId);
+
+            if (string.IsNullOrEmpty(sessionId))
+                return Task.FromResult<string?>(null);
+
+            if (!_sessionIndex.TryGetValue(sessionId, out var metadata))
+                return Task.FromResult<string?>(null);
+
+            var session = _sessionManager.GetSession(metadata.ConnectionId);
+            if (session == null)
+                return Task.FromResult<string?>(null);
+
+            try
+            {
+                var perception = session.GetPerception(absoluteCoordinates);
+                return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(perception));
+            }
+            catch
+            {
+                return Task.FromResult<string?>(null);
+            }
+        }
+
+        public Task<string?> GetWorldSnapshotAsync(string worldId)
+        {
+            if (!OperatorAccess.IsEnabled())
+                return Task.FromResult<string?>(null);
+
+            if (string.IsNullOrEmpty(worldId))
+                return Task.FromResult<string?>(null);
+
+            var world = _liveWorlds?.Resolve(worldId);
+            if (world == null)
+                return Task.FromResult<string?>(null);
+
+            try
+            {
+                var mapId = _liveWorlds?.GetPrimaryMapId(worldId) ?? worldId;
+                var snapshot = WorldSnapshotBuilder.Build(world, worldId, mapId);
+                if (snapshot.Truncated)
+                    Console.WriteLine($"[GameManagementGrain] World snapshot for {worldId} truncated (emitted {snapshot.Entities.Count}/{snapshot.EntityCount} entities, {snapshot.Tiles.Count}/{snapshot.TileCount} tiles)");
+                return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(snapshot));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error building world snapshot for {worldId}: {ex.Message}");
+                return Task.FromResult<string?>(null);
+            }
+        }
+
+        public Task<string?> GetMemoryAsync(string sessionId)
+        {
+            // Memories carry absolute world coordinates — a god-view read, gated like
+            // absolute perception and world snapshots.
+            if (!OperatorAccess.IsEnabled())
+                return Task.FromResult<string?>(null);
+
+            if (string.IsNullOrEmpty(sessionId) || !_sessionIndex.TryGetValue(sessionId, out var metadata))
+                return Task.FromResult<string?>(null);
+
+            var session = _sessionManager.GetSession(metadata.ConnectionId);
+            var player = session?.Player;
+            if (session == null || player == null || !player.Has<Aetherium.Components.Memory>())
+                return Task.FromResult<string?>(null);
+
+            TouchSession(sessionId);
+            try
+            {
+                var memory = player.Get<Aetherium.Components.Memory>();
+
+                // Resolve the character's effective decay fallback (world policy × any MemoryProfile),
+                // so effective strength honors per-memory stability and permanence (add-memory-dynamics).
+                var profile = player.Has<Aetherium.Components.MemoryProfile>()
+                    ? player.Get<Aetherium.Components.MemoryProfile>() : null;
+                var dynamics = session.World.MemoryPolicy.ResolveDynamics(
+                    profile?.HalfLifeMultiplier ?? 1.0,
+                    profile?.StabilityGrowthMultiplier ?? 1.0,
+                    profile?.MaxLocationsOverride);
+                var fallbackHalfLife = dynamics.BaseHalfLifeSeconds;
+
+                var dto = new CharacterMemoryDto
+                {
+                    SessionId = sessionId,
+                    LocationsTracked = memory.LocationsTracked,
+                    TotalMemories = memory.SpaceTimeMemoriesTracked,
+                    TotalImpressions = memory.SpaceTimeMemoryImpressions
+                };
+
+                foreach (var m in memory.AllSpaceTimeMemories)
+                {
+                    dto.Memories.Add(new MemoryEntryDto
+                    {
+                        Location = new WorldLocationDto(m.Location.X, m.Location.Y, m.Location.Z),
+                        ContentType = m.ContentType,
+                        Content = m.Content,
+                        Strength = m.Strength,
+                        EffectiveStrength = Aetherium.Core.MemoryPolicy.EffectiveStrength(
+                            m.Strength, m.TimeSinceLastSeen, m.StabilitySeconds, m.Permanent, fallbackHalfLife),
+                        Impressions = m.Impressions,
+                        LastEventTime = m.LastEventTime,
+                        StabilitySeconds = m.StabilitySeconds,
+                        Permanent = m.Permanent
+                    });
+                }
+
+                return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(dto));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error reading memory for session {sessionId}: {ex.Message}");
+                return Task.FromResult<string?>(null);
+            }
+        }
+
+        public Task<string?> GetRecognitionAsync(string worldId, string entityId)
+        {
+            // Recognition state carries individual identities and absolute knowledge — a god-view read,
+            // gated like absolute perception, world snapshots, and memory.
+            if (!OperatorAccess.IsEnabled())
+                return Task.FromResult<string?>(null);
+
+            if (string.IsNullOrEmpty(worldId) || string.IsNullOrEmpty(entityId))
+                return Task.FromResult<string?>(null);
+
+            var world = _liveWorlds?.Resolve(worldId);
+            if (world == null || !world.Entities.TryGetValue(entityId, out var entity))
+                return Task.FromResult<string?>(null);
+
+            if (!entity.Has<Aetherium.Components.IndividualRecognition>())
+                return Task.FromResult<string?>(null);
+
+            try
+            {
+                var recognition = entity.Get<Aetherium.Components.IndividualRecognition>();
+                var halfLife = world.RecognitionPolicy.FamiliarityHalfLifeSeconds;
+                var now = DateTime.UtcNow;
+
+                var dto = new RecognitionDto
+                {
+                    WorldId = worldId,
+                    EntityId = entityId,
+                    Kind = Aetherium.Components.RecognitionKind.Resolve(entity),
+                    KnownCount = recognition.Count
+                };
+
+                foreach (var k in recognition.KnownIndividuals.Values)
+                {
+                    dto.Individuals.Add(new KnownIndividualDto
+                    {
+                        EntityId = k.EntityId,
+                        Kind = k.Kind,
+                        FirstMet = k.FirstMet,
+                        LastSeen = k.LastSeen,
+                        Encounters = k.Encounters,
+                        Strength = k.Strength,
+                        EffectiveFamiliarity = recognition.EffectiveFamiliarity(k, now, halfLife),
+                        StabilitySeconds = k.StabilitySeconds,
+                        Permanent = k.Permanent
+                    });
+                }
+
+                return Task.FromResult<string?>(System.Text.Json.JsonSerializer.Serialize(dto));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error reading recognition for {entityId} in {worldId}: {ex.Message}");
+                return Task.FromResult<string?>(null);
+            }
+        }
+
+        public async Task<ToolExecutionResultDto> ExecuteWorldToolAsync(string worldId, string toolId, Dictionary<string, object> args)
+        {
+            if (!OperatorAccess.IsEnabled())
+                return new ToolExecutionResultDto { Success = false, Message = "Operator access is disabled" };
+
+            if (string.IsNullOrEmpty(worldId))
+                return new ToolExecutionResultDto { Success = false, Message = "World ID cannot be null or empty" };
+
+            var world = _liveWorlds?.Resolve(worldId);
+            if (world == null)
+                return new ToolExecutionResultDto { Success = false, Message = $"World not found or not initialized in this process: {worldId}" };
+
+            var toolRegistry = ServiceProvider.GetService(typeof(Aetherium.Server.Agents.Tools.AgentToolRegistry))
+                as Aetherium.Server.Agents.Tools.AgentToolRegistry;
+            if (toolRegistry == null)
+                return new ToolExecutionResultDto { Success = false, Message = "Tool registry not available" };
+
+            var tool = toolRegistry.GetTool(toolId);
+            if (tool == null)
+                return new ToolExecutionResultDto { Success = false, Message = $"Tool not found: {toolId}" };
+
+            // Only world-building tools may run here: character tools (move, pickup, ...) need a
+            // session context and must not execute through the god-view path.
+            if (!tool.RequiredCapabilities.Contains("world_edit"))
+                return new ToolExecutionResultDto { Success = false, Message = $"Tool '{toolId}' is not a world-building tool (requires world_edit)" };
+
+            try
+            {
+                var context = new Aetherium.Server.Agents.Tools.WorldBuildingToolContext(world, ServiceProvider);
+                var result = await tool.ExecuteAsync(context, args ?? new Dictionary<string, object>());
+                Console.WriteLine($"[GameManagementGrain] Executed world tool '{toolId}' on {worldId}: {(result.Success ? "Success" : "Failed")} - {result.Message}");
+                return result.ToDto();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GameManagementGrain] Error executing world tool {toolId} on {worldId}: {ex.Message}");
+                return new ToolExecutionResultDto { Success = false, Message = $"Error executing world tool: {ex.Message}" };
+            }
+        }
+
         public Task<string?> GetPerceptionAsync(string sessionId)
         {
             if (string.IsNullOrEmpty(sessionId))
@@ -382,6 +699,7 @@ namespace Aetherium.Server.Management
             if (session == null)
                 return Task.FromResult<string?>(null);
 
+            TouchSession(sessionId);
             try
             {
                 var perception = session.GetPerception();
@@ -700,7 +1018,9 @@ namespace Aetherium.Server.Management
                     GameDefinitionVersion = hubConfig?.GameDefinitionVersion ?? request.GameDefinitionVersion,
                     ContentConfig = hubConfig?.ContentConfig ?? request.ContentConfig,
                     EcaConfig = hubConfig?.EcaConfig ?? request.EcaConfig,
-                    Topology = hubConfig?.Topology ?? request.Topology
+                    Topology = hubConfig?.Topology ?? request.Topology,
+                    EconomyConfig = hubConfig?.EconomyConfig ?? request.EconomyConfig,
+                    StartingCurrency = hubConfig?.StartingCurrency ?? request.StartingCurrency
                 };
 
                 // Default to public world
@@ -739,7 +1059,9 @@ namespace Aetherium.Server.Management
                     GameDefinitionVersion = request.GameDefinitionVersion,
                     ContentConfig = request.ContentConfig,
                     EcaConfig = request.EcaConfig,
-                    Topology = request.Topology
+                    Topology = request.Topology,
+                    EconomyConfig = request.EconomyConfig,
+                    StartingCurrency = request.StartingCurrency
                 };
 
                 // Ensure WorldId is set
@@ -1040,12 +1362,78 @@ namespace Aetherium.Server.Management
             catch (Exception ex)
             {
                 Console.WriteLine($"[GameManagementGrain] Error executing tool {toolId} for session {sessionId}: {ex.Message}");
-                return new ToolExecutionResultDto 
-                { 
-                    Success = false, 
-                    Message = $"Error executing tool: {ex.Message}" 
+                return new ToolExecutionResultDto
+                {
+                    Success = false,
+                    Message = $"Error executing tool: {ex.Message}"
                 };
             }
+        }
+
+        private const int MaxBatchActions = 1000;
+
+        public async Task<List<BatchActionResultDto>> ExecuteToolBatchAsync(string sessionId, List<ScriptedActionDto> actions, bool stopOnError)
+        {
+            var results = new List<BatchActionResultDto>();
+
+            if (actions == null || actions.Count == 0)
+                return results;
+
+            if (actions.Count > MaxBatchActions)
+            {
+                results.Add(new BatchActionResultDto
+                {
+                    Index = 0,
+                    Tool = string.Empty,
+                    Success = false,
+                    Message = $"Batch too large: {actions.Count} actions (max {MaxBatchActions})"
+                });
+                return results;
+            }
+
+            // Fail fast on an unknown session with a single result rather than N identical failures.
+            if (string.IsNullOrEmpty(sessionId) || !_sessionIndex.ContainsKey(sessionId))
+            {
+                results.Add(new BatchActionResultDto
+                {
+                    Index = 0,
+                    Tool = string.Empty,
+                    Success = false,
+                    Message = $"Session not found: {sessionId}"
+                });
+                return results;
+            }
+
+            // Runs inside a single grain turn: no other management call interleaves against this
+            // session mid-batch, so ordering is deterministic. Each step reuses ExecuteToolAsync.
+            for (int i = 0; i < actions.Count; i++)
+            {
+                var action = actions[i] ?? new ScriptedActionDto();
+                var args = action.Args ?? new Dictionary<string, object>();
+
+                ToolExecutionResultDto stepResult;
+                try
+                {
+                    stepResult = await ExecuteToolAsync(action.Tool, sessionId, args);
+                }
+                catch (Exception ex)
+                {
+                    stepResult = new ToolExecutionResultDto { Success = false, Message = $"Error executing tool: {ex.Message}" };
+                }
+
+                results.Add(new BatchActionResultDto
+                {
+                    Index = i,
+                    Tool = action.Tool,
+                    Success = stepResult.Success,
+                    Message = stepResult.Message
+                });
+
+                if (stopOnError && !stepResult.Success)
+                    break;
+            }
+
+            return results;
         }
     }
 }

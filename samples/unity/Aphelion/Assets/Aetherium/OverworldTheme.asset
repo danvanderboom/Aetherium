@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 52046c1f3ef452b42bf6d05d0a8a6c90, type: 3}
+  m_Name: OverworldTheme
+  m_EditorClassIdentifier: Aetherium.Unity::Aetherium.Unity.ThemeAsset
+  creatures: []
+  defaultCreaturePrefab: {fileID: 1397442421572227650, guid: b4ff19d9f289d40449a2df8d9231a9fe, type: 3}
+  terrain:
+  - id: Plains
+    prefab: {fileID: 8482290691665492177, guid: 912ad02d47af08b4c9bb5bbaf0918926, type: 3}
+  - id: Forest
+    prefab: {fileID: 3792313168727995522, guid: a191390125ec3314d9b058fafed5f9da, type: 3}
+  - id: Desert
+    prefab: {fileID: 161203014350499729, guid: a198158817ead644a9b515c0e45054bc, type: 3}
+  - id: Hills
+    prefab: {fileID: 3905208788594412746, guid: 77954685d4119e44890478cadee3acc4, type: 3}
+  - id: Road
+    prefab: {fileID: 3009534605199021313, guid: 22b17d4076890a248aca23c94cae10f5, type: 3}
+  - id: Indoors
+    prefab: {fileID: 7897000006512333474, guid: 22322ca15f246784eb9860461a9f29bf, type: 3}
+  - id: Mountain
+    prefab: {fileID: 8383574530356265180, guid: 949b7fc11d2b62949a3f634489d5804b, type: 3}
+  - id: Wall
+    prefab: {fileID: 4194832543702710446, guid: 1deab6ceb446eaf438e33a2f73c28043, type: 3}
+  - id: Water
+    prefab: {fileID: 5981498090283697562, guid: 8ba04ac01d880d742b13e7b0224331c0, type: 3}
+  - id: WindowWall
+    prefab: {fileID: 2650207994774198491, guid: e6bc816e5cb8571489d9e9295560a51b, type: 3}
+  defaultTerrainPrefab: {fileID: 8482290691665492177, guid: 912ad02d47af08b4c9bb5bbaf0918926, type: 3}
+  regionTerrains:
+  - id: Water
+    material: {fileID: 2100000, guid: 84e898cb74ceb3d429e84f9a7adbf947, type: 2}
+  items: []
+  defaultItemPrefab: {fileID: 9018901109629423330, guid: f72b6f53e94555e4f8372ee5061d8957, type: 3}
+  playerPrefab: {fileID: 7026807989520385318, guid: 0f6e2d32e8b8b0f42a86f542c79fb135, type: 3}
+  loudPlaceholderPrefab: {fileID: 0}

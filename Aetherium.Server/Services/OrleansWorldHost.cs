@@ -64,6 +64,8 @@ namespace Aetherium.Server.Services
                 ContentConfig = template.ContentConfig,
                 EcaConfig = template.EcaConfig,
                 Topology = template.Topology,
+                EconomyConfig = template.EconomyConfig,
+                StartingCurrency = template.StartingCurrency,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };
@@ -78,9 +80,11 @@ namespace Aetherium.Server.Services
             // Initialize the world
             await worldGrain.InitializeAsync(config);
 
-            // Set ACL
+            // Set ACL. Must be awaited: this runs on the calling grain's activation context,
+            // and a blocking .Wait() deadlocks against the response being scheduled back
+            // onto that same context (Orleans then expires the message after 30s).
             var aclGrain = _grainFactory.GetGrain<IWorldAclGrain>(worldId.Value);
-            aclGrain.SetAclAsync(acl).Wait(cancellationToken);
+            await aclGrain.SetAclAsync(acl);
 
             // Register in directory
             var worldInfo = await worldGrain.GetInfoAsync();
