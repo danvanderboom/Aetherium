@@ -214,6 +214,22 @@ namespace Aetherium.Client.Contracts
         /// frame was computed (starts at 1; 0 = unsequenced legacy). The store uses it to
         /// drop stale frames and defer ahead-of-anchor ones.</summary>
         public long MoveSequence { get; set; }
+
+        /// <summary>The perceiver's flight envelope, present only when they can fly/pilot;
+        /// drives the altitude gauge. Null for non-flyers, so this is a purely additive,
+        /// non-breaking field mirroring the server's <c>PerceptionDto.FlightEnvelope</c>.</summary>
+        public FlightEnvelopeDto? FlightEnvelope { get; set; }
+    }
+
+    /// <summary>Client mirror of the server's <c>FlightEnvelopeDto</c> — the perceiver's flight
+    /// envelope. Because relative-coordinate perception reports the player at Z 0, the real band
+    /// is surfaced here explicitly. Present only for flyers; null otherwise.</summary>
+    public class FlightEnvelopeDto
+    {
+        public int MinBand { get; set; }
+        public int MaxBand { get; set; }
+        public int CurrentBand { get; set; }
+        public string State { get; set; } = "Airborne";
     }
 
     /// <summary>Mirror of the server's <c>(double r, double g, double b)</c> ambient-tint
