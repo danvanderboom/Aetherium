@@ -26,5 +26,5 @@
 ## 4. Close-out
 
 - [x] 4.1 `openspec validate add-interoception-channel --strict` passes.
-- [ ] 4.2 Update `openspec/specs/perception/spec.md` at archive time (three ADDED requirements).
+- [x] 4.2 Update `openspec/specs/perception/spec.md` at archive time (three ADDED requirements).
 - [x] 4.3 Confirm every `tasks.md` item is checked and every `**Verified by:**` test exists and is green.

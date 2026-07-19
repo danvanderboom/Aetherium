@@ -291,3 +291,172 @@ The grain SHALL follow Orleans grain lifecycle patterns for singleton coordinati
 - **AND** no explicit locking SHALL be required in grain code
 - **AND** ConcurrentDictionary SHALL provide additional thread safety for index
 
+### Requirement: Recognition Memory Retrieval
+The management grain SHALL expose an operator-gated read of a character's individual-recognition memory by world and entity id, resolving the canonical world, so both player characters and NPCs can be inspected.
+
+#### Scenario: Read a character's known individuals
+- **WHEN** `GetRecognitionAsync(worldId, entityId)` is called for a character with recognition state and operator access is enabled
+- **THEN** it SHALL return JSON listing each known individual with kind, first-met, last-seen, encounter count, stored and effective familiarity, stability, and permanence
+
+#### Scenario: Operator gate
+- **WHEN** operator access is disabled
+- **THEN** `GetRecognitionAsync` SHALL return null
+
+#### Scenario: Unknown world or entity
+- **WHEN** the world cannot be resolved or the entity is not present
+- **THEN** `GetRecognitionAsync` SHALL return null
+
+### Requirement: Character Memory Retrieval
+The grain SHALL expose a character's accumulated memories to authorized operators as JSON.
+
+#### Scenario: Retrieve memories for a session
+- **WHEN** `GetMemoryAsync` is called with a valid `sessionId`
+- **THEN** the grain SHALL return the character's memories as JSON, each entry carrying absolute location, content type, content, stored strength, effective (decayed) strength, impression count, and last-seen time
+
+#### Scenario: Unknown session
+- **WHEN** `GetMemoryAsync` is called with an unknown `sessionId`
+- **THEN** the grain SHALL return null and SHALL NOT throw
+
+#### Scenario: Operator gating
+- **WHEN** operator access is disabled
+- **THEN** `GetMemoryAsync` SHALL be denied (memories carry absolute world coordinates and are a god-view read)
+
+### Requirement: Headless Session Provisioning
+The grain SHALL support creating a game session in an existing world without an interactive SignalR client connection, so that automation, tests, and agent runners can place and drive a character with no game client running.
+
+#### Scenario: Create headless session in an existing world
+- **WHEN** `CreateHeadlessSessionAsync` is called with a valid `worldId`
+- **THEN** the grain SHALL construct a `GameSession` bound to a synthetic connection id (for example `headless:{guid}`)
+- **AND** the session SHALL place a player `Character` in that world using the same placement logic as an interactive join
+- **AND** the grain SHALL register the session in its index via the sessionId ↔ connectionId mapping
+- **AND** the grain SHALL return the new `sessionId`
+
+#### Scenario: Create headless session at an explicit start location
+- **WHEN** `CreateHeadlessSessionAsync` is called with a `worldId` and a start location
+- **THEN** the player `Character` SHALL be placed at that location if it is passable
+- **AND** the grain SHALL return the new `sessionId`
+
+#### Scenario: Create headless session in a non-existent world
+- **WHEN** `CreateHeadlessSessionAsync` is called with an unknown `worldId`
+- **THEN** the grain SHALL NOT create a session
+- **AND** SHALL return a failure result indicating the world was not found
+
+#### Scenario: Drive a headless session with existing verbs
+- **WHEN** a headless session exists and `GetPerceptionAsync`, `MoveAsync`, or `ExecuteToolAsync` is called with its `sessionId`
+- **THEN** the grain SHALL resolve the session and execute the operation exactly as for a client-backed session
+- **AND** any perception push to the (client-less) connection SHALL be a safe no-op
+
+#### Scenario: Terminate and reap headless sessions
+- **WHEN** `TerminateSessionAsync` is called with a headless `sessionId`
+- **THEN** the grain SHALL remove the session from `GameSessionManager` and its index
+- **WHEN** a headless session remains idle beyond the configured timeout
+- **THEN** the grain SHALL terminate it automatically
+- **AND** the reaper SHALL only target sessions tagged as headless
+
+### Requirement: Operator Perception Retrieval
+The grain SHALL expose a session's current perception to authorized operators as JSON, including an option to return absolute (un-relativized) world coordinates for debugging.
+
+#### Scenario: Retrieve perception for a valid session
+- **WHEN** `GetPerceptionAsync` is called with a valid `sessionId`
+- **THEN** the grain SHALL return the session's current perception serialized as a `PerceptionDto` JSON string
+
+#### Scenario: Retrieve perception with absolute coordinates
+- **WHEN** perception is requested with the absolute-coordinates option enabled
+- **THEN** the returned `PlayerLocation` SHALL contain the player's true world coordinates
+- **AND** the default behavior (without the option) SHALL remain relativized to (0,0,0)
+
+#### Scenario: Retrieve perception for a non-existent session
+- **WHEN** `GetPerceptionAsync` is called with an unknown `sessionId`
+- **THEN** the grain SHALL return null
+- **AND** SHALL NOT throw an exception
+
+#### Scenario: Perception reflects prior action
+- **WHEN** an action changes session state and perception is retrieved afterward
+- **THEN** the returned perception SHALL reflect the updated state
+
+### Requirement: World State Snapshot
+The grain SHALL provide an omniscient, field-of-view-independent snapshot of a world's tiles and entities, independent of any single session's perception.
+
+#### Scenario: Retrieve a world snapshot
+- **WHEN** `GetWorldSnapshotAsync` is called with a valid `worldId`
+- **THEN** the grain SHALL return a snapshot containing the world's tiles and all entities with absolute coordinates
+- **AND** the snapshot SHALL include entities regardless of visibility or lighting
+
+#### Scenario: Cap oversized snapshots
+- **WHEN** a world's entity or tile count exceeds the snapshot cap
+- **THEN** the snapshot SHALL set a truncation flag rather than silently dropping content
+- **AND** the omitted counts SHALL be logged
+
+#### Scenario: Snapshot for a non-existent world
+- **WHEN** `GetWorldSnapshotAsync` is called with an unknown `worldId`
+- **THEN** the grain SHALL return a failure result or null
+- **AND** SHALL NOT throw an exception
+
+### Requirement: Operator Authorization for God-View Operations
+The grain SHALL restrict headless-session creation, absolute-coordinate perception, and world snapshots to an operator/developer authorization capability, so that ordinary player profiles cannot reach god-view state.
+
+#### Scenario: Player profile denied god-view operations
+- **WHEN** a caller without the operator capability invokes `CreateHeadlessSessionAsync`, absolute-coordinate perception, or `GetWorldSnapshotAsync`
+- **THEN** the grain SHALL deny the operation
+- **AND** SHALL return a failure result indicating insufficient authorization
+
+#### Scenario: Operator caller permitted
+- **WHEN** a caller with the operator capability invokes those operations
+- **THEN** the grain SHALL perform them normally
+
+### Requirement: Batch Action Execution
+The grain SHALL execute an ordered sequence of tool invocations against a single session in one grain call and return a result for each attempted step, so that callers can drive a character with a deterministic, reproducible action script.
+
+#### Scenario: Execute an ordered batch
+- **WHEN** `ExecuteToolBatchAsync` is called with a valid `sessionId` and a list of actions
+- **THEN** the grain SHALL execute the actions in the given order against that session
+- **AND** SHALL return one result per action containing its index, tool id, success flag, and message
+- **AND** the results SHALL be in the same order as the input actions
+
+#### Scenario: Stop on first error
+- **WHEN** `ExecuteToolBatchAsync` is called with `stopOnError` = true and a step fails
+- **THEN** the grain SHALL stop after the failing step
+- **AND** SHALL return the results for the steps attempted so far, ending with the failed step
+
+#### Scenario: Continue past errors
+- **WHEN** `ExecuteToolBatchAsync` is called with `stopOnError` = false and a step fails
+- **THEN** the grain SHALL continue executing the remaining steps
+- **AND** SHALL return a result for every action, each reporting its own success or failure
+
+#### Scenario: Unknown session
+- **WHEN** `ExecuteToolBatchAsync` is called with a session id that is not registered
+- **THEN** the grain SHALL NOT throw
+- **AND** SHALL return a single failure result indicating the session was not found
+
+#### Scenario: Empty and oversized batches
+- **WHEN** `ExecuteToolBatchAsync` is called with an empty action list
+- **THEN** the grain SHALL return an empty result list
+- **WHEN** the action list exceeds the maximum batch size
+- **THEN** the grain SHALL reject the batch with a clear error rather than executing a partial sequence
+
+### Requirement: Runtime World Tool Execution
+The grain SHALL execute world-building tools against a live, running world (resolved from the in-process world registry), so that operators can modify worlds at runtime without regenerating them.
+
+#### Scenario: Execute a world-building tool at runtime
+- **WHEN** `ExecuteWorldToolAsync` is called with a valid `worldId` and a tool that requires the `world_edit` capability
+- **THEN** the grain SHALL execute the tool against that world via a world-building context
+- **AND** SHALL return the tool's result, including any structured data (e.g. a spawned entity id)
+
+#### Scenario: Spawn a creature into a running world
+- **WHEN** `ExecuteWorldToolAsync` runs the `spawnentity` tool with a supported creature type at a passable, unoccupied location
+- **THEN** a new entity SHALL be created and added to the world at that location
+- **AND** the entity SHALL appear in subsequent world snapshots and, when visible, in character perception
+
+#### Scenario: Reject non-world-building tools
+- **WHEN** `ExecuteWorldToolAsync` is called with a tool that does not require the `world_edit` capability
+- **THEN** the grain SHALL refuse to execute it and return a failure result
+
+#### Scenario: Unknown world or tool
+- **WHEN** `ExecuteWorldToolAsync` is called with an unknown `worldId` or an unregistered tool id
+- **THEN** the grain SHALL return a failure result identifying the problem
+- **AND** SHALL NOT throw
+
+#### Scenario: Operator gating
+- **WHEN** operator access is disabled
+- **THEN** `ExecuteWorldToolAsync` SHALL be denied with a failure result
+
