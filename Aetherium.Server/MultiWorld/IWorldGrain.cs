@@ -78,6 +78,28 @@ namespace Aetherium.Server.MultiWorld
         Task<string?> GetPlayerMapAsync(string playerId);
 
         /// <summary>
+        /// Records that <paramref name="playerId"/> now resides on <paramref name="mapId"/> in this
+        /// world, keeping the world grain's player-location record (the "which map is this player on"
+        /// source of truth) in agreement with a re-point performed directly against the map grains
+        /// (see <c>add-boardable-vehicles</c> Phase 0). Unlike <see cref="AddPlayerAsync"/> /
+        /// <see cref="MovePlayerToMapAsync"/>, this does NOT touch map-grain membership — the caller
+        /// has already joined the target map (via <c>IGameMapGrain.JoinPlayerAsync</c>) and left the
+        /// old one; this only updates the location index. Player count is incremented only when the
+        /// player was not previously tracked, so repeated re-points don't inflate it.
+        /// </summary>
+        Task RegisterPlayerLocationAsync(string playerId, string mapId);
+
+        /// <summary>
+        /// Drops <paramref name="playerId"/> from this world's player-location record when a re-point
+        /// moves them to a different world (see <c>add-boardable-vehicles</c> Phase 0). Pairs with
+        /// <see cref="RegisterPlayerLocationAsync"/> on the destination world. Does NOT touch map-grain
+        /// membership — the caller has already left the old map via <c>IGameMapGrain.LeavePlayerAsync</c>
+        /// (which strips the Character and frees the spawn); this only updates the location index and
+        /// decrements the player count. No-op when the player was not tracked here.
+        /// </summary>
+        Task UnregisterPlayerAsync(string playerId);
+
+        /// <summary>
         /// Processes a world tick (delegates to map grains).
         /// </summary>
         Task TickAsync();

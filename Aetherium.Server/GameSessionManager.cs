@@ -344,6 +344,57 @@ namespace Aetherium.Server
             session.ReplaceWorld(builder, worldId, mapId, spawnLocation);
         }
 
+        /// <summary>
+        /// Re-points a live session onto a different world/map and pushes a fresh perception frame —
+        /// the reusable session half of the world/map perception re-point (add-boardable-vehicles
+        /// Phase 0). Swaps the session's <see cref="GameSession.World"/> to one hydrated from
+        /// <paramref name="builder"/> (a target-map snapshot), rebinds
+        /// <see cref="GameSession.WorldId"/>/<see cref="GameSession.MapId"/> and re-anchors the view at
+        /// <paramref name="spawn"/>, optionally swaps the mutation gateway to the target map, runs
+        /// <paramref name="configure"/> (e.g. to apply per-game player vision) before the push, then
+        /// sends <c>ReceivePerceptionUpdate</c> to the session's connection.
+        ///
+        /// <para>
+        /// This runs silo-side, so it is callable both from <c>GameHub</c> (JoinWorld / UsePortal) and
+        /// directly from grains that move a player between maps (e.g. a vehicle boarding a party into
+        /// its interior). Returns false when no live session matches <paramref name="sessionId"/> — a
+        /// detached/headless session is simply not re-pointed.
+        /// </para>
+        /// </summary>
+        public async Task<bool> RepointSessionAsync(
+            string sessionId,
+            Aetherium.WorldBuilders.WorldBuilder builder,
+            string worldId,
+            string mapId,
+            Aetherium.Components.WorldLocation spawn,
+            Aetherium.Server.MultiWorld.IMapMutationGateway? gateway = null,
+            Action<GameSession>? configure = null)
+        {
+            if (string.IsNullOrEmpty(sessionId) || builder is null)
+                return false;
+
+            var session = sessions.Values.FirstOrDefault(s => s.SessionId == sessionId);
+            if (session is null)
+                return false;
+
+            session.ReplaceWorld(builder, worldId, mapId, spawn);
+            if (gateway is not null)
+                session.Gateway = gateway;
+            configure?.Invoke(session);
+
+            // The mirror moved to a new map, so any pending coalesced flush for the old map is stale.
+            dirtyPerception.TryRemove(session.ConnectionId, out _);
+
+            if (hubContext is not null && !string.IsNullOrEmpty(session.ConnectionId))
+            {
+                var perception = session.GetPerception();
+                await hubContext.Clients.Client(session.ConnectionId)
+                    .SendAsync("ReceivePerceptionUpdate", perception);
+            }
+
+            return true;
+        }
+
         public bool RemoveSession(string connectionId)
         {
             dirtyPerception.TryRemove(connectionId, out _);

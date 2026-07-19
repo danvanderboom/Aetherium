@@ -1,9 +1,9 @@
 ## 0. Phase 0 - Session -> world/map perception re-point (foundation)
-- [ ] 0.1 Build grain -> session hydration: construct a session's ECS `World` + view location from a target world/map grain
-- [ ] 0.2 Finish `GameHub.JoinWorld` (currently returns "not yet supported") to load the target world/map into the session and push a fresh perception
-- [ ] 0.3 Close the `GameHub.UsePortal` cross-world `// TODO: Load new world/map into session` using the same re-point path
-- [ ] 0.4 Update `GameSession.WorldId` and `WorldGrain.PlayerLocations` together on every re-point; add an invariant guard
-- [ ] 0.5 Tests: re-point switches perception to the target map and streams a fresh frame; both sources of truth agree
+- [x] 0.1 Build grain -> session hydration: reusable `GameSessionManager.RepointSessionAsync` (swaps the session World from a target-map snapshot builder, rebinds world/map, swaps gateway, pushes a fresh frame) — silo-side so both `GameHub` and grains can drive it
+- [x] 0.2 `GameHub.JoinWorld` routed through the shared `RepointCallerToMapAsync` path (it already hydrated; now it also registers the world-grain player location)
+- [x] 0.3 Close the `GameHub.UsePortal` cross-world `// TODO: Load new world/map into session` — both same-world and cross-world branches now re-point via the shared path
+- [x] 0.4 `IWorldGrain.RegisterPlayerLocationAsync`/`UnregisterPlayerAsync` keep `WorldGrain.PlayerLocations` in agreement with the map-grain re-point; the shared helper updates both sides on every re-point
+- [x] 0.5 Tests: `SessionRepointTests` — the location invariant (register/re-point/unregister, no count inflation) + `RepointSessionAsync` switches the map, pushes a fresh frame, and perception follows the new map; existing `Travel_Rebinds_Session…` isolation test still green
 
 ## 1. Phase 1 - Footprint / multi-tile occupancy
 - [ ] 1.1 Add `Footprint` component (box `Size3d` or explicit relative `Cells`; `OccupiedTiles(anchor)` enumerator, mirroring `WorldChunk.AllLocations`)

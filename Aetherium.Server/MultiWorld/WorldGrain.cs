@@ -291,6 +291,35 @@ namespace Aetherium.Server.MultiWorld
             return Task.FromResult<string?>(mapId);
         }
 
+        public async Task RegisterPlayerLocationAsync(string playerId, string mapId)
+        {
+            if (string.IsNullOrEmpty(playerId) || string.IsNullOrEmpty(mapId))
+                return;
+
+            // Keep the world's player-location index in agreement with a re-point that the caller
+            // performed directly against the map grains (add-boardable-vehicles Phase 0). Only bump
+            // the count when this player wasn't already tracked, so re-points stay idempotent.
+            bool isNew = !_worldState.State.PlayerLocations.ContainsKey(playerId);
+            _worldState.State.PlayerLocations[playerId] = mapId;
+            if (isNew)
+                _worldState.State.Info.PlayerCount++;
+            _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
+            await _worldState.WriteStateAsync();
+        }
+
+        public async Task UnregisterPlayerAsync(string playerId)
+        {
+            if (string.IsNullOrEmpty(playerId))
+                return;
+
+            if (_worldState.State.PlayerLocations.Remove(playerId))
+            {
+                _worldState.State.Info.PlayerCount = Math.Max(0, _worldState.State.Info.PlayerCount - 1);
+                _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
+                await _worldState.WriteStateAsync();
+            }
+        }
+
         public async Task TickAsync()
         {
             if (_worldState.State.Info.State != WorldState.Active)
