@@ -97,9 +97,13 @@ namespace Aphelion.EditorTools
             var rig = new GameObject("Aetherium");
             var behaviour = rig.AddComponent<AetheriumClientBehaviour>();
             var behaviourSo = new SerializedObject(behaviour);
-            behaviourSo.FindProperty("serverUrl").stringValue = "http://localhost:50310";
-            // worldId stays empty: connect joins the server's default session. Paste an
-            // aphelion instance id here (or via the Inspector) to play the sample bundle.
+            behaviourSo.FindProperty("serverUrl").stringValue = "http://localhost:5000";
+            // First Light is the square station: this scene's ThemeAsset binds the station tiles
+            // (Wall/Door), so it joins the square `aphelion` bundle. Create one first with
+            //   aetherctl game create aphelion
+            // For the spherical planet, use the menu "Aetherium → Build Aphelion Planet (H3) Scene"
+            // instead (its theme covers the biome + transport terrain).
+            behaviourSo.FindProperty("joinGameDefinitionId").stringValue = "aphelion";
             behaviourSo.ApplyModifiedPropertiesWithoutUndo();
 
             var mapView = rig.AddComponent<GridMapView>();

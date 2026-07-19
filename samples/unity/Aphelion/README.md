@@ -39,11 +39,22 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
    ```powershell
    dotnet run --project Aetherium.Server
    ```
-   It listens on `http://localhost:50310`.
-3. **Open the project** (Unity Hub → this folder, Unity 6000.5.x) and run the menu item
+   It listens on `http://localhost:5000` (and `https://localhost:5001`), and auto-discovers
+   the game bundles in `Data/Games/`.
+3. **Create a world to join.** The client resolves a *running* instance from the lobby, so
+   create one first — for the square station:
+   ```powershell
+   dotnet run --project Aetherctl -- game create aphelion
+   ```
+   (For the spherical planet, create `aphelion-h3` instead and use the planet scene below.)
+4. **Open the project** (Unity Hub → this folder, Unity 6000.5.x) and run the menu item
    **Aetherium → Build First Light Scene**. It creates `Assets/Scenes/FirstLight.unity`,
-   stand-in primitive prefabs, and a ThemeAsset — all rewireable in the Inspector.
-4. **Press Play.** The client connects, joins the server's default session, and the maze
+   stand-in primitive prefabs, and a station ThemeAsset — all rewireable in the Inspector. The
+   rig's `AetheriumClientBehaviour` is bootstrapped with `serverUrl = http://localhost:5000` and
+   `joinGameDefinitionId = aphelion`, so on Play it lists the lobby and joins the newest running
+   `aphelion` station — no world GUID to paste. (Clear that field and paste a `worldId` to pin one
+   specific instance.)
+5. **Press Play.** The client connects, resolves the station from the lobby, and the maze
    reveals around your cyan avatar as you explore. Controls:
    - **WASD** — move by compass (the client composes the rotate-then-step the server requires)
    - **← / →** — turn 90°; the map sweeps to keep your heading up-screen
@@ -68,11 +79,46 @@ Licensing: **everything committed is CC0 or generated in-repo** — per-asset pr
    `ghostGlowStartCells` / `ghostGlowOpacity` on the EntityViewRegistry component live in
    Play mode to taste. Vision is directional (a 120° forward arc from `game.yaml`
    `player.vision`), so minding your back — and remembering what was behind you — matters.
-5. **To play the `aphelion` bundle** instead of the default world, create an instance and
-   paste its world id into the `AetheriumClientBehaviour` inspector field:
+6. **To pin one specific instance** instead of the newest-of-a-bundle lobby pick, clear
+   `joinGameDefinitionId` and paste a world id into the rig's `worldId` field. List running
+   worlds with `dotnet run --project Aetherctl -- game instances aphelion`.
+
+## Aphelion Prime — the H3 planet
+
+The spherical companion to the station: the whole world the crew orbits, a resolution-4 H3 sphere
+(~288k hex/pentagon cells) of oceans, forests, deserts, hills and mountains, threaded with rivers,
+roads, rail, and 320 tiered settlements (`Data/Games/aphelion-h3/`, design in
+[docs/design/h3-sphere-worldgen.md](../../../docs/design/h3-sphere-worldgen.md)). It has its own
+scene + biome ThemeAsset — the station's Wall/Door theme doesn't cover planet terrain.
+
+1. Vendor the DLLs and start the server as above, then create a planet instance:
    ```powershell
-   Invoke-RestMethod -Method Post "http://localhost:50310/api/management/games/aphelion/instances"
+   dotnet run --project Aetherctl -- game create aphelion-h3
    ```
+2. Menu **Aetherium → Build Aphelion Planet (H3) Scene**. It creates
+   `Assets/Scenes/AphelionPlanet.unity` and `AphelionPlanetTheme.asset`, whose terrain bindings
+   cover the planet's full vocabulary — **water, plains, forest, desert, hills, mountains, plus the
+   transport layers road / rail / subway and the settlement tiles wall / indoor floor / window
+   wall**. The rig is wired to `joinGameDefinitionId = aphelion-h3`.
+3. **Press Play.** The client joins the newest `aphelion-h3` world and the planet reveals around
+   you. Terrain renders as **hexagonal prisms** — a pointy-top hex of circumradius 1/√3 tessellates
+   the axial layout `GridCellLayout` uses for `"h3"`, so tiles meet edge-to-edge (no overlap, so no
+   z-fighting), grounds flush at the walkable plane and mountains/walls rising as taller hex columns.
+   (The smooth `RoundedRegionRenderer` water/biome meshes are square-topology-only, so the planet
+   uses these hex tiles instead.) Vision here is **360°** (from the bundle's `player.vision`), and
+   it's a calm exploration/economy sandbox, so this scene uses the open-world controls:
+   - **WASD** — move by compass; **← / →** turn; **↑ / ↓** step along your heading
+   - **E** — interact: pick up an adjacent item, open/close or unlock an adjacent door
+   - **L** — toggle daylight vs. carried lamp
+
+   Stand in a settlement and you can trade: the server exposes a `market` tool (quote/buy/sell)
+   and grants a joining player a wallet. The Unity sample doesn't surface a market UI yet — drive
+   it from `aetherctl` (`tools test market …`) or wire a panel to `Client.Tools.ExecuteToolAsync("market", …)`.
+
+   > **Tuning the look.** Every binding is editable on `AphelionPlanetTheme.asset` in the Inspector
+   > (biome colors live on the `PL_Rounded*` materials; re-run the menu item to regenerate from the
+   > palette in `AphelionPlanetSceneBootstrap.cs`). Unknown terrain falls back to the Plains ground
+   > slab, never magenta.
 
 ## Overworld sandbox scene
 
@@ -85,12 +131,12 @@ a **translucent window wall**), an `OverworldTheme`, and the client rig.
 To run it:
 
 1. Start the server (it auto-discovers the `overworld` bundle in `Data/Games/`), then create an
-   instance and copy the returned world id:
+   instance:
    ```powershell
-   Invoke-RestMethod -Method Post "http://localhost:50310/api/management/games/overworld/instances"
+   dotnet run --project Aetherctl -- game create overworld
    ```
-2. **Aetherium → Build Overworld Scene**, then paste the world id into the `AetheriumClient`
-   rig's `worldId` field in the Inspector.
+2. **Aetherium → Build Overworld Scene**, then set the `AetheriumClient` rig's
+   `joinGameDefinitionId` to `overworld` in the Inspector (or paste a specific `worldId`).
 3. Press **Play.** The world defaults to **daylight** (this is a sunlit sandbox). Controls:
    - **WASD** — move by compass; **← / →** turn; **↑ / ↓** step along your heading
    - **E** — interact: pick up an adjacent item (e.g. a key), open/close an adjacent door, or
