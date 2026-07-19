@@ -1,7 +1,21 @@
+using System;
 using Orleans;
 
 namespace Aetherium.Model.Vehicles
 {
+    /// <summary>Result of starting a timed voyage (add-boardable-vehicles Phase 3).</summary>
+    [GenerateSerializer]
+    public class VoyageResult
+    {
+        [Id(0)] public bool Success { get; set; }
+        [Id(1)] public string? Error { get; set; }
+        /// <summary>UTC time the vehicle is expected to arrive and re-dock.</summary>
+        [Id(2)] public DateTime EtaUtc { get; set; }
+
+        public static VoyageResult Ok(DateTime etaUtc) => new() { Success = true, EtaUtc = etaUtc };
+        public static VoyageResult Fail(string error) => new() { Success = false, Error = error };
+    }
+
     /// <summary>Snapshot of a vehicle's current state (add-boardable-vehicles).</summary>
     [GenerateSerializer]
     public class VehicleInfo

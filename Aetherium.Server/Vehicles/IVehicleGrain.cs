@@ -43,6 +43,20 @@ namespace Aetherium.Server.Vehicles
         /// transit — mirrors <c>DungeonInstanceGrain.TickAsync</c>.</summary>
         Task TickAsync(System.TimeSpan gameTimeElapsed);
 
+        /// <summary>Takes off from the current dock and starts a timed voyage to a destination surface
+        /// (add-boardable-vehicles Phase 3): removes the exterior footprint from the origin, records an
+        /// ETA <paramref name="voyageMinutes"/> from now, marks the vehicle in transit, and arms an
+        /// Orleans reminder that self-drives arrival. Passengers stay in the interior, which keeps
+        /// ticking en route. Requires the vehicle to be landed.</summary>
+        Task<VoyageResult> DepartAsync(string destinationWorldId, string destinationMapId,
+            int destAnchorX, int destAnchorY, int destAnchorZ, double voyageMinutes);
+
+        /// <summary>One voyage step (called by the voyage reminder, and directly by tests): if the ETA has
+        /// passed, place the exterior at the destination dock, unregister the reminder, and transition to
+        /// landed; otherwise tick the interior and push a voyage-progress update to passengers. No-op when
+        /// not in transit.</summary>
+        Task TickVoyageAsync();
+
         Task<VehicleInfo> GetInfoAsync();
         Task<string?> GetInteriorMapIdAsync();
         Task<IReadOnlyList<string>> GetPassengersAsync();

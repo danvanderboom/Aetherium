@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Orleans;
 using Orleans.Runtime;
@@ -19,8 +20,10 @@ namespace Aetherium.Server.Vehicles
     /// <c>UnregisterPlayerAsync</c> (the cross-world re-point primitives from Phase 0) rather than the
     /// in-world <c>MovePlayerToMapAsync</c>. Auto-discovered by Orleans; reuses the "worldStore" provider.
     /// </summary>
-    public class VehicleGrain : Grain, IVehicleGrain
+    public class VehicleGrain : Grain, IVehicleGrain, IRemindable
     {
+        private const string VoyageReminderName = "vehicle-voyage";
+
         private readonly IPersistentState<VehicleState> _state;
         private readonly IGrainFactory _grainFactory;
         private readonly MapGeneratorRegistry _generatorRegistry;
@@ -52,6 +55,18 @@ namespace Aetherium.Server.Vehicles
             !string.IsNullOrEmpty(worldId) && worldId.StartsWith(InteriorWorldPrefix, System.StringComparison.Ordinal)
                 ? worldId.Substring(InteriorWorldPrefix.Length)
                 : null;
+
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
+        {
+            await base.OnActivateAsync(cancellationToken);
+
+            // Recovery (add-boardable-vehicles Phase 3): a voyage in flight when the grain last
+            // deactivated re-arms its reminder from the persisted ETA, so the journey resumes without a
+            // fresh DepartAsync. If the ETA has already passed while the grain was down, the first wake
+            // arrives it immediately.
+            if (_state.State.InTransit)
+                await TryArmVoyageReminderAsync();
+        }
 
         public async Task InitializeAsync(VehicleConfig config)
         {
@@ -230,6 +245,142 @@ namespace Aetherium.Server.Vehicles
                 await _grainFactory.GetGrain<IGameMapGrain>(_state.State.InteriorMapId).TickAsync(gameTimeElapsed);
         }
 
+        public async Task<VoyageResult> DepartAsync(string destinationWorldId, string destinationMapId,
+            int destAnchorX, int destAnchorY, int destAnchorZ, double voyageMinutes)
+        {
+            if (_state.State.Config is null || string.IsNullOrEmpty(_state.State.InteriorMapId))
+                return VoyageResult.Fail("Vehicle not initialized");
+            if (!_state.State.Landed || string.IsNullOrEmpty(_state.State.DockMapId))
+                return VoyageResult.Fail("Vehicle must be landed to depart");
+            if (string.IsNullOrEmpty(destinationWorldId) || string.IsNullOrEmpty(destinationMapId))
+                return VoyageResult.Fail("destinationWorldId and destinationMapId required");
+
+            // Takeoff: remove the exterior footprint from the origin surface.
+            var originMap = _grainFactory.GetGrain<IGameMapGrain>(_state.State.DockMapId);
+            await originMap.RemoveVehicleExteriorAsync(this.GetPrimaryKeyString());
+
+            var now = DateTime.UtcNow;
+            _state.State.DepartedUtc = now;
+            _state.State.EtaUtc = now.AddMinutes(Math.Max(0.0, voyageMinutes));
+            _state.State.DestWorldId = destinationWorldId;
+            _state.State.DestMapId = destinationMapId;
+            _state.State.DestAnchorX = destAnchorX;
+            _state.State.DestAnchorY = destAnchorY;
+            _state.State.DestAnchorZ = destAnchorZ;
+            _state.State.Landed = false;
+            _state.State.InTransit = true;
+            await _state.WriteStateAsync();
+
+            await TryArmVoyageReminderAsync();
+            await PushVoyageUpdateAsync(arrived: false);
+            return VoyageResult.Ok(_state.State.EtaUtc.Value);
+        }
+
+        public async Task TickVoyageAsync()
+        {
+            if (!_state.State.InTransit)
+                return;
+
+            if (_state.State.EtaUtc is DateTime eta && DateTime.UtcNow >= eta)
+            {
+                await ArriveAsync();
+                return;
+            }
+
+            // En route: keep the interior alive so combat/exploration proceed, and nudge the HUD.
+            if (!string.IsNullOrEmpty(_state.State.InteriorMapId))
+                await _grainFactory.GetGrain<IGameMapGrain>(_state.State.InteriorMapId).TickAsync(TimeSpan.FromMinutes(1));
+            await PushVoyageUpdateAsync(arrived: false);
+        }
+
+        private async Task ArriveAsync()
+        {
+            var cfg = _state.State.Config;
+            if (cfg is null || string.IsNullOrEmpty(_state.State.DestMapId) || string.IsNullOrEmpty(_state.State.DestWorldId))
+                return;
+
+            var destMap = _grainFactory.GetGrain<IGameMapGrain>(_state.State.DestMapId);
+            var placed = await destMap.PlaceVehicleExteriorAsync(
+                this.GetPrimaryKeyString(), cfg.DisplayName,
+                _state.State.DestAnchorX, _state.State.DestAnchorY, _state.State.DestAnchorZ,
+                cfg.FootprintWidth, cfg.FootprintLength, cfg.FootprintDepth,
+                cfg.ExteriorTerrain ?? string.Empty, cfg.LandingTerrain ?? new List<string>());
+
+            if (!placed)
+            {
+                // Destination dock momentarily blocked — stay in transit and retry on the next wake.
+                return;
+            }
+
+            _state.State.DockWorldId = _state.State.DestWorldId;
+            _state.State.DockMapId = _state.State.DestMapId;
+            _state.State.AnchorX = _state.State.DestAnchorX;
+            _state.State.AnchorY = _state.State.DestAnchorY;
+            _state.State.AnchorZ = _state.State.DestAnchorZ;
+            _state.State.Landed = true;
+            _state.State.InTransit = false;
+            _state.State.DestWorldId = null;
+            _state.State.DestMapId = null;
+            _state.State.EtaUtc = null;
+            _state.State.DepartedUtc = null;
+            await _state.WriteStateAsync();
+
+            await TryDisarmVoyageReminderAsync();
+            await PushVoyageUpdateAsync(arrived: true);
+        }
+
+        public Task ReceiveReminder(string reminderName, TickStatus status)
+            => reminderName == VoyageReminderName ? TickVoyageAsync() : Task.CompletedTask;
+
+        private async Task TryArmVoyageReminderAsync()
+        {
+            try
+            {
+                // Orleans' minimum reminder period is 1 minute; each wake re-checks the ETA.
+                await this.RegisterOrUpdateReminder(VoyageReminderName, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+            }
+            catch (Exception ex)
+            {
+                // No reminder service (e.g. a headless/test host without one): the voyage still advances
+                // when TickVoyageAsync is driven externally; it just won't self-schedule.
+                Console.WriteLine($"[VehicleGrain] voyage reminder unavailable: {ex.Message}");
+            }
+        }
+
+        private async Task TryDisarmVoyageReminderAsync()
+        {
+            try
+            {
+                var reminder = await this.GetReminder(VoyageReminderName);
+                if (reminder is not null)
+                    await this.UnregisterReminder(reminder);
+            }
+            catch
+            {
+                // No reminder service or nothing registered — nothing to clean up.
+            }
+        }
+
+        private async Task PushVoyageUpdateAsync(bool arrived)
+        {
+            var sessionManager = SessionManager;
+            if (sessionManager is null || _state.State.Passengers.Count == 0)
+                return;
+
+            var payload = new Dictionary<string, object?>
+            {
+                ["vehicleId"] = this.GetPrimaryKeyString(),
+                ["displayName"] = _state.State.Config?.DisplayName ?? string.Empty,
+                ["inTransit"] = _state.State.InTransit,
+                ["arrived"] = arrived,
+                ["etaUtc"] = _state.State.EtaUtc,
+                ["destMapId"] = _state.State.DestMapId ?? _state.State.DockMapId,
+            };
+
+            foreach (var passenger in _state.State.Passengers.ToList())
+                await sessionManager.NotifyPlayerEventAsync(passenger, "ReceiveVoyageProgress", payload);
+        }
+
         public Task<VehicleInfo> GetInfoAsync()
         {
             var s = _state.State;
@@ -272,5 +423,14 @@ namespace Aetherium.Server.Vehicles
         [Id(8)] public int AnchorY { get; set; }
         [Id(9)] public int AnchorZ { get; set; }
         [Id(10)] public HashSet<string> Passengers { get; set; } = new();
+
+        // --- Voyage (Phase 3) ---
+        [Id(11)] public string? DestWorldId { get; set; }
+        [Id(12)] public string? DestMapId { get; set; }
+        [Id(13)] public int DestAnchorX { get; set; }
+        [Id(14)] public int DestAnchorY { get; set; }
+        [Id(15)] public int DestAnchorZ { get; set; }
+        [Id(16)] public DateTime? DepartedUtc { get; set; }
+        [Id(17)] public DateTime? EtaUtc { get; set; }
     }
 }

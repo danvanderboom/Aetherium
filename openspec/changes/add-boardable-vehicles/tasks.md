@@ -22,12 +22,12 @@
 - [x] 2.6 Tests: `VehicleBoardingTests` — init creates a joinable interior; board moves a player into the interior & off the surface; disembark returns them; capacity rejects surplus; board requires a landed vehicle; boarding re-points a live session (fresh interior frame). Full suite 2513 passing.
 
 ## 3. Phase 3 - Timed voyage
-- [ ] 3.1 `DepartAsync`: remove exterior footprint from the origin surface, compute ETA (10-30 min) via `WorldClock`, mark `InTransit`
-- [ ] 3.2 Make `VehicleGrain : IRemindable` and register an Orleans reminder to self-drive the voyage
-- [ ] 3.3 Each reminder wake before ETA: tick the interior map (`GameMapGrain.TickAsync`) and push a voyage-progress HUD update
-- [ ] 3.4 On ETA: place the exterior footprint at the destination surface dock, unregister the reminder, transition to `Landed`
-- [ ] 3.5 Recovery: re-arm the reminder from persisted `etaGameTime` on grain activation (cluster-restart edge case)
-- [ ] 3.6 Tests: voyage advances over time; arrival re-docks; disembark on the destination surface
+- [x] 3.1 `DepartAsync`: removes the exterior footprint from the origin surface, records an ETA (UtcNow + voyageMinutes; the route/caller decides the 10-30 min duration), marks `InTransit`
+- [x] 3.2 `VehicleGrain : IRemindable` + `RegisterOrUpdateReminder` (added `UseInMemoryReminderService()` to Program.cs — there were no reminder grains before). Reminder arming is try/caught so a host without a reminder service still runs (voyage driven via `TickVoyageAsync`)
+- [x] 3.3 `TickVoyageAsync` (called by the reminder + directly by tests): before ETA, ticks the interior map and pushes a `ReceiveVoyageProgress` update to passengers
+- [x] 3.4 On ETA: places the exterior at the destination dock (`PlaceVehicleExteriorAsync`), unregisters the reminder, transitions to `Landed` at the destination (blocked-dock case retries next wake)
+- [x] 3.5 Recovery: `OnActivateAsync` re-arms the reminder from the persisted ETA when a grain reactivates mid-voyage
+- [x] 3.6 Tests: `VehicleVoyageTests` — depart removes the origin exterior & marks in-transit; a wake before ETA stays in transit; arrival at ETA re-docks at the destination and the passenger (who travelled in the interior) disembarks onto the destination surface; depart requires a landed vehicle
 
 ## 4. Phase 4 - In-transit events
 - [ ] 4.1 On departure, schedule mid-voyage events via `EventSchedulerGrain.ScheduleEventAsync` at game-time offsets
