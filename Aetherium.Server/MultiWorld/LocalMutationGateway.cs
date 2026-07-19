@@ -100,6 +100,22 @@ namespace Aetherium.Server.MultiWorld
                 };
             }));
 
+        public Task<TradeResultDto> TradeAsync(string side, string good, double quantity)
+            => Task.FromResult(_session.WithStateLock(() =>
+            {
+                if (_session.Player is null)
+                    return TradeResultDto.Fail("No player");
+
+                var r = Aetherium.Server.Economy.MarketTrade.ExecuteAt(_session.World, _session.Player, side, good, quantity);
+                double wallet = _session.Player.Has<Aetherium.Components.Wallet>()
+                    ? _session.Player.Get<Aetherium.Components.Wallet>().Currency : 0;
+                return new TradeResultDto
+                {
+                    Success = r.Success, Reason = r.Reason, Side = side, Good = good,
+                    Quantity = r.Quantity, UnitPrice = r.UnitPrice, Total = r.Total, WalletAfter = wallet,
+                };
+            }));
+
         private static InteractionResultDto ToDto(InteractionResult result)
         {
             var dto = new InteractionResultDto

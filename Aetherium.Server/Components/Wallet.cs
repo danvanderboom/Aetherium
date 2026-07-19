@@ -9,6 +9,10 @@ namespace Aetherium.Components
     /// </summary>
     public class Wallet : Component
     {
+        /// <summary>Credits a freshly joined trader starts with — enough to make a few opening trades so
+        /// the economy is reachable from turn one. A per-world data override can come later.</summary>
+        public const double StartingCurrency = 500.0;
+
         public double Currency { get; set; }
 
         public Wallet() : base() { }

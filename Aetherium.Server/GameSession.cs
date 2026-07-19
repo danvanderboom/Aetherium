@@ -612,6 +612,8 @@ namespace Aetherium.Server
 			Player = new Character();
 			Player.Set(new WorldLocation(loc.X, loc.Y, loc.Z));
 			Player.Set(new Inventory());
+			// A starting purse so this session can trade against settlement markets (economy Item 2b).
+			Player.Set(new Wallet { Currency = Wallet.StartingCurrency });
 
 			// For audio test, preload a compass into inventory so compass widget is visible
 			if (worldBuilder is AudioTestWorldBuilder)

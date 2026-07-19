@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Aetherium.Components;
 using Aetherium.Core;
+using Aetherium.Topology;
 
 namespace Aetherium.Server.Economy
 {
@@ -73,6 +76,49 @@ namespace Aetherium.Server.Economy
             var hold = new GoodsHold();
             e.Set(hold);
             return hold;
+        }
+
+        /// <summary>The settlement market a trader standing at <paramref name="loc"/> can trade at: the
+        /// nearest settlement whose core the trader is within (topology distance ≤ the settlement's
+        /// <see cref="Settlement.CoreRadius"/>). Null if the trader isn't in any town. Scans the few
+        /// settlement entities, not the whole terrain.</summary>
+        public static (LocalMarket Market, Settlement Settlement)? ResolveMarketAt(World world, WorldLocation loc)
+        {
+            if (world is null || loc is null) return null;
+            var topo = world.Topology;
+            var here = new GridCoord(loc.X, loc.Y, loc.Z);
+
+            (LocalMarket Market, Settlement Settlement)? best = null;
+            int bestDist = int.MaxValue;
+            foreach (var e in world.Entities.Values)
+            {
+                if (!e.Has<LocalMarket>() || !e.Has<Settlement>() || !e.Has<WorldLocation>()) continue;
+                var s = e.Get<Settlement>();
+                var mloc = e.Get<WorldLocation>();
+                int radius = Math.Max(1, s.CoreRadius);
+                int d = topo.Distance(here, new GridCoord(mloc.X, mloc.Y, mloc.Z));
+                if (d <= radius && d < bestDist)
+                {
+                    best = (e.Get<LocalMarket>(), s);
+                    bestDist = d;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>Resolve the market under <paramref name="trader"/> and buy/sell there. Fails clearly
+        /// when the trader isn't standing in a town, or on an unknown side.</summary>
+        public static TradeResult ExecuteAt(World world, Entity trader, string side, string good, double quantity)
+        {
+            if (!trader.Has<WorldLocation>()) return TradeResult.Fail("trader has no location");
+            var resolved = ResolveMarketAt(world, trader.Get<WorldLocation>());
+            if (resolved is not { } r) return TradeResult.Fail("no market here — stand in a settlement to trade");
+            return (side ?? string.Empty).Trim().ToLowerInvariant() switch
+            {
+                "buy" => Buy(trader, r.Market, good, quantity),
+                "sell" => Sell(trader, r.Market, good, quantity),
+                _ => TradeResult.Fail($"unknown side '{side}' (use buy or sell)"),
+            };
         }
     }
 }

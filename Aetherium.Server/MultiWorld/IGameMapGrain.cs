@@ -92,6 +92,10 @@ namespace Aetherium.Server.MultiWorld
 
         Task<Aetherium.Model.InteractionResultDto> CloseAsync(string sessionId, string targetEntityId);
 
+        /// <summary>Buy or sell a good against the settlement market the session's player is standing in
+        /// (economy Item 2b). Mutates the canonical world's market stock and the player's wallet/hold.</summary>
+        Task<TradeResultDto> TradeAsync(string sessionId, string side, string good, double quantity);
+
         /// <summary>
         /// Resolves a melee attack by the session's Character against an adjacent target, applying
         /// damage to canonical state and fanning out a health-change or entity-removed delta.

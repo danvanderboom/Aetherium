@@ -127,6 +127,48 @@ namespace Aetherium.Test.Economy
         }
 
         [Test]
+        public void ResolveMarketAtFindsTheTownYouAreStandingIn()
+        {
+            var world = new Aetherium.Core.World();
+            var town = new SettlementEntity();
+            town.Set(new WorldLocation(10, 10, 0));
+            town.Set(new Settlement { Name = "Rivertown", Tier = SettlementTier.Town, CoreRadius = 2 });
+            town.Set(Market("Grain", 500, 500, 4.0));
+            world.AddEntity(town);
+
+            Assert.That(MarketTrade.ResolveMarketAt(world, new WorldLocation(11, 10, 0)), Is.Not.Null,
+                "within the core radius resolves the town's market");
+            Assert.That(MarketTrade.ResolveMarketAt(world, new WorldLocation(50, 50, 0)), Is.Null,
+                "far from any settlement resolves nothing");
+        }
+
+        [Test]
+        public void ExecuteAtBuysFromTheColocatedMarket()
+        {
+            var world = new Aetherium.Core.World();
+            var town = new SettlementEntity();
+            town.Set(new WorldLocation(10, 10, 0));
+            town.Set(new Settlement { Name = "Rivertown", CoreRadius = 2 });
+            town.Set(Market("Grain", 500, 500, 4.0));
+            world.AddEntity(town);
+
+            var (trader, wallet) = Trader(1000);
+            trader.Set(new WorldLocation(10, 10, 0)); // standing on the town
+            world.AddEntity(trader);
+
+            var ok = MarketTrade.ExecuteAt(world, trader, "buy", "Grain", 10);
+            Assert.That(ok.Success, Is.True, ok.Reason);
+            Assert.That(wallet.Currency, Is.LessThan(1000), "buying spent from the wallet");
+
+            var (drifter, _) = Trader(1000);
+            drifter.Set(new WorldLocation(80, 80, 0)); // wilderness
+            world.AddEntity(drifter);
+            var noMarket = MarketTrade.ExecuteAt(world, drifter, "buy", "Grain", 1);
+            Assert.That(noMarket.Success, Is.False);
+            Assert.That(noMarket.Reason, Does.Contain("no market"));
+        }
+
+        [Test]
         public void ArbitrageAcrossMarketsNetsAProfit()
         {
             // The gameplay loop: buy cheap at a glutted market, sell dear at a shortage.

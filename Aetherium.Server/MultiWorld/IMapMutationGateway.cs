@@ -41,6 +41,27 @@ namespace Aetherium.Server.MultiWorld
         Task<InteractionResultDto> CloseAsync(string targetEntityId);
 
         Task<AttackResultDto> AttackAsync(string targetEntityId);
+
+        /// <summary>Buy or sell a good against the settlement market the player is standing in
+        /// (<paramref name="side"/> = "buy"/"sell"). Economy Item 2b.</summary>
+        Task<TradeResultDto> TradeAsync(string side, string good, double quantity);
+    }
+
+    /// <summary>Result of <see cref="IMapMutationGateway.TradeAsync"/>: whether the trade filled, why not,
+    /// and — when it did — how much moved at what price, plus the trader's wallet balance after.</summary>
+    [Orleans.GenerateSerializer]
+    public class TradeResultDto
+    {
+        [Orleans.Id(0)] public bool Success { get; set; }
+        [Orleans.Id(1)] public string? Reason { get; set; }
+        [Orleans.Id(2)] public string Side { get; set; } = string.Empty;
+        [Orleans.Id(3)] public string Good { get; set; } = string.Empty;
+        [Orleans.Id(4)] public double Quantity { get; set; }
+        [Orleans.Id(5)] public double UnitPrice { get; set; }
+        [Orleans.Id(6)] public double Total { get; set; }
+        [Orleans.Id(7)] public double WalletAfter { get; set; }
+
+        public static TradeResultDto Fail(string reason) => new() { Success = false, Reason = reason };
     }
 
     /// <summary>

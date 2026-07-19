@@ -977,6 +977,8 @@ namespace Aetherium.Server.MultiWorld
             character.Set(new Aetherium.Components.WorldLocation(spawn.X, spawn.Y, spawn.Z));
             character.Set(new Aetherium.Components.Inventory());
             character.Set(new Aetherium.Components.HasHeading { Heading = 0 });
+            // A starting purse so a joining player can trade against settlement markets (economy Item 2b).
+            character.Set(new Aetherium.Components.Wallet { Currency = Aetherium.Components.Wallet.StartingCurrency });
 
             // Stamp the world's configured resource pools onto the joining character (engine
             // gap-analysis §4.3 — see wire-abilities-live). Fresh instances per character so each
@@ -2654,6 +2656,24 @@ namespace Aetherium.Server.MultiWorld
             });
 
             return Ok();
+        }
+
+        public Task<TradeResultDto> TradeAsync(string sessionId, string side, string good, double quantity)
+        {
+            var ctx = TryBuildActionContext(sessionId);
+            if (ctx is null) return Task.FromResult(TradeResultDto.Fail("Map not initialized or player not on map"));
+
+            // Canonical trade against the settlement market the player stands in — mutates _world's market
+            // stock and the player's wallet/hold. Prices aren't in perception yet, so no fan-out; the
+            // client re-fetches. (Economy Item 2b.)
+            var r = Aetherium.Server.Economy.MarketTrade.ExecuteAt(_world!, ctx.Player, side, good, quantity);
+            double wallet = ctx.Player.Has<Aetherium.Components.Wallet>()
+                ? ctx.Player.Get<Aetherium.Components.Wallet>().Currency : 0;
+            return Task.FromResult(new TradeResultDto
+            {
+                Success = r.Success, Reason = r.Reason, Side = side, Good = good,
+                Quantity = r.Quantity, UnitPrice = r.UnitPrice, Total = r.Total, WalletAfter = wallet,
+            });
         }
 
         public async Task<Aetherium.Model.InteractionResultDto> DropAsync(string sessionId, string itemEntityId)
