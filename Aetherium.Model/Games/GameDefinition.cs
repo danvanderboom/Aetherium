@@ -73,6 +73,12 @@ namespace Aetherium.Model.Games
     {
         /// <summary>The player's vision cone/range. Null = the engine default (omnidirectional).</summary>
         [Id(0)] public Aetherium.Model.Content.VisionConfig? Vision { get; set; }
+
+        /// <summary>The credits a joining player's <c>Wallet</c> starts with, so a world's opening purse
+        /// is per-world data rather than an engine constant. Null = the engine default
+        /// (<c>Aetherium.Components.Wallet.StartingCurrency</c>). The YAML `player.startingCurrency:`
+        /// key binds here.</summary>
+        [Id(1)] public double? StartingCurrency { get; set; }
     }
 
     [GenerateSerializer]

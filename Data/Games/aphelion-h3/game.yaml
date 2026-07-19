@@ -102,6 +102,10 @@ player:
     directional: false
     fieldOfView: 360
     range: 18
+  # A generous opening purse for the planet's trade sandbox (add-starting-currency-data). Per-world
+  # data: omit this key and a joining player falls back to the engine default (Wallet.StartingCurrency,
+  # 500 credits). Tune it per game — a survival crawl might start players with far less.
+  startingCurrency: 750
 
 # A calm exploration/economy sandbox: no permadeath, nothing lost on death.
 death:

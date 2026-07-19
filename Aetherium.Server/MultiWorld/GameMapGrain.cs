@@ -273,6 +273,12 @@ namespace Aetherium.Server.MultiWorld
             if (_mapState.State?.DeathPolicy is not null)
                 _deathPolicy = _mapState.State.DeathPolicy;
 
+            // Rehydrate the per-world opening purse (add-starting-currency-data) from persisted state,
+            // for the same reason: InitializeAsync isn't called again after a silo restart. A brand-new
+            // grain has no MapState.StartingCurrency yet, leaving the field-initializer default in place.
+            if (_mapState.State?.StartingCurrency is { } startingCurrency)
+                _startingCurrency = startingCurrency;
+
             // Recompile the ability catalog + re-stamp resource-pool definitions from persisted config
             // (engine gap-analysis §4.3 — see wire-abilities-live), so abilities survive reactivation
             // without re-running InitializeAsync. Null config yields an empty catalog.
@@ -536,11 +542,12 @@ namespace Aetherium.Server.MultiWorld
             return result.World;
         }
 
-        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null, Aetherium.Model.Economy.EconomyConfig? economyConfig = null)
+        public async Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null, Aetherium.Model.Economy.EconomyConfig? economyConfig = null, double? startingCurrency = null)
         {
             var mapId = this.GetPrimaryKeyString();
 
             _deathPolicy = deathPolicy ?? DeathPolicy.Default;
+            _startingCurrency = startingCurrency ?? Aetherium.Components.Wallet.StartingCurrency;
             ApplyAbilityConfig(abilityConfig);
             ApplyProgressionConfig(progressionConfig);
             ApplyFactionConfig(factionConfig);
@@ -679,6 +686,7 @@ namespace Aetherium.Server.MultiWorld
                 ContentConfig = contentConfig,
                 EcaConfig = ecaConfig,
                 Topology = topology,
+                StartingCurrency = startingCurrency,
             };
 
             await _mapState.WriteStateAsync();
@@ -978,7 +986,9 @@ namespace Aetherium.Server.MultiWorld
             character.Set(new Aetherium.Components.Inventory());
             character.Set(new Aetherium.Components.HasHeading { Heading = 0 });
             // A starting purse so a joining player can trade against settlement markets (economy Item 2b).
-            character.Set(new Aetherium.Components.Wallet { Currency = Aetherium.Components.Wallet.StartingCurrency });
+            // The amount is per-world data (add-starting-currency-data): _startingCurrency comes from the
+            // world's player.startingCurrency, falling back to the Wallet.StartingCurrency engine default.
+            character.Set(new Aetherium.Components.Wallet { Currency = _startingCurrency });
 
             // Stamp the world's configured resource pools onto the joining character (engine
             // gap-analysis §4.3 — see wire-abilities-live). Fresh instances per character so each
@@ -2329,6 +2339,12 @@ namespace Aetherium.Server.MultiWorld
         // reactivation) rather than hardcoded, so different worlds can pick different death models
         // as data. Defaults to DeathPolicy.Default until InitializeAsync/OnActivateAsync sets it.
         private DeathPolicy _deathPolicy = DeathPolicy.Default;
+
+        // Per-world opening purse (add-starting-currency-data), sourced from InitializeAsync's
+        // startingCurrency argument (persisted on MapState so it survives reactivation) rather than
+        // the Wallet.StartingCurrency constant, so different worlds can grant different starting
+        // credits as data. Defaults to the engine constant until InitializeAsync/OnActivateAsync sets it.
+        private double _startingCurrency = Aetherium.Components.Wallet.StartingCurrency;
         private readonly DeathSystem _deathSystem = new DeathSystem();
         private readonly CorpseExpirySystem _corpseExpirySystem = new CorpseExpirySystem();
         private readonly Aetherium.Server.Economy.EconomySystem _economySystem = new Aetherium.Server.Economy.EconomySystem();
@@ -2813,6 +2829,15 @@ namespace Aetherium.Server.MultiWorld
         }
 
         public Task<DeathPolicy> GetDeathPolicyAsync() => Task.FromResult(_deathPolicy);
+
+        public Task<double> GetWalletAsync(string playerId)
+        {
+            var player = GetPlayerCharacter(playerId);
+            var currency = player is not null && player.Has<Aetherium.Components.Wallet>()
+                ? player.Get<Aetherium.Components.Wallet>().Currency
+                : 0.0;
+            return Task.FromResult(currency);
+        }
 
         /// <summary>
         /// Casts a player's ability (engine gap-analysis §4.3, Phase 2 — see wire-abilities-live)
@@ -3632,6 +3657,12 @@ namespace Aetherium.Server.MultiWorld
         /// reactivation without re-running InitializeAsync. Null/empty means square — so any
         /// map persisted before topologies shipped reactivates as square correctly.</summary>
         [Id(17)] public string? Topology { get; set; }
+
+        /// <summary>Per-world opening purse captured at <c>InitializeAsync</c> time
+        /// (add-starting-currency-data), so the grain can rehydrate <c>_startingCurrency</c> on
+        /// reactivation without re-running InitializeAsync. Null means the world specified none — the
+        /// grain falls back to <c>Aetherium.Components.Wallet.StartingCurrency</c>.</summary>
+        [Id(18)] public double? StartingCurrency { get; set; }
     }
 }
 

@@ -1019,7 +1019,8 @@ namespace Aetherium.Server.Management
                     ContentConfig = hubConfig?.ContentConfig ?? request.ContentConfig,
                     EcaConfig = hubConfig?.EcaConfig ?? request.EcaConfig,
                     Topology = hubConfig?.Topology ?? request.Topology,
-                    EconomyConfig = hubConfig?.EconomyConfig ?? request.EconomyConfig
+                    EconomyConfig = hubConfig?.EconomyConfig ?? request.EconomyConfig,
+                    StartingCurrency = hubConfig?.StartingCurrency ?? request.StartingCurrency
                 };
 
                 // Default to public world
@@ -1059,7 +1060,8 @@ namespace Aetherium.Server.Management
                     ContentConfig = request.ContentConfig,
                     EcaConfig = request.EcaConfig,
                     Topology = request.Topology,
-                    EconomyConfig = request.EconomyConfig
+                    EconomyConfig = request.EconomyConfig,
+                    StartingCurrency = request.StartingCurrency
                 };
 
                 // Ensure WorldId is set

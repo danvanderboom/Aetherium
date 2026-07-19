@@ -29,8 +29,10 @@ namespace Aetherium.Server.MultiWorld
         /// items, spawn mix (add-content-definitions); null means legacy hardcoded content.
         /// <paramref name="ecaConfig"/> is the owning world's reactive rules (add-eca-scripting); null
         /// means no rules fire.
+        /// <paramref name="startingCurrency"/> is the credits a joining player's Wallet starts with
+        /// (add-starting-currency-data); null falls back to <see cref="Aetherium.Components.Wallet.StartingCurrency"/>.
         /// </summary>
-        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null, Aetherium.Model.Economy.EconomyConfig? economyConfig = null);
+        Task InitializeAsync(string worldId, string mapName, WorldSize size, string generatorType, Dictionary<string, object> parameters, DeathPolicy? deathPolicy = null, AbilityConfig? abilityConfig = null, ProgressionConfig? progressionConfig = null, FactionConfig? factionConfig = null, Aetherium.Model.Content.ContentConfig? contentConfig = null, Aetherium.Model.Eca.EcaConfig? ecaConfig = null, string? topology = null, Aetherium.Model.Economy.EconomyConfig? economyConfig = null, double? startingCurrency = null);
 
         /// <summary>
         /// Gets the current world state for this map.
@@ -109,6 +111,11 @@ namespace Aetherium.Server.MultiWorld
         /// see openspec/changes/wire-death-respawn-live): the world's configured policy, or
         /// <see cref="DeathPolicy.Default"/> if none was specified.</summary>
         Task<DeathPolicy> GetDeathPolicyAsync();
+
+        /// <summary>The credits currently on <paramref name="playerId"/>'s Wallet on this map
+        /// (add-starting-currency-data). Returns 0 when the player is not on the map or carries no
+        /// Wallet. Lets callers/tests read the per-world opening purse a joining player received.</summary>
+        Task<double> GetWalletAsync(string playerId);
 
         /// <summary>Casts the session's player ability from this map's per-world compiled catalog
         /// (engine gap-analysis §4.3 — see openspec/changes/wire-abilities-live). Gated by actionable

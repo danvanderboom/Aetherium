@@ -92,6 +92,7 @@ namespace Aetherium.Server.MultiWorld
             _worldState.State.EcaConfig = config.EcaConfig;
             _worldState.State.Topology = config.Topology;
             _worldState.State.EconomyConfig = config.EconomyConfig;
+            _worldState.State.StartingCurrency = config.StartingCurrency;
 
             _worldState.State.Info.LastActivityAt = DateTime.UtcNow;
 
@@ -173,7 +174,7 @@ namespace Aetherium.Server.MultiWorld
             if (parameters.ContainsKey("Height"))
                 size.Height = Convert.ToInt32(parameters["Height"]);
 
-            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig, _worldState.State.ContentConfig, _worldState.State.EcaConfig, _worldState.State.Topology, _worldState.State.EconomyConfig);
+            await mapGrain.InitializeAsync(_worldState.State.Info.WorldId, mapName, size, generatorType, parameters, _worldState.State.DeathPolicy, _worldState.State.AbilityConfig, _worldState.State.ProgressionConfig, _worldState.State.FactionConfig, _worldState.State.ContentConfig, _worldState.State.EcaConfig, _worldState.State.Topology, _worldState.State.EconomyConfig, _worldState.State.StartingCurrency);
 
             _worldState.State.Info.MapIds.Add(mapId);
             await _worldState.WriteStateAsync();
@@ -382,6 +383,11 @@ namespace Aetherium.Server.MultiWorld
         /// <summary>Per-world economy recipe (goods/prices/basket/biome production), set once at
         /// InitializeAsync and applied to every map this world creates. Null means the engine default.</summary>
         public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
+
+        /// <summary>Per-world opening purse (add-starting-currency-data), set once at InitializeAsync and
+        /// applied to every map this world creates. Null means every map falls back to
+        /// <see cref="Aetherium.Components.Wallet.StartingCurrency"/>.</summary>
+        public double? StartingCurrency { get; set; }
     }
 }
 

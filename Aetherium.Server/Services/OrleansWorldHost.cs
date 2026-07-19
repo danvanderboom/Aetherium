@@ -65,6 +65,7 @@ namespace Aetherium.Server.Services
                 EcaConfig = template.EcaConfig,
                 Topology = template.Topology,
                 EconomyConfig = template.EconomyConfig,
+                StartingCurrency = template.StartingCurrency,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };

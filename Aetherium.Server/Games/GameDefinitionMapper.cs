@@ -34,6 +34,7 @@ namespace Aetherium.Server.Games
                 EcaConfig = definition.Rules,
                 Topology = definition.World.Topology,
                 EconomyConfig = definition.Economy,
+                StartingCurrency = definition.Player?.StartingCurrency,
                 GameDefinitionId = definition.Id,
                 GameDefinitionVersion = definition.Version,
             };
