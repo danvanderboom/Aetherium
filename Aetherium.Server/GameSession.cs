@@ -578,14 +578,25 @@ namespace Aetherium.Server
 	/// </summary>
 	private void InitializePlayer(WorldBuilder? worldBuilder, WorldLocation? startLocation = null)
 	{
-		// Determine start location
-		if (startLocation == null)
+		// Determine start location.
+		//
+		// NOTE: use the `is null` / `is not null` patterns, NOT `== null` / `!= null`.
+		// WorldLocation is a class that overloads operator== so a null operand always
+		// compares *unequal* — its Equals returns false whenever either side is null
+		// (see Aetherium.Components.WorldLocation). That means `startLocation == null` is
+		// false even when startLocation really is null, which previously skipped spawn
+		// selection entirely and dropped every auto-spawned player onto the (15,15,0)
+		// fallback below. That looked fine on square maps (where (15,15,0) is a real
+		// passable cell near the origin) but spawned off-map on H3/spherical worlds whose
+		// cells use large packed coordinates. The `is` patterns bypass the operator and
+		// test the reference directly.
+		if (startLocation is null)
 		{
 			if (worldBuilder is AudioTestWorldBuilder audioBuilder)
 			{
 				startLocation = audioBuilder.StartLocation;
 			}
-			else if (worldBuilder is FovDiagnosticWorldBuilder fovBuilder && fovBuilder.StartLocation != null)
+			else if (worldBuilder is FovDiagnosticWorldBuilder fovBuilder && fovBuilder.StartLocation is not null)
 			{
 				startLocation = fovBuilder.StartLocation;
 			}
@@ -614,13 +625,16 @@ namespace Aetherium.Server
 		}
 		else
 		{
-			// Fallback
-			var locations = World.EntitiesByLocation.Keys;
-			if (locations.Count > 0)
+			// Fallback: no passable cell was resolved (a degenerate world with no passable
+			// terrain). Spawn on any occupied cell rather than a hardcoded (15,15,0), which is
+			// not a valid coordinate on non-square topologies (e.g. H3, whose cells use large
+			// packed coordinates).
+			var anyLocation = World.EntitiesByLocation.Keys.FirstOrDefault();
+			if (anyLocation is not null)
 			{
-				ViewLocation = new WorldLocation(15, 15, 0);
+				ViewLocation = anyLocation;
 				Player = new Character();
-				Player.Set(new WorldLocation(15, 15, 0));
+				Player.Set(new WorldLocation(anyLocation.X, anyLocation.Y, anyLocation.Z));
 				Player.Set(new Inventory());
 				World.AddEntity(Player);
 			}
