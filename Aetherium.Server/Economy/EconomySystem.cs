@@ -28,8 +28,6 @@ namespace Aetherium.Server.Economy
 
         // Pricing: price = base × clamp(target/stock, Min, Max). Stock is capped so a runaway glut can't
         // grow without bound (its price is already floored well before the cap).
-        private const double MinPriceMult = 0.25;
-        private const double MaxPriceMult = 4.0;
         private const double StockCapFactor = 8.0;
 
         // Trade: throughput = Base × link.Capacity / (1 + length/LengthScale). Capacity is the route's tier
@@ -104,12 +102,9 @@ namespace Aetherium.Server.Economy
 
         private static void Reprice(LocalMarket market)
         {
+            // Same clamp band a player buy/sell uses (GoodMarket.Reprice) — one formula, one place.
             foreach (var gm in market.Goods.Values)
-            {
-                double target = gm.Target > 0 ? gm.Target : 1.0;
-                double mult = Math.Clamp(target / Math.Max(gm.Stock, 1.0), MinPriceMult, MaxPriceMult);
-                gm.Price = gm.BasePrice * mult;
-            }
+                gm.Reprice();
         }
 
         // Arbitrage each undirected link once (canonical by entity-id order): for every good, move some
