@@ -138,6 +138,9 @@ namespace Aetherium.Model.Worlds
         /// <summary>The world's tiling (docs/grid-topologies.md): "square" (default) | "hex" | "tri"
         /// | (later) "h3". Null/empty means square, byte-identically to the pre-topology engine.</summary>
         [Id(16)] public string? Topology { get; set; }
+
+        /// <summary>Per-world economy recipe (goods/prices/basket/biome production). Null → engine default.</summary>
+        [Id(17)] public Aetherium.Model.Economy.EconomyConfig? EconomyConfig { get; set; }
     }
 
     /// <summary>

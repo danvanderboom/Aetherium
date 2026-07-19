@@ -33,6 +33,7 @@ namespace Aetherium.Server.Games
                 ContentConfig = definition.Content,
                 EcaConfig = definition.Rules,
                 Topology = definition.World.Topology,
+                EconomyConfig = definition.Economy,
                 GameDefinitionId = definition.Id,
                 GameDefinitionVersion = definition.Version,
             };

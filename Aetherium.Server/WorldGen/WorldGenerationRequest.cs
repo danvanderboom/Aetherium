@@ -30,6 +30,12 @@ namespace Aetherium.WorldGen
         /// sphere-native layout and skips square-grid-only passes (docs/h3-topology.md).
         /// </summary>
         public string? Topology { get; set; }
+
+        /// <summary>Optional per-world economy recipe (goods/prices/basket/biome production). Flows to
+        /// <see cref="GeneratorContext.Economy"/> so the settlement seeder uses bundle-supplied goods;
+        /// null falls back to the engine default (<c>Goods.DefaultConfig()</c>).</summary>
+        public Aetherium.Model.Economy.EconomyConfig? Economy { get; set; }
+
         public WorldGenerationTemplate Template { get; set; } = WorldGenerationTemplate.Dungeon;
         public int Width { get; set; } = 80;
         public int Height { get; set; } = 80;

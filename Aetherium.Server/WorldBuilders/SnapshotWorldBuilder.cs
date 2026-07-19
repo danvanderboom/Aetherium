@@ -57,6 +57,9 @@ namespace Aetherium.WorldBuilders
                 // walkable H3 ground, and joining players spawn off-map. RegenerateFromRecipe and
                 // InitializeAsync both set this; the snapshot-hydrate path (which takes precedence) must too.
                 Topology = recipe.Topology,
+                // Carry the economy recipe too, so a regenerate-from-recipe rehydration re-seeds
+                // settlements with the same bundle-supplied goods rather than the engine default.
+                Economy = recipe.Economy,
             };
 
             var passes = BuildPasses(recipe.Template);

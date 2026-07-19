@@ -64,6 +64,7 @@ namespace Aetherium.Server.Services
                 ContentConfig = template.ContentConfig,
                 EcaConfig = template.EcaConfig,
                 Topology = template.Topology,
+                EconomyConfig = template.EconomyConfig,
                 CreatedAt = System.DateTime.UtcNow,
                 CreatedBy = "system" // TODO: Get from context
             };
