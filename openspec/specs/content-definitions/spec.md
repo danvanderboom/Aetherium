@@ -1,7 +1,8 @@
-# content-definitions Specification (Delta)
+# content-definitions Specification
 
-## ADDED Requirements
-
+## Purpose
+TBD - created by archiving change add-content-definitions. Update Purpose after archive.
+## Requirements
 ### Requirement: Content Config Data Model
 
 `Aetherium.Model.Content.ContentConfig` SHALL define creatures (`CreatureDefinition`: id, name,
@@ -40,10 +41,10 @@ and non-positive health or spawn weight. It SHALL warn (not error) when a factio
 
 ### Requirement: Data-Driven Population
 
-WHEN a world is created with a `ContentConfig` whose spawn table is non-empty, every monster
-placed by the population passes SHALL be re-materialized from a weighted draw over the spawn
-table — health, attack power, action speed, glyph/color tile, and `CreatureTypeTag` all taken
-from the drawn `CreatureDefinition` — deterministically per world seed. A world with no
+Population SHALL be data-driven. In a world created with a `ContentConfig` whose spawn table is
+non-empty, every monster placed by the population passes SHALL be re-materialized from a weighted draw
+over the spawn table — health, attack power, action speed, glyph/color tile, and `CreatureTypeTag` all
+taken from the drawn `CreatureDefinition` — deterministically per world seed. A world with no
 `ContentConfig` SHALL be populated exactly as today (legacy `Monster`, glyph `M`).
 
 **Verified by:** `GameInstanceTests.CreateInstance_PopulatesFromSpawnTable`,
@@ -111,3 +112,4 @@ plus one `EntityKindTag` per defined creature and item.
 - **WHEN** a config defining `wolf` and `healing_salve` is compiled
 - **THEN** the catalog's atlas contains entity-kind tags `wolf` and `healing_salve` alongside
   the engine defaults
+

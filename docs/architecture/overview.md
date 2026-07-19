@@ -137,6 +137,6 @@ Detailed in [server.md](server.md), [clients.md](clients.md), and [tooling-and-d
 
 ## Development workflow
 
-- Spec-driven development via **OpenSpec**: `openspec/specs/` holds ~32 capability specs (current truth), `openspec/changes/` holds active proposals. The flight, 3D-depth, cognition (memory/recognition/interoception), and aetherctl-operator changes were archived into the specs on 2026-07-19; some older completed changes still await archival. See [openspec/AGENTS.md](../../openspec/AGENTS.md).
+- Spec-driven development via **OpenSpec**: `openspec/specs/` holds ~38 capability specs (current truth), `openspec/changes/` holds active proposals. A large batch of completed changes — flight, 3D-depth, cognition (memory/recognition/interoception), aetherctl operator tooling, combat, ECA scripting, content/instance/persistence work — was archived into the specs on 2026-07-19; the remaining active changes are genuine in-progress proposals plus `add-xbox-controller-unity` (complete, but blocked on `add-unity-2d-client` archiving first). See [openspec/AGENTS.md](../../openspec/AGENTS.md).
 - Dev scripts: `start-game-test.ps1` / `stop-game.ps1` (run server + console client with PID tracking), `scripts/monitor-game.ps1` / `monitor-lite.ps1` (attach to the monitoring WebSocket), `scripts/start-llm-agents.ps1`.
 - Tests: `dotnet test` (see [docs/audits/README.md](../audits/2026-07-03-initial-subsystem-audit/README.md) for current ground-truth results and runtime caveats).

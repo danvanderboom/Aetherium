@@ -88,9 +88,9 @@ already emit.
 
 ### Requirement: Rules React to Creature Death
 
-WHEN a world is created with an `EcaConfig` and a monster is defeated by a melee or ability kill, the
-`creature_died` event SHALL be raised with the victim's creature type, the killer, and the death
-location, and every matching rule's actions SHALL execute — `spawn_creature` materializing a
+In a world created with an `EcaConfig`, the `creature_died` event SHALL be raised when a monster is
+defeated by a melee or ability kill — carrying the victim's creature type, the killer, and the death
+location — and every matching rule's actions SHALL execute: `spawn_creature` materializing a
 content-catalog creature at the death location, `deal_damage` routing through the map's damage pipeline,
 `apply_status` applying a shipped status. A world with no `EcaConfig` SHALL behave exactly as today.
 

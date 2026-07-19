@@ -6,7 +6,7 @@ Cross-cutting simulation services (`WorldClock`, `WeatherSystem`, `EventSchedule
 process-wide singletons driven concurrently by many Orleans region/world tick activations.
 This capability defines their thread-safety and time-progression contracts.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Concurrency-safe shared simulation singletons
 
