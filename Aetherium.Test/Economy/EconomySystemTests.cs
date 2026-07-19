@@ -50,6 +50,43 @@ namespace Aetherium.Test.Economy
         }
 
         [Test]
+        public void SeederHonoursACustomPerWorldRecipe()
+        {
+            // A bundle-supplied economy: a wholly different goods vocabulary and biome map. The seeder must
+            // use it verbatim — proving goods/recipes are data, not the hard-coded default.
+            var cfg = new Aetherium.Model.Economy.EconomyConfig
+            {
+                Goods = new()
+                {
+                    new() { Name = "Spice",   BasePrice = 12.0, ConsumePerPop = 0.002 },
+                    new() { Name = "Crystal", BasePrice = 40.0, ConsumePerPop = 0.001 },
+                },
+                CoastalGood = "Pearl",
+                CoastalPerPop = 0.004,
+                Production = new()
+                {
+                    new() { Biome = "Desert", Good = "Spice",   PerPop = 0.02 },
+                    new() { Biome = "Hills",  Good = "Crystal", PerPop = 0.01 },
+                },
+            };
+
+            var e = new SettlementEntity();
+            e.Set(new WorldLocation(0, 0, 0));
+            EconomySeeder.Seed(e, new Settlement { Biome = "Desert", Coastal = true, Population = 10000 }, cfg);
+
+            var producer = e.Get<Producer>();
+            Assert.That(producer.RatesPerStep.ContainsKey("Spice"), Is.True, "a desert town produces the recipe's Spice");
+            Assert.That(producer.RatesPerStep.ContainsKey("Pearl"), Is.True, "a coastal town lands the recipe's Pearl");
+            Assert.That(producer.RatesPerStep.ContainsKey(Goods.Grain), Is.False, "the default goods must not leak in");
+
+            var market = e.Get<LocalMarket>();
+            Assert.That(market.Goods.Keys, Is.EquivalentTo(new[] { "Spice", "Crystal" }),
+                "the market carries exactly the recipe's goods");
+            Assert.That(market.Goods["Crystal"].Price, Is.EqualTo(40.0).Within(1e-9),
+                "it opens at the recipe's base price, not a default");
+        }
+
+        [Test]
         public void PopulationScalesTheEconomy()
         {
             var big = Seeded("Plains", false, 1_000_000);

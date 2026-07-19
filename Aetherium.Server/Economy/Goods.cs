@@ -53,5 +53,29 @@ namespace Aetherium.Server.Economy
             "Desert" => (Grain, 0.0050),   // oasis agriculture — thinner than the plains
             _ => null,
         };
+
+        /// <summary>The built-in economy recipe as data (<see cref="Aetherium.Model.Economy.EconomyConfig"/>):
+        /// the exact goods, prices, basket, coastal bonus, and biome production the slice hard-coded above,
+        /// packaged so a bundle-supplied recipe can replace it and the seeder consumes both the same way.
+        /// This is the data-driven "lift" of the tables in this file — the values still live here.</summary>
+        public static Aetherium.Model.Economy.EconomyConfig DefaultConfig() => new()
+        {
+            Goods = new()
+            {
+                new() { Name = Grain,  BasePrice = BasePrice[Grain],  ConsumePerPop = ConsumePerPop[Grain] },
+                new() { Name = Timber, BasePrice = BasePrice[Timber], ConsumePerPop = ConsumePerPop[Timber] },
+                new() { Name = Ore,    BasePrice = BasePrice[Ore],    ConsumePerPop = ConsumePerPop[Ore] },
+                new() { Name = Fish,   BasePrice = BasePrice[Fish],   ConsumePerPop = ConsumePerPop[Fish] },
+            },
+            CoastalGood = Fish,
+            CoastalPerPop = CoastalFishPerPop,
+            Production = new()
+            {
+                new() { Biome = "Plains", Good = Grain,  PerPop = 0.0100 },
+                new() { Biome = "Forest", Good = Timber, PerPop = 0.0100 },
+                new() { Biome = "Hills",  Good = Ore,    PerPop = 0.0100 },
+                new() { Biome = "Desert", Good = Grain,  PerPop = 0.0050 },
+            },
+        };
     }
 }
