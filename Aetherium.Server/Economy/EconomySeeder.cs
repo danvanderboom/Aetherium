@@ -19,38 +19,41 @@ namespace Aetherium.Server.Economy
         public const double StockHorizon = 100.0;
 
         /// <summary>Give <paramref name="entity"/> production, consumption, and a market priced at
-        /// equilibrium. Population scales every rate, so a capital dwarfs a village.</summary>
-        public static void Seed(Entity entity, Settlement s)
+        /// equilibrium, from the goods/recipe in <paramref name="config"/> (per-world data; null uses the
+        /// built-in <see cref="Goods.DefaultConfig"/>). Population scales every rate, so a capital dwarfs a
+        /// village.</summary>
+        public static void Seed(Entity entity, Settlement s, Aetherium.Model.Economy.EconomyConfig? config = null)
         {
+            var cfg = config ?? Goods.DefaultConfig();
             double pop = Math.Max(1, s.Population);
 
             var producer = new Producer();
-            var primary = Goods.PrimaryProduction(s.Biome);
-            if (primary is { } p) producer.RatesPerStep[p.Good] = p.PerPop * pop;
-            if (s.Coastal)
-                producer.RatesPerStep[Goods.Fish] =
-                    producer.RatesPerStep.GetValueOrDefault(Goods.Fish) + Goods.CoastalFishPerPop * pop;
+            var primary = cfg.Production.Find(p => p.Biome == s.Biome);
+            if (primary != null) producer.RatesPerStep[primary.Good] = primary.PerPop * pop;
+            if (s.Coastal && !string.IsNullOrEmpty(cfg.CoastalGood))
+                producer.RatesPerStep[cfg.CoastalGood] =
+                    producer.RatesPerStep.GetValueOrDefault(cfg.CoastalGood) + cfg.CoastalPerPop * pop;
 
             var consumer = new Consumer();
-            foreach (var (good, perPop) in Goods.ConsumePerPop)
-                consumer.RatesPerStep[good] = perPop * pop;
+            foreach (var g in cfg.Goods)
+                consumer.RatesPerStep[g.Name] = g.ConsumePerPop * pop;
 
             // A market for every good the place makes or needs, seeded at its target stock so it opens at
             // the base price and only moves as production/consumption/trade pull it off equilibrium.
             var market = new LocalMarket();
-            foreach (var good in Goods.All)
+            foreach (var g in cfg.Goods)
             {
-                double consume = consumer.RatesPerStep.GetValueOrDefault(good);
-                double produce = producer.RatesPerStep.GetValueOrDefault(good);
+                double consume = consumer.RatesPerStep.GetValueOrDefault(g.Name);
+                double produce = producer.RatesPerStep.GetValueOrDefault(g.Name);
                 // Target tracks consumption; a pure exporter (produces, barely consumes) still gets a
                 // sensible target from its own output so its glut price has a floor to fall to.
                 double target = Math.Max(consume, produce) * StockHorizon;
-                market.Goods[good] = new GoodMarket
+                market.Goods[g.Name] = new GoodMarket
                 {
-                    BasePrice = Goods.BasePrice.GetValueOrDefault(good, 1.0),
+                    BasePrice = g.BasePrice,
                     Target = target,
                     Stock = target,
-                    Price = Goods.BasePrice.GetValueOrDefault(good, 1.0),
+                    Price = g.BasePrice,
                 };
             }
 

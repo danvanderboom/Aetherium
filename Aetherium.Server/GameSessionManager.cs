@@ -266,6 +266,28 @@ namespace Aetherium.Server
         }
 
         /// <summary>
+        /// Completes once the debounced perception fan-out has fully drained: no session is
+        /// still marked dirty and no flush task is pending or mid-flight. Because
+        /// <see cref="SchedulePerceptionFlush"/> dispatches ~<see cref="PerceptionFlushWindowMs"/>ms
+        /// after a mutation, a mutation's <c>ReceivePerceptionUpdate</c> can land well after the
+        /// grain call that produced it has returned. A caller that needs a clean observation
+        /// boundary — e.g. a test about to reset its dispatch capture and assert which
+        /// connections receive the NEXT mutation — must await this first so an earlier
+        /// mutation's in-flight flush doesn't bleed across the boundary. Polls until quiescent
+        /// or <paramref name="timeout"/> elapses (returns either way; it's a settle, not a gate).
+        /// </summary>
+        public async Task WaitForPerceptionQuiescenceAsync(TimeSpan timeout)
+        {
+            var start = DateTime.UtcNow;
+            while (DateTime.UtcNow - start < timeout)
+            {
+                if (dirtyPerception.IsEmpty && System.Threading.Volatile.Read(ref perceptionFlushScheduled) == 0)
+                    return;
+                await Task.Delay(10);
+            }
+        }
+
+        /// <summary>
         /// Creates a session with a world builder (legacy single-world mode).
         /// </summary>
         public GameSession CreateSession(string connectionId, WorldBuilder worldBuilder)

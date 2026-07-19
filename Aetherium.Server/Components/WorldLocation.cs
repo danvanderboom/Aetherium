@@ -68,16 +68,26 @@ namespace Aetherium.Components
 
         public static bool Equals(WorldLocation? rhs, WorldLocation? lhs)
         {
-            //if (rhs is null && lhs is null)
-            //    return true;
+            if (rhs is null && lhs is null)
+                return true;
 
             if (rhs is null || lhs is null)
                 return false;
 
+            // "None" is a sentinel for "no location" and must not compare equal to a real
+            // (0, 0, 0) coordinate. Two None values are equal to each other; a None value is
+            // never equal to a located one, regardless of its X/Y/Z.
+            if (rhs.IsNone || lhs.IsNone)
+                return rhs.IsNone && lhs.IsNone;
+
             return lhs.X == rhs.X && lhs.Y == rhs.Y && lhs.Z == rhs.Z;
         }
 
-        public override int GetHashCode() => ToString().GetHashCode();
+        // Keep the hash consistent with Equals: all None values share one bucket, distinct
+        // from any real coordinate (a real (0,0,0) hashes on its coordinate string, not here).
+        public override int GetHashCode() => IsNone ? NoneHashCode : ToString().GetHashCode();
+
+        static readonly int NoneHashCode = "WorldLocation.None".GetHashCode();
 
         public static bool operator ==(WorldLocation? lhs, WorldLocation? rhs) => Equals(lhs, rhs);
 

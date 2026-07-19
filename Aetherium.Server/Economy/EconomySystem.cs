@@ -129,9 +129,11 @@ namespace Aetherium.Server.Economy
                     double throughput = BaseThroughput * Math.Max(0.0, link.Capacity)
                                         / (1.0 + Math.Max(0, link.Length) / LengthScale);
 
-                    foreach (var good in Goods.All)
+                    // Trade every good the source market carries; the good vocabulary is whatever the
+                    // seeded markets hold (per-world data), not a fixed global list.
+                    foreach (var good in la.Goods.Keys)
                     {
-                        if (!la.Goods.TryGetValue(good, out var ga) || !lb.Goods.TryGetValue(good, out var gb))
+                        if (!lb.Goods.TryGetValue(good, out var gb) || !la.Goods.TryGetValue(good, out var ga))
                             continue;
                         var (src, dst) = ga.Price <= gb.Price ? (ga, gb) : (gb, ga);
                         double gap = dst.Price - src.Price;
