@@ -38,6 +38,26 @@ namespace Aetherium.Test.WorldGen
         }
 
         [Test]
+        public void RailPlacesAStationMarkerAtEveryMajorCity()
+        {
+            var world = FlatWorld(out var cells);
+            var s = Settlements(world, cells);
+            new H3TransitNetwork().Build(world, s, railCapacity: 6, subwayCapacity: 8, subwayBand: -2);
+
+            var stations = world.EntitiesByLocation.Values
+                .SelectMany(bucket => bucket.Values)
+                .Where(e => e.Has<Station>())
+                .Select(e => e.Get<Station>())
+                .ToList();
+
+            int majors = s.Count(x => x.Tier >= SettlementTier.City);
+            Assert.That(stations.Count, Is.EqualTo(majors), "a station marks each rail stop (the City+ tier)");
+            Assert.That(stations.All(st => st.LineId == "rail"), Is.True, "every marker belongs to the rail line");
+            Assert.That(stations.Select(st => st.StopIndex).Distinct().Count(), Is.EqualTo(majors),
+                "each station has a distinct ordinal along the line");
+        }
+
+        [Test]
         public void SubwaysRunUndergroundFromEachCapital()
         {
             var world = FlatWorld(out var cells);

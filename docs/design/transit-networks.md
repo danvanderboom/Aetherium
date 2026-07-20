@@ -1,6 +1,6 @@
 # Design: Transit Networks (Rails, Roads, Subways, Bus Routes)
 
-**Status:** 🟡 Partially built — a rail backbone and underground subways across bands are generated and traversable on H3 planets (`H3TransitNetwork` + the flight-plan follower); stations, scheduled/AdHoc/bus services, and boardable vehicles remain proposal. · **OpenSpec change:** `add-transit-networks` · **Depends on:** [`flying-entities`](flying-entities.md), [`boardable-vehicles`](boardable-vehicles.md)
+**Status:** 🟡 Partially built — a rail backbone and underground subways across bands are generated and traversable on H3 planets (`H3TransitNetwork`), and the rail line is now **rideable**: `Station` markers plus a `TransitServiceGrain` run a boardable train station-to-station (dwell → timed voyage → loop), reusing the boardable-vehicles machinery, so a player boards at one station and alights at the next. Still proposal: the generic topology-agnostic `TransitNetworkPass` (Poisson stations, wide corridors, per-world config), monorail/AdHoc/Manual/bus services, and inhabited corridors. · **OpenSpec change:** `add-transit-networks` · **Depends on:** [`flying-entities`](flying-entities.md), [`boardable-vehicles`](boardable-vehicles.md)
 
 ## Summary
 

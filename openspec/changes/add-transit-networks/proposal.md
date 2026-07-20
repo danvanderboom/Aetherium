@@ -51,8 +51,15 @@ scope of this change:
   engine a `ServiceGrain` drives station-to-station.
 - **Inhabited corridors / `TransitVenuePass`** (Phase 5) — none.
 
-Net: the generation *concepts* are proven on H3 as **economy infrastructure**; the **player-facing,
-rideable** feature (stations → boardable scheduled services on the existing lines, reusing the boardable-
-vehicles voyage machinery) is the natural next slice and the bulk of this change. Task checkboxes below
-are left unchecked because they specify the *generic* pass + rideable services, which `H3TransitNetwork`
-does not provide.
+**Update (2026-07-20):** the **rideable-service slice has now landed.** `Station` markers are placed on
+the rail line (`TransitServicePlanner` + an `H3TransitNetwork` hook), and a `TransitServiceGrain`
+(`Aetherium.Server/Transit`) drives a train — a boardable `VehicleGrain` — around an ordered list of
+station docks, dwelling then departing on a timed voyage, looping. It reuses the boardable-vehicles
+voyage machinery wholesale, so a player boards the parked train at one station and alights at the next
+(`TransitServiceTests`). That checks tasks 1.5 and 3.1–3.4.
+
+Net: the generation *concepts* are proven on H3 as **economy infrastructure**, and transit is now
+**rideable** on the existing rail line. What remains is the **generic, topology-agnostic
+`TransitNetworkPass`** (Poisson-disc stations, wide `CorridorProfile` carver, per-world config threading),
+Phase 2 (monorail/ramps/validation), Phase 4 (AdHoc/Manual), and Phase 5 (inhabited corridors) — plus
+service caps (3.5) and auto-boarding NPC crowds. Those checkboxes stay unchecked.

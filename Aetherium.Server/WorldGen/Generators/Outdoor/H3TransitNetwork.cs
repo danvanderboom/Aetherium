@@ -45,6 +45,14 @@ namespace Aetherium.WorldGen.Generators.Outdoor
                     EconomySeeder.LinkMode(a.Entity, b.Entity, "rail", railCapacity, len);
                     edges.Add(new TransitEdge(a, b, "rail", len));
                 }
+
+                // Platform markers at every rail stop, so the backbone is a visible, queryable line a
+                // rideable service can be stood up over (add-transit-networks Phase 1). Non-obstructing,
+                // co-located with the city core; the ordered stops mirror the majors list.
+                var stops = majors
+                    .Select(m => (m.Center, m.Entity.Has<Settlement>() ? m.Entity.Get<Settlement>().Name : "Station"))
+                    .ToList();
+                Aetherium.Server.Transit.TransitServicePlanner.PlaceStations(world, "rail", stops);
             }
 
             // Subway: each capital to its two nearest cities, underground on the subway band — the densest,
