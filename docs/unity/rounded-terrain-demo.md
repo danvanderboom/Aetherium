@@ -76,5 +76,19 @@ All non-visual logic is covered by headless tests (Unity batchmode `-nographics`
 - PlayMode: `WaterRegionRenderingTests`, `TilemapLightingTests`,
   `RoundedTerrainDemoTests`.
 
-The only thing tests can't assert is whether the water *looks* good — that's the
-visual sign-off above.
+The *appearance* is covered too, by an automated render sign-off:
+`RoundedWaterVisualTests` (PlayMode) renders the demo lake to a RenderTexture on a
+real GPU and asserts the measurable half of "looks good" — deep water reads blue,
+shore is brighter than the deep interior (foam + shallows), the sandy island reads
+warm (not washed over), pixels shift frame-to-frame (waves animate), and the warm
+ambient render is warmer than a neutral one. It also writes the frames to PNG
+(`ROUNDED_WATER_CAPTURE_DIR`, default `Application.temporaryCachePath/rounded-water-verify`)
+for a human glance. It needs a graphics device, so run it *without* `-nographics`:
+
+```
+Unity.exe -runTests -batchmode -projectPath Aetherium.Unity -testPlatform PlayMode \
+  -testFilter Aetherium.Unity.Tests.RoundedWaterVisualTests -testResults results.xml
+```
+
+The only thing left to human taste is whether the water is *pretty* — the captured
+PNGs above are there for that glance.
