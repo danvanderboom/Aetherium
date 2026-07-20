@@ -483,6 +483,12 @@ Light sources found:
                             foreach (var e in ents.Values)
                             {
                                 var door = e.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+                                if (e.Has<Aetherium.Components.Boardable>()
+                                    && !affordances.Any(a => a.Action == "board" && a.TargetId == e.EntityId))
+                                {
+                                    // A landed boardable vehicle whose footprint reaches this cell — offer to board.
+                                    affordances.Add(new AffordanceDto { Action = "board", ActorId = player.EntityId, TargetId = e.EntityId });
+                                }
                                 if (door != null)
                                 {
                                     if (door.IsLocked)
@@ -733,6 +739,12 @@ Light sources found:
                         foreach (var e in ents.Values)
                         {
                             var door = e.AllComponents.OfType<OpensAndCloses>().FirstOrDefault();
+                            if (e.Has<Aetherium.Components.Boardable>()
+                                && !affordances.Any(a => a.Action == "board" && a.TargetId == e.EntityId))
+                            {
+                                // A landed boardable vehicle whose footprint reaches this cell — offer to board.
+                                affordances.Add(new AffordanceDto { Action = "board", ActorId = player.EntityId, TargetId = e.EntityId });
+                            }
                             if (door == null)
                                 continue;
                             if (door.IsLocked)
