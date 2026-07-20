@@ -139,7 +139,76 @@ namespace Aetherium.Test.Perception
             Assert.That(new Entity[] { station, train, city }.All(e => !byId[e.EntityId].IsHostile), Is.True);
         }
 
+        // ---- board affordance: see the train, walk up, get a prompt ----
+
+        [Test]
+        public void Planar_OffersBoardAffordanceWhenStandingNextToAVehicle()
+        {
+            var world = SquareRoom();
+            var playerLoc = new WorldLocation(4, 4, 0);
+            var player = new Character();
+            player.Set(playerLoc);
+            world.AddEntity(player);
+
+            var train = new VehicleExterior();
+            train.Set(new WorldLocation(4, 3, 0)); // one cell north — within reach
+            train.Set(new Boardable { VehicleInstanceId = "veh-1", DisplayName = "The Kestrel" });
+            world.AddEntity(train);
+
+            var p = Perceive(world, playerLoc);
+            var board = p.Affordances.SingleOrDefault(a => a.Action == "board");
+            Assert.That(board, Is.Not.Null, "a boardable vehicle one cell away offers a board prompt");
+            Assert.That(board!.TargetId, Is.EqualTo(train.EntityId));
+            Assert.That(board.ActorId, Is.EqualTo(player.EntityId));
+        }
+
+        [Test]
+        public void Planar_NoBoardAffordanceWhenTheVehicleIsOutOfReach()
+        {
+            var world = SquareRoom();
+            var playerLoc = new WorldLocation(4, 4, 0);
+            world.AddEntity(WithLoc(new Character(), playerLoc));
+
+            var train = new VehicleExterior();
+            train.Set(new WorldLocation(4, 1, 0)); // three cells away — not adjacent
+            train.Set(new Boardable { VehicleInstanceId = "veh-1", DisplayName = "The Kestrel" });
+            world.AddEntity(train);
+
+            var p = Perceive(world, playerLoc);
+            Assert.That(p.Affordances.Any(a => a.Action == "board"), Is.False,
+                "you must be next to a vehicle to board it");
+        }
+
+        [Test]
+        public void H3_OffersBoardAffordanceNextToAParkedTrain()
+        {
+            var world = H3Flat(out var player, out var byDistance);
+            world.AddEntity(WithLoc(new Character(), player));
+
+            var train = new VehicleExterior();
+            train.Set(byDistance(1)); // an adjacent H3 cell
+            train.Set(new Boardable { VehicleInstanceId = "train-7", DisplayName = "Capitol Line Express" });
+            world.AddEntity(train);
+
+            var p = Perceive(world, player);
+            var board = p.Affordances.SingleOrDefault(a => a.Action == "board");
+            Assert.That(board, Is.Not.Null, "an adjacent parked train offers a board prompt on the sphere too");
+            Assert.That(board!.TargetId, Is.EqualTo(train.EntityId));
+        }
+
         // ---- helpers ----
+
+        private World SquareRoom()
+        {
+            var world = new World();
+            var builder = new DungeonCrawlerWorldBuilder();
+            world.AddTileTypes(builder.TileTypes);
+            world.AddTerrainTypes(builder.CreateTerrainTypes(builder.TileTypes));
+            for (int x = 0; x <= 8; x++)
+                for (int y = 0; y <= 8; y++)
+                    world.SetTerrain("Indoors", new WorldLocation(x, y, 0));
+            return world;
+        }
 
         private static Entity WithLoc(Entity e, WorldLocation loc)
         {
