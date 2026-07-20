@@ -1,3 +1,10 @@
+> **Status (2026-07-20):** see the reconciliation in `proposal.md`. `H3TransitNetwork` already
+> generates rail + subway lines as H3 *economy infrastructure* (band-separated, terrain-carving,
+> `TradeLinks`), proving the MST-line and grade-separation ideas — but no `Station`s, wide corridors,
+> or rideable services exist. Boxes below stay unchecked: they specify the *generic* pass + the
+> player-rideable services, which remain unbuilt. Recommended next slice: stations + boardable
+> scheduled services on the existing lines, reusing the now-complete `add-boardable-vehicles` voyage machinery.
+
 ## 1. Phase 1 — Single-line generation
 - [ ] 1.1 Add `TransitNetworkPass` scaffolding on the generator pipeline (model on `PortalNetworkPass`)
 - [ ] 1.2 Place station sites with `PoissonDiscSampling` (spacing biased to population/POIs)
