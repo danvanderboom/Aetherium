@@ -426,6 +426,15 @@ Light sources found:
                                 loc.Z - playerLocation.Z);
                             visibleCharacters.Add(charDto);
                         }
+                        else if (!(entity is Aetherium.Entities.Terrain))
+                        {
+                            // Persistent landmarks (stations, boardable vehicles, settlements) read as
+                            // named contacts so the player can see and navigate to them.
+                            TrySurfaceLandmark(entity, new WorldLocationDto(
+                                loc.X - playerLocation.X,
+                                loc.Y - playerLocation.Y,
+                                loc.Z - playerLocation.Z), visibleCharacters);
+                        }
                     }
                 }
             }
@@ -666,6 +675,12 @@ Light sources found:
                             itemDto.Location = new WorldLocationDto(relX, relY, relZ);
                             visibleItems.Add(itemDto);
                         }
+                        else if (loc != playerLocation && !(entity is Aetherium.Entities.Terrain))
+                        {
+                            // Persistent landmarks (stations, boardable vehicles, settlements) read as
+                            // named contacts so the player can see and navigate to them.
+                            TrySurfaceLandmark(entity, new WorldLocationDto(relX, relY, relZ), visibleCharacters);
+                        }
                     }
                 }
 
@@ -816,6 +831,12 @@ Light sources found:
                                 itemDto.Location = new WorldLocationDto(relX, relY, relZ);
                                 visibleItems.Add(itemDto);
                             }
+                            else if (!(entity is Aetherium.Entities.Terrain))
+                            {
+                                // A landmark glimpsed through the slab — a subway station underfoot,
+                                // a boardable vehicle overhead — reads as a contact at its band.
+                                TrySurfaceLandmark(entity, new WorldLocationDto(relX, relY, relZ), visibleCharacters);
+                            }
                         }
                     }
 
@@ -893,6 +914,49 @@ Light sources found:
                         affordances.Add(new AffordanceDto { Action = "hack", ActorId = playerId, TargetId = sat.EntityId });
                 }
             }
+        }
+
+        /// <summary>
+        /// Surfaces a persistent map <em>landmark</em> — a transit <see cref="Aetherium.Components.Station"/>,
+        /// a vehicle's <see cref="Aetherium.Components.Boardable"/> exterior, or a
+        /// <see cref="Aetherium.Components.Settlement"/> — into the visible-characters contact channel, so a
+        /// player who can see the cell also sees the thing on it as a named, non-hostile contact and knows
+        /// where to walk (to board a train, catch a service, or reach a town). Mirrors how the orbital
+        /// channel surfaces satellites, but ungated: a landmark reads whenever its cell is visible. Landmarks
+        /// sit on visible ground, so the cell's terrain Visual already gives the client somewhere to draw the
+        /// contact — no synthetic marker cell needed (unlike a satellite in empty sky). Returns true when
+        /// <paramref name="entity"/> was a landmark, so callers can stop classifying it.
+        /// </summary>
+        private static bool TrySurfaceLandmark(Entity entity, WorldLocationDto relLoc, List<CharacterDto> sink)
+        {
+            string? name = null;
+            if (entity.Has<Aetherium.Components.Station>())
+            {
+                var st = entity.Get<Aetherium.Components.Station>();
+                name = string.IsNullOrWhiteSpace(st.Name) ? "Station" : $"{st.Name} Station";
+            }
+            else if (entity.Has<Aetherium.Components.Boardable>())
+            {
+                var b = entity.Get<Aetherium.Components.Boardable>();
+                name = string.IsNullOrWhiteSpace(b.DisplayName) ? "Vehicle" : b.DisplayName;
+            }
+            else if (entity.Has<Aetherium.Components.Settlement>())
+            {
+                var s = entity.Get<Aetherium.Components.Settlement>();
+                name = string.IsNullOrWhiteSpace(s.Name) ? s.Tier.ToString() : s.Name;
+            }
+
+            if (name is null)
+                return false;
+
+            sink.Add(new CharacterDto
+            {
+                Id = entity.EntityId,
+                Name = name,
+                IsHostile = false,
+                Location = relLoc,
+            });
+            return true;
         }
 
         // The best (longest) satellite range among the perceiver's active tuned radios — their own built-in
